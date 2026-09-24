@@ -1,0 +1,13 @@
+[app]
+crate = "splash"
+
+[frontend]
+dir = "app"
+
+[codegen]
+out = "app/src/bindings.ts"
+
+[bundle]
+identifier = "com.example.splash"
+name = "splash"
+version = "0.1.0"
