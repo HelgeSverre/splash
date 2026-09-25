@@ -6,6 +6,8 @@ use std::process::Command;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use crate::procs::run_with_timeout;
+
 static PATH: OnceLock<String> = OnceLock::new();
 
 /// The login shell's `PATH`, falling back to the current one plus the usual
@@ -16,26 +18,11 @@ pub fn path() -> &'static str {
 
 fn login_shell_path() -> Option<String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let mut child = Command::new(shell)
-        .args(["-lic", "printf '__PATH__%s' \"$PATH\""])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .ok()?;
     // An interactive rc file can hang (prompts, plugins): give it 5s.
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    loop {
-        match child.try_wait().ok()? {
-            Some(_) => break,
-            None if std::time::Instant::now() > deadline => {
-                let _ = child.kill();
-                return None;
-            }
-            None => std::thread::sleep(Duration::from_millis(20)),
-        }
-    }
-    let out = child.wait_with_output().ok()?;
+    let out = run_with_timeout(
+        Command::new(shell).args(["-lic", "printf '__PATH__%s' \"$PATH\""]),
+        Duration::from_secs(5),
+    )?;
     let text = String::from_utf8_lossy(&out.stdout);
     let path = text.rsplit("__PATH__").next()?.trim().to_string();
     (!path.is_empty()).then_some(path)

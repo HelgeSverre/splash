@@ -112,8 +112,18 @@ type PromptFut = Pin<
 /// `Shutdown`, when the agent exits, or when every sender is dropped.
 pub fn start(spec: SessionSpec, sink: Arc<dyn Sink>) -> mpsc::UnboundedSender<SessionCmd> {
     let (tx, rx) = mpsc::unbounded_channel();
-    tokio::spawn(run(spec, rx, sink));
+    start_with(spec, rx, sink);
     tx
+}
+
+/// Start a session on a command channel made earlier — commands sent before
+/// the actor runs are queued, not lost.
+pub fn start_with(
+    spec: SessionSpec,
+    cmds: mpsc::UnboundedReceiver<SessionCmd>,
+    sink: Arc<dyn Sink>,
+) {
+    tokio::spawn(run(spec, cmds, sink));
 }
 
 async fn run(
@@ -272,7 +282,7 @@ async fn run(
                     let sid = new_session(&cx, &cwd, &mut transcript).await?;
                     if had_history {
                         transcript.push(Entry::Divider {
-                            text: format!("New {} session — the agent doesn't remember the conversation above.", spec_agent.name),
+                            text: format!("New {} session. The agent doesn't remember the conversation above.", spec_agent.name),
                         });
                     }
                     sid

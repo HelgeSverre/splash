@@ -5,16 +5,16 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use splash::acp::actor::{self, SessionCmd, SessionSpec, Sink, Status};
-use splash::acp::map::Change;
+use splash::acp::map::{Change, TranscriptSnapshot};
 use splash::acp::model::{Entry, SessionMeta};
 use splash::acp::transport::Dir;
 use splash::agents::registry::{AgentSpec, AuthCheck, Transport};
 
-/// Records everything, and mirrors the frontend: applies changes by the same
-/// rules `transcripts.svelte.ts` uses, so the wire protocol is tested too.
+/// Records everything, and mirrors the frontend with the app's own
+/// [`TranscriptSnapshot::apply`], so the wire protocol is tested too.
 #[derive(Default)]
 struct Recorder {
-    mirror: Mutex<Vec<(u32, Entry)>>,
+    mirror: Mutex<TranscriptSnapshot>,
     gaps: Mutex<u32>,
     statuses: Mutex<Vec<Status>>,
     meta: Mutex<SessionMeta>,
@@ -26,42 +26,9 @@ struct Recorder {
 impl Sink for Recorder {
     fn changes(&self, _key: &str, changes: Vec<Change>) {
         let mut m = self.mirror.lock();
-        for c in changes {
-            match c {
-                Change::Upsert {
-                    index,
-                    version,
-                    entry,
-                } => {
-                    let i = index as usize;
-                    while m.len() <= i {
-                        m.push((
-                            0,
-                            Entry::Divider {
-                                text: "<hole>".into(),
-                            },
-                        ));
-                    }
-                    if version > m[i].0 {
-                        m[i] = (version, entry);
-                    }
-                }
-                Change::AppendText {
-                    index,
-                    version,
-                    delta,
-                } => {
-                    let i = index as usize;
-                    match m.get_mut(i) {
-                        Some((v, Entry::Agent { text, .. } | Entry::Thought { text, .. }))
-                            if *v + 1 == version =>
-                        {
-                            text.push_str(&delta);
-                            *v = version;
-                        }
-                        _ => *self.gaps.lock() += 1,
-                    }
-                }
+        for c in &changes {
+            if !m.apply(c) {
+                *self.gaps.lock() += 1;
             }
         }
     }
@@ -83,7 +50,7 @@ impl Sink for Recorder {
 
 impl Recorder {
     fn entries(&self) -> Vec<Entry> {
-        self.mirror.lock().iter().map(|(_, e)| e.clone()).collect()
+        self.mirror.lock().entries.clone()
     }
     fn last_status(&self) -> Option<Status> {
         self.statuses.lock().last().copied()
@@ -103,6 +70,7 @@ fn fake_agent(fixture: &str) -> &'static AgentSpec {
         cli: program,
         program,
         args,
+        env: &[],
         transport: Transport::Native,
         experimental: false,
         auth: AuthCheck::File("nope"),
@@ -340,6 +308,7 @@ async fn a_missing_program_reports_an_error() {
         cli: "ghost",
         program: "definitely-not-installed-xyz",
         args: &[],
+        env: &[],
         transport: Transport::Native,
         experimental: false,
         auth: AuthCheck::File("nope"),

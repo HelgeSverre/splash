@@ -55,12 +55,15 @@ test:
 fmt:
     cargo fmt --all
 
-# Check formatting, run clippy, and keep every UI colour a CSS token
+# Check formatting, run clippy, keep every UI colour a CSS token, the focus ring intact and em dashes out of UI copy
 [group('qa')]
 lint:
     cargo fmt --all --check
     cargo clippy --all-targets -- -D warnings
     scripts/check-colors.sh
+    cd app && npm run check
+    scripts/check-focus.sh
+    scripts/check-copy.sh
 
 # Full gate: lint + test
 [group('qa')]

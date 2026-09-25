@@ -4,8 +4,11 @@
 pub mod acp;
 pub mod agents;
 pub mod app;
+pub mod error;
+pub mod git;
 pub mod git_info;
 pub mod hub;
+pub mod json;
 pub mod procs;
 pub mod store;
 pub mod terminal;

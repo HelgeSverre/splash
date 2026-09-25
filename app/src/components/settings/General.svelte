@@ -1,8 +1,15 @@
 <script lang="ts">
   import RevealButton from "../ui/RevealButton.svelte";
   import AgentIcon from "../AgentIcon.svelte";
+  import SegmentedControl from "../ui/SegmentedControl.svelte";
+  import Switch from "../ui/Switch.svelte";
+  import ChoiceGroup from "../ui/ChoiceGroup.svelte";
+  import PageHeader from "./PageHeader.svelte";
+  import SettingsGroup from "./SettingsGroup.svelte";
+  import SettingsRow from "./SettingsRow.svelte";
   import { home } from "../../lib/paths";
-  import { app, prefs, setPref } from "../../lib/state.svelte";
+  import { app } from "../../lib/sessions.svelte";
+  import { prefs, setPref } from "../../lib/prefs.svelte";
 
   const defaultAgent = $derived(prefs.default_agent ?? "claude");
   const isolation = $derived(prefs.default_isolation ?? "worktree");
@@ -10,65 +17,46 @@
 </script>
 
 <div class="set-page">
-  <h2>General</h2>
-  <p class="lede">Defaults for new sessions, and how Splash gets your attention.</p>
+  <PageHeader title="General">
+    {#snippet lede()}Defaults for new sessions, and how Splash gets your attention.{/snippet}
+  </PageHeader>
 
-  <div class="set-group-title">New sessions</div>
-  <div class="set-group">
-    <div class="set-row">
-      <div class="set-label">
-        <div>Default agent</div>
-        <div class="set-desc">Preselected in the new-session dialog.</div>
+  <SettingsGroup title="New sessions">
+    <SettingsRow label="Default agent" labelId="set-default-agent" desc="Preselected in the new-session dialog.">
+      <!-- Wraps to a second row rather than squeezing the label. -->
+      <div class="agent-choices">
+      <ChoiceGroup items={app.agents} value={defaultAgent} key={(a) => a.id} title={(a) => a.name} labelledby="set-default-agent"
+        layout="row" variant="icon" onchange={(a) => setPref("default_agent", a.id)}>
+        {#snippet item(a)}<AgentIcon id={a.id} size={14} />{/snippet}
+      </ChoiceGroup>
       </div>
-      <div class="agents">
-        {#each app.agents as a (a.id)}
-          <button class="plain agent" class:on={a.id === defaultAgent} title={a.name} onclick={() => setPref("default_agent", a.id)}>
-            <AgentIcon id={a.id} size={14} />
-          </button>
-        {/each}
-      </div>
-    </div>
-    <div class="set-row">
-      <div class="set-label">
-        <div>Where sessions work</div>
-        <div class="set-desc">A new worktree keeps your checkout untouched; in place edits it directly.</div>
-      </div>
-      <div class="seg-control">
-        <button class:on={isolation === "worktree"} onclick={() => setPref("default_isolation", "worktree")}>Worktree</button>
-        <button class:on={isolation === "in_place"} onclick={() => setPref("default_isolation", "in_place")}>In place</button>
-      </div>
-    </div>
-  </div>
+    </SettingsRow>
+    <SettingsRow label="Where sessions work" desc="A new worktree keeps your checkout untouched; in place edits it directly.">
+      <SegmentedControl label="Where sessions work" value={isolation} onchange={(v) => setPref("default_isolation", v)}
+        options={[{ value: "worktree", label: "Worktree" }, { value: "in_place", label: "In place" }]} />
+    </SettingsRow>
+  </SettingsGroup>
 
-  <div class="set-group-title">Notifications</div>
-  <div class="set-group">
-    <div class="set-row">
-      <div class="set-label">
-        <div>Notify when a background session needs you</div>
-        <div class="set-desc">A permission request, or a turn finishing while you're looking at something else.</div>
-      </div>
-      <button class="toggle" class:on={notify} aria-label="Notifications" onclick={() => setPref("notify", notify ? "off" : "on")}></button>
-    </div>
-  </div>
+  <SettingsGroup title="Notifications">
+    <SettingsRow label="Notify when a background session needs you" labelId="set-notify"
+      desc="A permission request, or a turn finishing while you're looking at something else.">
+      <Switch checked={notify} labelledby="set-notify" onchange={(on) => setPref("notify", on ? "on" : "off")} />
+    </SettingsRow>
+  </SettingsGroup>
 
-  <div class="set-group-title">Storage</div>
-  <div class="set-group">
-    <div class="set-row">
-      <div class="set-label"><div>Data folder</div><div class="set-desc">Projects, sessions and transcripts (SQLite).</div></div>
-      <span class="set-value" title={prefs.data_dir}>{home(prefs.data_dir ?? "")}</span>
+  <SettingsGroup title="Storage">
+    <SettingsRow label="Data folder" desc="Projects, sessions and transcripts (SQLite)."
+      value={home(prefs.data_dir ?? "")} valueTitle={prefs.data_dir} path>
       <RevealButton path={prefs.data_dir} />
-    </div>
-    <div class="set-row">
-      <div class="set-label"><div>Worktrees</div><div class="set-desc">One folder per worktree session; archiving removes it and keeps the branch.</div></div>
-      <span class="set-value" title={prefs.worktrees_dir}>{home(prefs.worktrees_dir ?? "")}</span>
+    </SettingsRow>
+    <SettingsRow label="Worktrees" desc="One folder per worktree session; archiving removes it and keeps the branch."
+      value={home(prefs.worktrees_dir ?? "")} valueTitle={prefs.worktrees_dir} path>
       <RevealButton path={prefs.worktrees_dir} />
-    </div>
-  </div>
+    </SettingsRow>
+  </SettingsGroup>
 </div>
 
 <style>
-  .agents { display: flex; gap: 4px; }
-  .agent { width: 30px; height: 28px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
-  .agent:hover { border-color: var(--border-strong); }
-  .agent.on { border-color: var(--accent); background: var(--accent-soft); }
+  .agent-choices { max-width: 320px; }
+  .agent-choices :global(.is-row) { justify-content: flex-end; }
 </style>

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::model::*;
+use crate::json::{str_at, str_or};
 
 /// A change to push to the frontend. `version` counts changes per entry:
 /// an `Upsert` is a full snapshot (apply if newer); an `AppendText` must be
@@ -27,6 +28,66 @@ pub enum Change {
         version: u32,
         delta: String,
     },
+}
+
+/// A transcript with per-entry versions, for (re)syncing the frontend.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct TranscriptSnapshot {
+    pub entries: Vec<Entry>,
+    pub versions: Vec<u32>,
+}
+
+impl TranscriptSnapshot {
+    /// Stored entries, at version 1 like a restored [`Transcript`].
+    pub fn from_history(entries: Vec<Entry>) -> Self {
+        Self {
+            versions: vec![1; entries.len()],
+            entries,
+        }
+    }
+
+    /// Apply a change by the rules `transcripts.svelte.ts` uses. False on a
+    /// gap — an append that isn't exactly the next version of a text entry —
+    /// which the frontend answers with a resync.
+    pub fn apply(&mut self, change: &Change) -> bool {
+        match change {
+            Change::Upsert {
+                index,
+                version,
+                entry,
+            } => {
+                let i = *index as usize;
+                while self.entries.len() <= i {
+                    self.entries.push(Entry::Divider {
+                        text: String::new(),
+                    });
+                    self.versions.push(0);
+                }
+                if *version > self.versions[i] {
+                    self.entries[i] = entry.clone();
+                    self.versions[i] = *version;
+                }
+                true
+            }
+            Change::AppendText {
+                index,
+                version,
+                delta,
+            } => {
+                let i = *index as usize;
+                match self.entries.get_mut(i) {
+                    Some(Entry::Agent { text, .. } | Entry::Thought { text, .. })
+                        if self.versions[i] + 1 == *version =>
+                    {
+                        text.push_str(delta);
+                        self.versions[i] = *version;
+                        true
+                    }
+                    _ => false,
+                }
+            }
+        }
+    }
 }
 
 /// What an update did besides touching entries.
@@ -332,7 +393,7 @@ impl Transcript {
     fn chunk(&mut self, update: &Value, thought: bool) {
         let block = &update["content"];
         let text = match block["type"].as_str() {
-            Some("text") | None => block["text"].as_str().unwrap_or("").to_string(),
+            Some("text") | None => str_at(block, "text"),
             Some(other) => format!("[{other}]"),
         };
         if text.is_empty() {
@@ -629,7 +690,7 @@ fn content(v: &Value) -> Vec<ToolContent> {
             "diff" => Some(ToolContent::Diff {
                 path: c["path"].as_str()?.to_string(),
                 old: c["oldText"].as_str().map(String::from),
-                new: c["newText"].as_str().unwrap_or("").to_string(),
+                new: str_at(c, "newText"),
             }),
             "terminal" => Some(ToolContent::Terminal {
                 id: c["terminalId"].as_str()?.to_string(),
@@ -687,18 +748,6 @@ fn output_text(v: &Value) -> Option<String> {
     (!text.is_empty()).then(|| truncate(&text, MAX_OUTPUT))
 }
 
-fn str_at(v: &Value, key: &str) -> String {
-    v[key].as_str().unwrap_or("").to_string()
-}
-
-fn str_or(v: &Value, key: &str, default: &str) -> String {
-    v[key]
-        .as_str()
-        .filter(|s| !s.is_empty())
-        .unwrap_or(default)
-        .to_string()
-}
-
 pub fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
@@ -708,4 +757,59 @@ pub fn truncate(s: &str, max: usize) -> String {
         end -= 1;
     }
     format!("{}\n… ({} more bytes)", &s[..end], s.len() - end)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn agent(text: &str) -> Entry {
+        Entry::Agent {
+            text: text.into(),
+            streaming: true,
+        }
+    }
+
+    fn upsert(index: u32, version: u32, entry: Entry) -> Change {
+        Change::Upsert {
+            index,
+            version,
+            entry,
+        }
+    }
+
+    fn append(index: u32, version: u32, delta: &str) -> Change {
+        Change::AppendText {
+            index,
+            version,
+            delta: delta.into(),
+        }
+    }
+
+    #[test]
+    fn upserts_fill_holes_and_only_move_forward() {
+        let mut m = TranscriptSnapshot::default();
+        assert!(m.apply(&upsert(2, 1, agent("c"))));
+        assert_eq!(m.versions, vec![0, 0, 1]);
+        assert!(matches!(&m.entries[0], Entry::Divider { text } if text.is_empty()));
+        assert!(m.apply(&upsert(2, 3, agent("new"))));
+        // A stale snapshot is ignored, not a gap.
+        assert!(m.apply(&upsert(2, 2, agent("old"))));
+        assert_eq!((m.entries[2].clone(), m.versions[2]), (agent("new"), 3));
+    }
+
+    #[test]
+    fn appends_need_exactly_the_next_version_of_a_text_entry() {
+        let mut m =
+            TranscriptSnapshot::from_history(vec![agent("a"), Entry::User { text: "u".into() }]);
+        assert_eq!(m.versions, vec![1, 1]);
+        assert!(m.apply(&append(0, 2, "b")));
+        assert!(!m.apply(&append(0, 4, "skipped")), "a version was skipped");
+        assert!(!m.apply(&append(0, 2, "again")), "already applied");
+        assert!(!m.apply(&append(1, 2, "x")), "not a text entry");
+        assert!(!m.apply(&append(9, 1, "x")), "no such entry");
+        assert!(m.apply(&append(0, 3, "c")));
+        assert_eq!(m.entries[0], agent("abc"));
+        assert_eq!(m.versions, vec![3, 1]);
+    }
 }

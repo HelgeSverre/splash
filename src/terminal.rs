@@ -13,6 +13,8 @@ use parking_lot::Mutex;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 
+use crate::error::{Error, Result};
+
 const SCROLLBACK: usize = 256 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize, specta::Type)]
@@ -53,7 +55,7 @@ impl Terminals {
         cols: u16,
         rows: u16,
         emit: impl Fn(TermEvent) + Send + 'static,
-    ) -> Result<TermAttach, String> {
+    ) -> Result<TermAttach> {
         let mut map = self.map.lock();
         if let Some(t) = map.get(session) {
             let _ = t.master.resize(PtySize {
@@ -77,7 +79,7 @@ impl Terminals {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| e.to_string())?;
+            .map_err(io)?;
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
         let mut cmd = CommandBuilder::new(shell);
         cmd.arg("-l");
@@ -88,14 +90,14 @@ impl Terminals {
         if std::env::var("LANG").is_err() {
             cmd.env("LANG", "en_US.UTF-8");
         }
-        let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+        let child = pair.slave.spawn_command(cmd).map_err(io)?;
         drop(pair.slave);
         if let Some(pid) = child.process_id() {
             // The shell leads its own session, so its pid is its group id.
             crate::procs::register(pid as i32);
         }
-        let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-        let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+        let mut reader = pair.master.try_clone_reader().map_err(io)?;
+        let writer = pair.master.take_writer().map_err(io)?;
 
         let buffer = Arc::new(Mutex::new((VecDeque::with_capacity(SCROLLBACK), 0u32)));
         let seq = Arc::new(AtomicU32::new(0));
@@ -137,7 +139,7 @@ impl Terminals {
                         exited: true,
                     });
                 })
-                .map_err(|e| e.to_string())?;
+                .map_err(io)?;
         }
         map.insert(
             session.to_string(),
@@ -154,18 +156,16 @@ impl Terminals {
         })
     }
 
-    pub fn write(&self, session: &str, data: &str) -> Result<(), String> {
+    pub fn write(&self, session: &str, data: &str) -> Result<()> {
         let mut map = self.map.lock();
-        let t = map.get_mut(session).ok_or("no terminal")?;
-        t.writer
-            .write_all(data.as_bytes())
-            .map_err(|e| e.to_string())?;
-        t.writer.flush().map_err(|e| e.to_string())
+        let t = map.get_mut(session).ok_or(Error::NotFound("no terminal"))?;
+        t.writer.write_all(data.as_bytes())?;
+        Ok(t.writer.flush()?)
     }
 
-    pub fn resize(&self, session: &str, cols: u16, rows: u16) -> Result<(), String> {
+    pub fn resize(&self, session: &str, cols: u16, rows: u16) -> Result<()> {
         let map = self.map.lock();
-        let t = map.get(session).ok_or("no terminal")?;
+        let t = map.get(session).ok_or(Error::NotFound("no terminal"))?;
         t.master
             .resize(PtySize {
                 rows,
@@ -173,7 +173,7 @@ impl Terminals {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| e.to_string())
+            .map_err(io)
     }
 
     /// Kill the shell (a new one starts on the next `open`).
@@ -198,6 +198,10 @@ impl Terminals {
             }
         }
     }
+}
+
+fn io(e: impl std::fmt::Display) -> Error {
+    Error::Io(e.to_string())
 }
 
 fn b64(bytes: &[u8]) -> String {

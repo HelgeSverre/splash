@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::worktree::git;
+use crate::git::{self, git};
 
 /// Files larger than this are shown as "too large".
 const MAX_FILE: u64 = 1_000_000;
@@ -82,14 +82,10 @@ pub fn relative(root: &Path, path: &str) -> Result<PathBuf, String> {
 /// Changes in `root` against `base` (a commit; `HEAD` for in-place sessions),
 /// including untracked files.
 pub fn status(root: &Path, base: &str) -> Result<Vec<FileChange>, String> {
-    if !crate::worktree::is_git(root) {
+    if !git::is_git(root) {
         return Ok(Vec::new());
     }
-    let base = if git(root, &["rev-parse", "--verify", "--quiet", base]).is_ok() {
-        base
-    } else {
-        "HEAD"
-    };
+    let base = base_or_head(root, base);
     let mut changes: Vec<FileChange> = Vec::new();
 
     // Statuses, then line counts, for tracked files (working tree vs base).
@@ -156,11 +152,7 @@ pub fn status(root: &Path, base: &str) -> Result<Vec<FileChange>, String> {
 pub fn file_diff(root: &Path, base: &str, path: &str) -> Result<FileDiff, String> {
     let rel = relative(root, path)?;
     let rel_s = rel.to_string_lossy().replace('\\', "/");
-    let base = if git(root, &["rev-parse", "--verify", "--quiet", base]).is_ok() {
-        base
-    } else {
-        "HEAD"
-    };
+    let base = base_or_head(root, base);
     let old = git_show(root, base, &rel_s);
     let new = std::fs::read(root.join(&rel)).ok();
     let too_large = old.as_ref().is_some_and(|b| b.len() as u64 > MAX_FILE)
@@ -183,13 +175,16 @@ pub fn file_diff(root: &Path, base: &str, path: &str) -> Result<FileDiff, String
 }
 
 fn git_show(root: &Path, base: &str, rel: &str) -> Option<Vec<u8>> {
-    let out = std::process::Command::new("git")
-        .args(["show", &format!("{base}:{rel}")])
-        .current_dir(root)
-        .env("PATH", crate::agents::env::path())
-        .output()
-        .ok()?;
-    out.status.success().then_some(out.stdout)
+    git::git_bytes(root, &["show", &format!("{base}:{rel}")]).ok()
+}
+
+/// `base` if it still names a commit, else `HEAD`.
+fn base_or_head<'a>(root: &Path, base: &'a str) -> &'a str {
+    if git::resolves(root, base) {
+        base
+    } else {
+        "HEAD"
+    }
 }
 
 /// One level of the tree, honouring `.gitignore`; directories first.
@@ -311,7 +306,6 @@ pub fn watch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::worktree::git;
 
     fn repo() -> PathBuf {
         let root = std::env::temp_dir().join(crate::store::new_id("ws"));

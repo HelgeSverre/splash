@@ -77,6 +77,7 @@ pub fn spawn(
         .args(spec.args)
         .current_dir(cwd)
         .env("PATH", env::path())
+        .envs(spec.env.iter().copied())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::json::str_opt;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct Skill {
     pub name: String,
@@ -19,8 +21,6 @@ pub struct Skill {
     pub agents: Vec<String>,
     /// The project it belongs to, for project-level skills.
     pub project: Option<String>,
-    /// `hidden: true` — a publisher's marker; no agent enforces it.
-    pub hidden: bool,
     /// `user-invocable: false` hides it from the `/` menu (Claude).
     pub user_invocable: bool,
     /// `disable-model-invocation: true`: only runs when called by name.
@@ -105,7 +105,7 @@ fn scan(dir: &Path, source: &str, agents: &[&str], project: Option<&String>, out
                 return None;
             }
             let text = std::fs::read_to_string(folder.join("SKILL.md")).ok()?;
-            let front = frontmatter(&text);
+            let (front, _) = split_frontmatter(&text);
             let fallback = e.file_name().to_string_lossy().into_owned();
             Some(Skill {
                 name: front["name"].as_str().map(String::from).unwrap_or(fallback),
@@ -118,7 +118,6 @@ fn scan(dir: &Path, source: &str, agents: &[&str], project: Option<&String>, out
                 source: source.to_string(),
                 agents: agents.iter().map(|a| a.to_string()).collect(),
                 project: project.cloned(),
-                hidden: front["hidden"].as_bool().unwrap_or(false),
                 user_invocable: front["user-invocable"].as_bool().unwrap_or(true),
                 manual_only: front["disable-model-invocation"].as_bool().unwrap_or(false),
             })
@@ -128,28 +127,18 @@ fn scan(dir: &Path, source: &str, agents: &[&str], project: Option<&String>, out
     out.extend(found);
 }
 
-/// The YAML between leading `---` lines, as JSON (`Null` when absent/bad).
-fn frontmatter(text: &str) -> Value {
+/// Split a markdown file into its frontmatter — the YAML between leading
+/// `---` lines, as JSON (`Null` when absent or bad) — and the body after it.
+fn split_frontmatter(text: &str) -> (Value, &str) {
     let Some(rest) = text.trim_start().strip_prefix("---") else {
-        return Value::Null;
+        return (Value::Null, text);
     };
     let Some(end) = rest.find("\n---") else {
-        return Value::Null;
+        return (Value::Null, text);
     };
-    serde_yaml_ng::from_str::<Value>(&rest[..end]).unwrap_or(Value::Null)
-}
-
-/// Split a markdown file into its frontmatter (as JSON) and the body after it.
-fn split_frontmatter(text: &str) -> (Value, &str) {
-    let trimmed = text.trim_start();
-    if let Some(rest) = trimmed.strip_prefix("---") {
-        if let Some(end) = rest.find("\n---") {
-            let after = &rest[end + 4..];
-            let body = after.split_once('\n').map(|(_, b)| b).unwrap_or("");
-            return (frontmatter(text), body);
-        }
-    }
-    (Value::Null, text)
+    let front = serde_yaml_ng::from_str::<Value>(&rest[..end]).unwrap_or(Value::Null);
+    let body = rest[end + 4..].split_once('\n').map_or("", |(_, b)| b);
+    (front, body)
 }
 
 // ── command files ────────────────────────────────────────────────────────────
@@ -362,10 +351,10 @@ fn entries(map: &Value, project: Option<String>) -> Vec<Found> {
 /// nested (`transport: {type, url}`).
 fn server(agent: &str, name: &str, v: &Value, source: &str, project: Option<String>) -> McpServer {
     let t = &v["transport"];
-    let url = str_of(v, "url")
-        .or_else(|| str_of(v, "httpUrl"))
-        .or_else(|| str_of(t, "url"));
-    let command = str_of(v, "command").or_else(|| str_of(t, "command"));
+    let url = str_opt(v, "url")
+        .or_else(|| str_opt(v, "httpUrl"))
+        .or_else(|| str_opt(t, "url"));
+    let command = str_opt(v, "command").or_else(|| str_opt(t, "command"));
     let args: Vec<String> = [&v["args"], &t["args"]]
         .iter()
         .find_map(|a| a.as_array())
@@ -375,8 +364,8 @@ fn server(agent: &str, name: &str, v: &Value, source: &str, project: Option<Stri
                 .collect()
         })
         .unwrap_or_default();
-    let transport = str_of(v, "type")
-        .or_else(|| str_of(t, "type"))
+    let transport = str_opt(v, "type")
+        .or_else(|| str_opt(t, "type"))
         .or_else(|| t.as_str().map(String::from))
         .unwrap_or_else(|| {
             if url.is_some() {
@@ -412,10 +401,6 @@ fn server(agent: &str, name: &str, v: &Value, source: &str, project: Option<Stri
         source: source.into(),
         project,
     }
-}
-
-fn str_of(v: &Value, key: &str) -> Option<String> {
-    v[key].as_str().filter(|s| !s.is_empty()).map(String::from)
 }
 
 /// Keys of a map, or the names from `"Key: value"` strings — never the values.
@@ -472,7 +457,6 @@ mod tests {
                 .unwrap_or_else(|| panic!("{n} in {s:?}"))
         };
         assert_eq!(by("deploy").description, "Ship it safely.");
-        assert!(by("deploy").hidden);
         assert_eq!(by("deploy").agents, vec!["claude"]);
         assert_eq!(by("review").description, "Review: diffs");
         assert!(by("review").agents.is_empty());

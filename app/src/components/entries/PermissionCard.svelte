@@ -1,6 +1,7 @@
 <script lang="ts">
+  import Kbd from "../Kbd.svelte";
   import { api } from "../../bindings";
-  import { showError } from "../../lib/state.svelte";
+  import { showError } from "../../lib/system";
   import { relText } from "../../lib/paths";
   import type { Entry } from "../../bindings";
 
@@ -9,12 +10,12 @@
 
   const chosen = $derived(entry.options.find((o) => o.id === entry.resolution));
 
-  export function choose(optionId: string | null) {
+  function choose(optionId: string | null) {
     api.resolve_permission(session, entry.request_id, optionId).catch(showError);
   }
 </script>
 
-<div class="perm" class:pending={!entry.resolution}>
+<div class="perm card" class:pending={!entry.resolution}>
   <div class="head">
     <span class="q">{entry.resolution ? "Permission" : "Allow this?"}</span>
     <span class="title">{relText(entry.title, cwd)}</span>
@@ -27,7 +28,7 @@
     <div class="options">
       {#each entry.options as o, i (o.id)}
         <button class="btn sm {o.kind.startsWith('allow') ? (i === 0 ? 'primary' : '') : 'danger'}" onclick={() => choose(o.id)}>
-          <span class="n">{i + 1}</span> {o.name}
+          <Kbd keys={String(i + 1)} inline /> {o.name}
         </button>
       {/each}
     </div>
@@ -35,14 +36,14 @@
 </div>
 
 <style>
-  .perm { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .perm { margin: 8px 0; }
   .perm.pending { border-color: var(--accent-border); background: linear-gradient(0deg, var(--accent-soft), var(--accent-soft)), var(--surface); }
   .head { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
-  .q { font-weight: 600; flex: none; }
+  .q { font-weight: var(--fw-semibold); flex: none; }
   .pending .q { color: var(--accent); }
-  .title { font: 12px var(--font-mono); color: var(--text-2); overflow-wrap: anywhere; }
+  .title { font: var(--fs-sm) var(--font-mono); color: var(--text-2); overflow-wrap: anywhere; }
   .options { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .n { font: 10px var(--font-mono); opacity: 0.7; }
-  .answer { margin-top: 4px; font: 12px var(--font-mono); color: var(--ok); }
-  .answer.rejected { color: var(--err); }
+  /* A status word, not code. */
+  .answer { margin-top: 4px; font-size: var(--fs-sm); color: var(--ok-dim); }
+  .answer.rejected { color: var(--err-dim); }
 </style>

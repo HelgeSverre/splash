@@ -265,8 +265,6 @@ export type Skill = {
 	agents: string[],
 	/**  The project it belongs to, for project-level skills. */
 	project: string | null,
-	/**  `hidden: true` — a publisher's marker; no agent enforces it. */
-	hidden: boolean,
 	/**  `user-invocable: false` hides it from the `/` menu (Claude). */
 	user_invocable: boolean,
 	/**  `disable-model-invocation: true`: only runs when called by name. */

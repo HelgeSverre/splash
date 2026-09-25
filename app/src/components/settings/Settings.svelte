@@ -2,7 +2,10 @@
   import Icon from "../Icon.svelte";
   import AgentIcon from "../AgentIcon.svelte";
   import Modal from "../ui/Modal.svelte";
-  import IconButton from "../ui/IconButton.svelte";
+  import ModalClose from "../ui/ModalClose.svelte";
+  import FilterInput from "../ui/FilterInput.svelte";
+  import Chevron from "../ui/Chevron.svelte";
+  import NavItem from "../ui/NavItem.svelte";
   import General from "./General.svelte";
   import Shortcuts from "./Shortcuts.svelte";
   import AgentsOverview from "./AgentsOverview.svelte";
@@ -11,15 +14,18 @@
   import AgentCommands from "./AgentCommands.svelte";
   import AgentMcp from "./AgentMcp.svelte";
   import About from "./About.svelte";
-  import { app, customize } from "../../lib/state.svelte";
-  import { readiness, skillsFor, mcpFor } from "../../lib/agents";
+  import { onDestroy } from "svelte";
+  import { app } from "../../lib/sessions.svelte";
+  import { agentPages, preview } from "../../lib/customize.svelte";
+  import { readiness } from "../../lib/agents";
+  import { matches } from "../../lib/format";
 
   let query = $state("");
   let searchEl: HTMLInputElement | undefined = $state();
   let expanded: Record<string, boolean> = $state({});
 
   const q = $derived(query.trim().toLowerCase());
-  const hit = (...text: string[]) => !q || text.join(" ").toLowerCase().includes(q);
+  const hit = (...text: string[]) => matches(q, ...text);
 
   // The current agent sub-page, so its agent stays expanded.
   const openAgent = $derived(app.settings?.startsWith("agent:") ? app.settings.split(":")[1] : null);
@@ -31,17 +37,19 @@
 
   const agents = $derived(
     app.agents.map((a) => {
-      const children = [
-        { id: `agent:${a.id}:skills`, title: "Skills", icon: "skills", count: customize.skills ? skillsFor(customize.skills, a.id).length : undefined },
-        { id: `agent:${a.id}:commands`, title: "Commands", icon: "commands", count: a.probe?.commands.length },
-        { id: `agent:${a.id}:mcp`, title: "MCP servers", icon: "mcp", count: customize.mcp ? mcpFor(customize.mcp.servers, a.id).filter((s) => !s.project).length : undefined },
-      ].filter((c) => hit(a.name, c.title, "skill command mcp server"));
+      const children = agentPages(a)
+        .map((c) => ({ ...c, id: `agent:${a.id}:${c.page}` }))
+        .filter((c) => hit(a.name, c.title, "skill command mcp server"));
       return { a, children, show: hit(a.name, a.id, "agent") || children.length > 0 };
     }),
   );
 
   const close = () => (app.settings = null);
+  // A doc preview opens from a settings page: it goes when Settings goes.
+  onDestroy(() => (preview.doc = null));
 
+  // On the settings panel, not the window: a dialog stacked on top (a doc
+  // preview) gets its own Esc and ⌘F.
   function onkeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && query) {
       e.preventDefault();
@@ -53,63 +61,58 @@
   }
 </script>
 
-<svelte:window onkeydowncapture={onkeydown} />
-
 <Modal label="Settings" width="1000px" height="720px" onclose={close}>
-  <div class="settings">
+  <div class="settings" onkeydowncapture={onkeydown} role="presentation">
     <nav class="rail">
-      <label class="search">
-        <Icon name="search" size={14} />
-        <input bind:this={searchEl} bind:value={query} placeholder="Search" />
-      </label>
+      <div class="search"><FilterInput bind:value={query} bind:ref={searchEl} placeholder="Search" label="Search settings" /></div>
       <div class="groups">
         {#if appItems.some((i) => hit(i.title, i.keywords))}
-          <div class="group-title">App</div>
+          <div class="group-title t-section">App</div>
           {#each appItems.filter((i) => hit(i.title, i.keywords)) as item (item.id)}
-            <button class="plain item" class:active={app.settings === item.id} onclick={() => (app.settings = item.id)}>
-              <Icon name={item.icon} size={15} /><span class="label">{item.title}</span>
-            </button>
+            <NavItem label={item.title} active={app.settings === item.id} onclick={() => (app.settings = item.id)}>
+              {#snippet lead()}<Icon name={item.icon} size={15} />{/snippet}
+            </NavItem>
           {/each}
         {/if}
 
-        <div class="group-title">Agents</div>
+        <div class="group-title t-section">Agents</div>
         {#if hit("overview agents probe detect refresh")}
-          <button class="plain item" class:active={app.settings === "agents"} onclick={() => (app.settings = "agents")}>
-            <Icon name="agents" size={15} /><span class="label">Overview</span>
-          </button>
+          <NavItem label="Overview" active={app.settings === "agents"} onclick={() => (app.settings = "agents")}>
+            {#snippet lead()}<Icon name="agents" size={15} />{/snippet}
+          </NavItem>
         {/if}
         {#each agents.filter((x) => x.show) as { a, children } (a.id)}
           {@const open = expanded[a.id] ?? (openAgent === a.id || !!q)}
           {@const r = readiness(a)}
-          <div class="node">
-            <button class="plain item" class:active={app.settings === `agent:${a.id}`}
-              onclick={() => { app.settings = `agent:${a.id}`; expanded[a.id] = true; }}>
-              <AgentIcon id={a.id} size={15} /><span class="label">{a.name}</span>
-              <span class="dot-s {r.tone}" title={r.label}></span>
-            </button>
-            <button class="plain twist" class:open title={open ? "Collapse" : "Expand"} onclick={() => (expanded[a.id] = !open)}>›</button>
-          </div>
+          <NavItem label={a.name} active={app.settings === `agent:${a.id}`} onclick={() => { app.settings = `agent:${a.id}`; expanded[a.id] = true; }}>
+            {#snippet lead()}<AgentIcon id={a.id} size={15} />{/snippet}
+            {#snippet trail()}<span class="dot {r.tone}" title={r.label}></span>{/snippet}
+            {#snippet action()}
+              <button class="plain twist focus-inset" title={open ? "Collapse" : "Expand"} aria-label="{a.name} pages" aria-expanded={open}
+                onclick={() => (expanded[a.id] = !open)}><Chevron {open} /></button>
+            {/snippet}
+          </NavItem>
           {#if open}
             {#each children as c (c.id)}
-              <button class="plain item child" class:active={app.settings === c.id} onclick={() => (app.settings = c.id)}>
-                <Icon name={c.icon} size={13} /><span class="label">{c.title}</span>
-                {#if c.count !== undefined}<span class="count">{c.count}</span>{/if}
-              </button>
+              <NavItem label={c.title} indent={31} dense active={app.settings === c.id} onclick={() => (app.settings = c.id)}>
+                {#snippet lead()}<Icon name={c.icon} size={13} />{/snippet}
+                {#snippet trail()}{#if c.count !== undefined}<span class="t-count">{c.count}</span>{/if}{/snippet}
+              </NavItem>
             {/each}
           {/if}
         {/each}
 
         {#if hit("about version data")}
-          <div class="group-title">About</div>
-          <button class="plain item" class:active={app.settings === "about"} onclick={() => (app.settings = "about")}>
-            <Icon name="info" size={15} /><span class="label">About Splash</span>
-          </button>
+          <div class="group-title t-section">About</div>
+          <NavItem label="About Splash" active={app.settings === "about"} onclick={() => (app.settings = "about")}>
+            {#snippet lead()}<Icon name="info" size={15} />{/snippet}
+          </NavItem>
         {/if}
       </div>
     </nav>
 
     <div class="content">
-      <span class="close"><IconButton title="Close (Esc)" onclick={close}><Icon name="close" size={14} /></IconButton></span>
+      <span class="close"><ModalClose onclose={close} /></span>
       <div class="page">
         {#if app.settings === "general"}
           <General />
@@ -136,35 +139,19 @@
 <style>
   .settings { flex: 1; min-height: 0; display: grid; grid-template-columns: 230px minmax(0, 1fr); }
   .rail { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-right: 1px solid var(--border); padding: 12px 8px; }
-  .search {
-    display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; margin-bottom: 10px;
-    background: var(--soft); border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted);
-  }
-  .search:focus-within { border-color: var(--border-strong); }
-  .search input { all: unset; flex: 1; min-width: 0; font-size: 13px; color: var(--text); user-select: text; }
-  .search input::placeholder { color: var(--muted); }
+  .search { display: flex; margin-bottom: 10px; }
+  .search :global(.filter) { min-width: 0; }
   .groups { flex: 1; overflow: auto; }
-  .group-title { padding: 12px 10px 4px; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .group-title { padding: 12px 10px 4px; }
   .group-title:first-child { padding-top: 2px; }
-  .item { display: flex; align-items: center; gap: 10px; width: 100%; height: 30px; padding: 0 10px; border-radius: var(--radius); color: var(--text-2); }
-  .item:hover { background: var(--hover); color: var(--text); }
-  .item.active { background: var(--raised); color: var(--text); }
-  .item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .item.child { height: 26px; padding-left: 34px; font-size: 12.5px; }
-  .count { font: 11px var(--font-mono); color: var(--faint); }
-  .node { position: relative; }
-  .node .item { padding-right: 30px; }
   .twist {
-    position: absolute; right: 4px; top: 5px; width: 20px; height: 20px; display: grid; place-items: center;
-    border-radius: var(--radius-sm); color: var(--faint); transition: transform 0.12s;
+    width: var(--control-h-xs); height: var(--control-h-xs); display: grid; place-items: center;
+    border-radius: var(--radius-sm);
   }
-  .twist:hover { color: var(--text); background: var(--raised); }
-  .twist.open { transform: rotate(90deg); }
-  .dot-s { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex: none; }
-  .dot-s.ok { background: var(--ok-dim); }
-  .dot-s.warn { background: var(--warn-dim); }
-  .dot-s.err { background: var(--err-dim); }
+  .twist:is(:hover, :focus-visible) { background: var(--raised); }
+  .twist:is(:hover, :focus-visible) :global(.chev) { color: var(--text); }
   .content { position: relative; min-height: 0; overflow: auto; user-select: text; }
   .close { position: absolute; top: 14px; right: 14px; z-index: 2; }
-  .page { padding: 28px 36px 40px; max-width: 780px; }
+  /* Room on the right for the close button. */
+  .page { padding: 28px 56px 40px 36px; max-width: 800px; }
 </style>

@@ -4,7 +4,8 @@
 // Combos are canonical strings — modifiers in the order Ctrl, Alt, Shift, Meta,
 // then the key from `KeyboardEvent.code` ("Meta+Shift+P", "Alt+Meta+B",
 // "Ctrl+Tab"), so ⌥ doesn't turn letters into "∫".
-import { prefs, setPref } from "./state.svelte";
+import { prefs, setPref } from "./prefs.svelte";
+import { modalOpen } from "./focus";
 
 export type Action = { id: string; title: string; group: string; defaults: string[] };
 
@@ -33,6 +34,9 @@ export const ACTIONS: Action[] = [
 
 const byId = new Map(ACTIONS.map((a) => [a.id, a]));
 
+/** An action's name, as the shortcut list and the command palette show it. */
+export const actionTitle = (id: string) => byId.get(id)?.title ?? id;
+
 /** Shared UI state: while recording a combo, shortcuts don't fire. */
 export const keys = $state({ recording: false });
 
@@ -47,7 +51,7 @@ function overrides(): Record<string, string[]> {
 const MOD_ORDER = ["Ctrl", "Alt", "Shift", "Meta"];
 
 /** Modifiers in canonical order, so "Meta+Shift+P" and "Shift+Meta+P" are one combo. */
-export function normalize(combo: string): string {
+function normalize(combo: string): string {
   const parts = combo.split("+");
   const key = parts.pop() ?? "";
   const mods = MOD_ORDER.filter((m) => parts.includes(m));
@@ -123,6 +127,12 @@ export function shortcut(id: string): string {
   return b ? format(b) : "";
 }
 
+/** A tooltip with the action's shortcut: "Terminal (⌘J)", or just "Terminal" when unbound. */
+export function withKey(label: string, id: string): string {
+  const keys = shortcut(id).replaceAll(" ", "");
+  return keys ? `${label} (${keys})` : label;
+}
+
 // ── dispatch ─────────────────────────────────────────────────────────────────
 
 /** A handler returns false when it doesn't apply right now (the key passes on). */
@@ -139,11 +149,16 @@ export function run(id: string): boolean {
   return !!h && h() !== false;
 }
 
+/** The only actions that still fire while a modal dialog is open. */
+const OVER_MODALS = new Set(["app.settings", "app.palette"]);
+
 function dispatch(e: KeyboardEvent) {
   if (keys.recording || e.defaultPrevented) return;
   const combo = comboFromEvent(e);
   if (!combo || !isUsable(combo)) return;
+  const modal = modalOpen();
   for (const a of ACTIONS) {
+    if (modal && !OVER_MODALS.has(a.id)) continue;
     if (bindings(a.id).includes(combo) && run(a.id)) {
       e.preventDefault();
       e.stopPropagation();

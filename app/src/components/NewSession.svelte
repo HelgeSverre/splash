@@ -1,10 +1,17 @@
 <script lang="ts">
-  import { dialog } from "@elyra/runtime";
   import AgentIcon from "./AgentIcon.svelte";
   import Modal from "./ui/Modal.svelte";
   import Tag from "./ui/Tag.svelte";
+  import EmptyState from "./ui/EmptyState.svelte";
+  import ModalHeader from "./ui/ModalHeader.svelte";
+  import Kbd from "./Kbd.svelte";
+  import ChoiceGroup from "./ui/ChoiceGroup.svelte";
+  import PathLabel from "./ui/PathLabel.svelte";
+  import AddButton from "./ui/AddButton.svelte";
   import { readiness as agentReadiness } from "../lib/agents";
-  import { app, prefs, addProject, createSession, showError, projectById } from "../lib/state.svelte";
+  import { app, agentById, createSession, pickFolder, projectById } from "../lib/sessions.svelte";
+  import { prefs } from "../lib/prefs.svelte";
+  import { showError } from "../lib/system";
   import type { AgentStatus, Isolation } from "../bindings";
 
 
@@ -16,7 +23,7 @@
   const project = $derived(projectById(projectId));
   const canWorktree = $derived(project?.is_git ?? false);
   const effectiveIsolation: Isolation = $derived(canWorktree ? isolation : "in_place");
-  const agent = $derived(app.agents.find((a) => a.id === agentId));
+  const agent = $derived(agentById(agentId));
 
   // Usable agents show their version; the rest say why not.
   function readiness(a: AgentStatus) {
@@ -24,19 +31,24 @@
     return r.tone === "err" || r.tone === "warn" ? r : { tone: "ok" as const, label: a.version ? `v${a.version}` : "ready" };
   }
   const close = () => (app.newSession = null);
+  const agentOff = (a: AgentStatus) => readiness(a).tone === "err";
+  const canStart = $derived(!!projectId && !!agent && !agentOff(agent) && !busy);
 
-  async function pickFolder() {
-    const [dir] = await dialog.open({ directory: true, title: "Add a project folder" });
-    if (!dir) return;
-    try {
-      projectId = (await addProject(dir)).id;
-    } catch (e) {
-      showError(e);
-    }
+  // The stored default may not be installed or ready: start on one that is.
+  $effect(() => {
+    const current = agentById(agentId);
+    if (current && !agentOff(current)) return;
+    const ready = app.agents.find((a) => !agentOff(a));
+    if (ready) agentId = ready.id;
+  });
+
+  async function addFolder() {
+    const p = await pickFolder();
+    if (p) projectId = p.id;
   }
 
   async function create() {
-    if (!projectId || !agentId || busy) return;
+    if (!canStart) return;
     busy = true;
     try {
       await createSession(projectId, agentId, effectiveIsolation, null);
@@ -48,100 +60,79 @@
     }
   }
 
+  // ⏎ starts the session from anywhere in the dialog except a plain button
+  // (Cancel, Add folder); ⌘⏎ from anywhere at all.
+  let dialogEl: HTMLDivElement | undefined = $state();
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Enter" && (e.metaKey || (e.target as HTMLElement).tagName !== "BUTTON")) {
+    const el = e.target as HTMLElement;
+    if (e.key !== "Enter" || !dialogEl?.contains(el)) return;
+    if (e.metaKey || el.tagName !== "BUTTON" || el.getAttribute("role") === "radio") {
       e.preventDefault();
       create();
     }
   }
+
+  const isolations: { id: Isolation; title: string }[] = [
+    { id: "worktree", title: "New worktree" },
+    { id: "in_place", title: "In place" },
+  ];
+  const isolationDesc = (id: Isolation) =>
+    id === "in_place" ? "Edits your working copy directly" : canWorktree ? "Own branch, your checkout stays clean" : "Needs a git repository";
 </script>
 
 <svelte:window onkeydown={onKey} />
 
 <Modal label="New session" width="620px" top onclose={close}>
-  <div class="dialog">
-    <h2>New session</h2>
+  <ModalHeader title="New session" onclose={close} />
+  <div class="dialog" bind:this={dialogEl}>
+    <div class="label t-group first" id="ns-project">Project</div>
+    <ChoiceGroup items={app.projects} value={projectId} key={(p) => p.id} title={(p) => p.path} labelledby="ns-project"
+      variant="stack" onchange={(p) => (projectId = p.id)}>
+      {#snippet item(p)}<span class="name">{p.name}</span><PathLabel path={p.path} muted start />{/snippet}
+    </ChoiceGroup>
+    <span class="add"><AddButton label="Add folder…" onclick={addFolder} /></span>
 
-    <div class="label">Project</div>
-    <div class="projects">
-      {#each app.projects as p (p.id)}
-        <button class="choice" class:on={p.id === projectId} onclick={() => (projectId = p.id)} title={p.path}>
-          <span class="pname">{p.name}</span>
-          <span class="ppath">{p.path.replace(/^\/Users\/[^/]+/, "~")}</span>
-        </button>
-      {/each}
-      <button class="choice add" onclick={pickFolder}>+ Add folder…</button>
-    </div>
-
-    <div class="label">Agent</div>
-    <div class="agents">
-      {#each app.agents as a (a.id)}
+    <div class="label t-group" id="ns-agent">Agent</div>
+    <ChoiceGroup items={app.agents} value={agentId} key={(a) => a.id} disabled={agentOff} labelledby="ns-agent"
+      layout="grid" onchange={(a) => (agentId = a.id)}>
+      {#snippet item(a)}
         {@const st = readiness(a)}
-        <button class="agent" class:on={a.id === agentId} disabled={st.tone === "err"} onclick={() => (agentId = a.id)}>
-          <AgentIcon id={a.id} size={16} />
-          <span class="aname">{a.name}</span>
-          {#if a.experimental}<Tag tone="warn">exp</Tag>{/if}
-          <span class="astate {st.tone}">{st.label}</span>
-        </button>
-      {:else}
-        <div class="loading"><span class="spinner"></span> Detecting agents…</div>
-      {/each}
-    </div>
+        <AgentIcon id={a.id} size={16} />
+        <span class="name">{a.name}</span>
+        {#if a.experimental}<Tag tone="warn">experimental</Tag>{/if}
+        <span class="astate {st.tone}">{st.label}</span>
+      {/snippet}
+      {#snippet empty()}<EmptyState inline loading title="Detecting agents…" />{/snippet}
+    </ChoiceGroup>
 
-    <div class="label">Where it works</div>
-    <div class="seg">
-      <button class:on={effectiveIsolation === "worktree"} disabled={!canWorktree} onclick={() => (isolation = "worktree")}>
-        <strong>New worktree</strong>
-        <span>{canWorktree ? "Own branch splash/…, your checkout stays untouched" : "Needs a git repository"}</span>
-      </button>
-      <button class:on={effectiveIsolation === "in_place"} onclick={() => (isolation = "in_place")}>
-        <strong>In place</strong>
-        <span>Edits your working copy directly</span>
-      </button>
-    </div>
-
+    <div class="label t-group" id="ns-where">Where it works</div>
+    <ChoiceGroup items={isolations} value={effectiveIsolation} key={(x) => x.id} disabled={(x) => x.id === "worktree" && !canWorktree}
+      labelledby="ns-where" layout="grid" variant="stack" onchange={(x) => (isolation = x.id)}>
+      {#snippet item(x)}<span class="name">{x.title}</span><span class="desc">{isolationDesc(x.id)}</span>{/snippet}
+    </ChoiceGroup>
 
     <div class="actions">
       <span class="hint">{agent?.transport === "adapter" ? "First start may download the ACP adapter via npx." : ""}</span>
-      <button class="btn ghost" onclick={() => (app.newSession = null)}>Cancel</button>
-      <button class="btn primary" disabled={!projectId || !agent || busy} onclick={create}>
+      <button class="btn ghost" onclick={close}>Cancel</button>
+      <button class="btn primary" disabled={!canStart} onclick={create}>
         {#if busy}<span class="spinner"></span>{/if}
-        Start session <span class="kbd on-accent">⏎</span>
+        Start session <Kbd keys="⏎" inline />
       </button>
     </div>
   </div>
 </Modal>
 
 <style>
-  .dialog { overflow: auto; max-height: 80vh; padding: 20px 22px 18px; background: var(--surface); }
-  h2 { margin: 0 0 14px; font-size: 16px; font-weight: 600; }
-  .label { color: var(--text-2); font-size: 12px; font-weight: 500; margin: 14px 0 6px; }
-  button { font: inherit; color: inherit; cursor: pointer; }
-  .projects, .agents { display: flex; flex-direction: column; gap: 4px; }
-  .choice, .agent {
-    display: flex; align-items: center; gap: 10px; text-align: left;
-    padding: 7px 10px; background: var(--soft); border: 1px solid var(--border); border-radius: var(--radius);
-  }
-  .choice:hover, .agent:hover:not(:disabled) { border-color: var(--border-strong); }
-  .choice.on, .agent.on { border-color: var(--accent); background: var(--accent-soft); }
-  .choice.add { color: var(--text-2); justify-content: center; border-style: dashed; background: transparent; }
-  .pname { font-weight: 500; }
-  .ppath { color: var(--muted); font: 11px var(--font-mono); margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
-  .agent:disabled { opacity: 0.45; cursor: default; }
-  .aname { font-weight: 500; }
-  .astate { margin-left: auto; font: 11px var(--font-mono); color: var(--muted); }
+  .dialog { overflow: auto; max-height: 80vh; padding: 16px 18px 18px; }
+  /* The content group-title role, as in settings. */
+  .label { margin: 16px 0 6px; }
+  .label.first { margin-top: 0; }
+  .add { display: block; margin-top: 4px; }
+  .name { flex: none; font-weight: var(--fw-medium); white-space: nowrap; }
+  .desc { color: var(--muted); font-size: var(--fs-sm); }
+  .astate { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); color: var(--muted); }
   .astate.err { color: var(--err-dim); }
   .astate.warn { color: var(--warn-dim); }
-  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .seg button {
-    display: flex; flex-direction: column; gap: 2px; text-align: left;
-    padding: 9px 11px; background: var(--soft); border: 1px solid var(--border); border-radius: var(--radius);
-  }
-  .seg button span { color: var(--muted); font-size: 12px; }
-  .seg button.on { border-color: var(--accent); background: var(--accent-soft); }
-  .seg button:disabled { opacity: 0.45; cursor: default; }
   .actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
-  .hint { flex: 1; color: var(--muted); font-size: 12px; }
-  .kbd.on-accent { color: inherit; background: transparent; border-color: var(--on-accent-border); height: 16px; min-width: 16px; }
-  .loading { display: flex; gap: 8px; align-items: center; color: var(--muted); padding: 8px; }
+  .hint { flex: 1; color: var(--muted); font-size: var(--fs-sm); }
 </style>

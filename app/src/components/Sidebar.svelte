@@ -1,41 +1,30 @@
 <script lang="ts">
-  import { dialog, contextMenu, confirm } from "@elyra/runtime";
+  import { contextMenu, confirm } from "@elyra/runtime";
   import AgentIcon from "./AgentIcon.svelte";
   import SplashMark from "./SplashMark.svelte";
   import Icon from "./Icon.svelte";
   import Kbd from "./Kbd.svelte";
-  import { shortcut } from "../lib/keybindings.svelte";
-  import {
-    app,
-    addProject,
-    removeProject,
-    openSession,
-    sessionsFor,
-    orderedSessions,
-    currentId,
-    deleteSession,
-    showError,
-    openSettings,
-  } from "../lib/state.svelte";
+  import IconButton from "./ui/IconButton.svelte";
+  import Chevron from "./ui/Chevron.svelte";
+  import NavItem from "./ui/NavItem.svelte";
+  import AddButton from "./ui/AddButton.svelte";
+  import { shortcut, withKey } from "../lib/keybindings.svelte";
+  import { errorMessage, statusLabel } from "../lib/format";
+  import { app, pickFolder, removeProject, openSession, sessionsFor, orderedSessions, currentId, deleteSession } from "../lib/sessions.svelte";
+  import { openSettings } from "../lib/customize.svelte";
+  import { showError } from "../lib/system";
   import { api } from "../bindings";
 
   let showArchived: Record<string, boolean> = $state({});
 
-
-  async function pickFolder() {
-    const [dir] = await dialog.open({ directory: true, title: "Add a project folder" });
-    if (!dir) return;
-    try {
-      const p = await addProject(dir);
-      app.newSession = { projectId: p.id };
-    } catch (e) {
-      showError(e);
-    }
+  async function addFolder() {
+    const p = await pickFolder();
+    if (p) app.newSession = { projectId: p.id };
   }
 
   function projectMenu(e: MouseEvent, id: string, name: string) {
     contextMenu(e, [
-      { label: "New session…", action: () => (app.newSession = { projectId: id }) },
+      { label: "New session…", action: () => void (app.newSession = { projectId: id }) },
       { separator: true },
       {
         label: "Remove project…",
@@ -68,8 +57,7 @@
     try {
       await api.archive_session(id, false);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg === "dirty") {
+      if (errorMessage(e) === "dirty") {
         if (await confirm("The worktree has uncommitted changes. Archive anyway and discard them? (The branch is kept.)", { danger: true, confirmLabel: "Discard & archive" }))
           await api.archive_session(id, true).catch(showError);
       } else showError(e);
@@ -87,12 +75,12 @@
     <SplashMark size={18} />
     <span>splash</span>
     <span class="spacer"></span>
-    <button class="plain gear" title="Settings (⌘,)" aria-label="Settings" onclick={() => openSettings()}><Icon name="gear" size={15} /></button>
+    <IconButton title={withKey("Settings", "app.settings")} label="Settings" icon="gear" onclick={() => openSettings()} />
   </div>
 
-  <div class="section">
+  <div class="section t-section">
     <span>Projects</span>
-    <button class="plain icon-btn" title="Add a project folder" onclick={pickFolder}>+</button>
+    <IconButton title="Add a project folder" size="sm" icon="plus" onclick={addFolder} />
   </div>
 
   <nav>
@@ -100,70 +88,63 @@
       {@const sessions = sessionsFor(p.id)}
       {@const archived = sessionsFor(p.id, true)}
       <div class="project">
-        <button
-          class="plain project-row"
-          onclick={() => (app.collapsed[p.id] = !app.collapsed[p.id])}
-          oncontextmenu={(e) => projectMenu(e, p.id, p.name)}
-          title={p.path}
-        >
-          <span class="chev" class:open={!app.collapsed[p.id]}>›</span>
-          <span class="name">{p.name}</span>
-          <span class="add" role="button" tabindex="-1" title="New session"
-            onclick={(e) => { e.stopPropagation(); app.newSession = { projectId: p.id }; }}
-            onkeydown={() => {}}>+</span>
-        </button>
+        <div class="project-row" oncontextmenu={(e) => projectMenu(e, p.id, p.name)} role="presentation">
+          <button
+            class="plain project-toggle focus-inset"
+            aria-expanded={!app.collapsed[p.id]}
+            onclick={() => (app.collapsed[p.id] = !app.collapsed[p.id])}
+            title={p.path}
+          >
+            <Chevron open={!app.collapsed[p.id]} />
+            <span class="name truncate">{p.name}</span>
+          </button>
+          <IconButton class="add reveal-on-hover" title="New session in {p.name}" size="sm" icon="plus"
+            onclick={() => (app.newSession = { projectId: p.id })} />
+        </div>
         {#if !app.collapsed[p.id]}
           {#each sessions as s (s.id)}
-            <button
-              class="plain session"
-              class:active={s.id === currentId()}
-              onclick={() => openSession(s.id)}
+            <NavItem label={s.title} indent={24} active={s.id === currentId()} onclick={() => openSession(s.id)}
               oncontextmenu={(e) => sessionMenu(e, s.id, s.title, false)}
-              title={s.branch ? `${s.title}\n⎇ ${s.branch}` : s.title}
-            >
-              <span class="dot {app.unread[s.id] && s.status === 'idle' ? 'unread' : s.status}"></span>
-              <AgentIcon id={s.agent_id} size={12} />
-              <span class="title">{s.title}</span>
-              {#if s.status === "awaiting_permission"}<span class="needs">!</span>{/if}
-              {#if s.isolation === "worktree"}<span class="wt" title="worktree">⎇</span>{/if}
-              <span class="key">{hotkey(s.id)}</span>
-            </button>
+              title={`${s.title}\n${statusLabel(s.status)}${s.branch ? ` · ${s.branch}` : ""}`}>
+              {#snippet lead()}
+                <span class="dot {app.unread[s.id] && s.status === 'idle' ? 'unread' : s.status}"></span>
+                <AgentIcon id={s.agent_id} size={12} />
+              {/snippet}
+              {#snippet trail()}
+                {#if s.status === "awaiting_permission"}<span class="needs" title="Needs you"><Icon name="alert" size={12} /></span>{/if}
+                {#if s.isolation === "worktree"}<span class="wt" title="worktree"><Icon name="branch" size={12} /></span>{/if}
+                <span class="key">{hotkey(s.id)}</span>
+              {/snippet}
+            </NavItem>
           {:else}
-            <button class="plain session empty" onclick={() => (app.newSession = { projectId: p.id })}>
-              <span class="muted">No sessions — start one</span>
-            </button>
+            <NavItem label="No sessions yet" indent={24} dense muted onclick={() => (app.newSession = { projectId: p.id })} />
           {/each}
           {#if archived.length}
-            <button class="plain archived-toggle" onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
-              {showArchived[p.id] ? "▾" : "▸"} Archived ({archived.length})
-            </button>
+            <NavItem label="Archived" indent={24} dense muted expanded={!!showArchived[p.id]} onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
+              {#snippet lead()}<Chevron open={!!showArchived[p.id]} />{/snippet}
+              {#snippet trail()}<span class="t-count">{archived.length}</span>{/snippet}
+            </NavItem>
             {#if showArchived[p.id]}
               {#each archived as s (s.id)}
-                <button
-                  class="plain session archived"
-                  class:active={s.id === currentId()}
-                  onclick={() => openSession(s.id)}
-                  oncontextmenu={(e) => sessionMenu(e, s.id, s.title, true)}
-                >
-                  <AgentIcon id={s.agent_id} size={12} />
-                  <span class="title">{s.title}</span>
-                </button>
+                <NavItem label={s.title} indent={24} muted active={s.id === currentId()} onclick={() => openSession(s.id)}
+                  oncontextmenu={(e) => sessionMenu(e, s.id, s.title, true)}>
+                  {#snippet lead()}<AgentIcon id={s.agent_id} size={12} />{/snippet}
+                </NavItem>
               {/each}
             {/if}
           {/if}
         {/if}
       </div>
     {:else}
-      <button class="plain empty-projects" onclick={pickFolder}>
-        <span>Add a project folder to start</span>
-      </button>
+      <div class="empty-projects"><AddButton label="Add a project folder" onclick={addFolder} /></div>
     {/each}
   </nav>
 
   <div class="footer">
-    <button class="plain foot-btn" onclick={() => (app.newSession = {})}>
-      <span>+ New session</span>{#if shortcut("session.new")}<Kbd keys={shortcut("session.new")} />{/if}
-    </button>
+    <NavItem label="New session" onclick={() => (app.newSession = {})}>
+      {#snippet lead()}<Icon name="plus" size={12} />{/snippet}
+      {#snippet trail()}{#if shortcut("session.new")}<Kbd keys={shortcut("session.new")} />{/if}{/snippet}
+    </NavItem>
   </div>
 </aside>
 
@@ -175,58 +156,27 @@
   }
   .brand {
     display: flex; align-items: center; gap: 8px;
-    padding: 10px 8px 8px 14px; min-height: 44px; font: 600 14px var(--font-mono); letter-spacing: -0.02em;
+    height: var(--h-header); padding: 0 8px 0 14px; flex: none; font: var(--fw-semibold) var(--fs-md) var(--font-mono); letter-spacing: var(--tracking-brand);
   }
-  .spacer { flex: 1; }
-  .gear { width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius); color: var(--muted); }
-  .gear:hover { background: var(--hover); color: var(--text); }
   .section {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 10px 4px 14px; color: var(--muted); font-size: 11px; font-weight: 500;
+    padding: 6px 10px 0 14px;
   }
-  .icon-btn {
-    width: 20px; height: 20px; border: 0; border-radius: var(--radius-sm);
-    background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1;
-  }
-  .icon-btn:hover { background: var(--hover); color: var(--text); }
-  nav { flex: 1; overflow: auto; padding: 0 6px 8px; }
+  /* 4px on top: room for a focus ring on the first row's reveal button. */
+  nav { flex: 1; overflow: auto; padding: 4px 6px 8px; }
   .project { margin-bottom: 4px; }
   .project-row {
-    display: flex; align-items: center; gap: 6px; width: 100%;
-    padding: 5px 8px; border-radius: var(--radius); color: var(--text-2); font-weight: 500;
+    display: flex; align-items: center; gap: 2px; width: 100%; padding-right: 4px;
+    border-radius: var(--radius); color: var(--text); font-weight: var(--fw-semibold);
   }
-  .project-row:hover { background: var(--hover); color: var(--text); }
-  .chev { width: 10px; color: var(--muted); transition: transform 0.12s; display: inline-block; }
-  .chev.open { transform: rotate(90deg); }
-  .project-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .add { opacity: 0; color: var(--muted); padding: 0 4px; border-radius: var(--radius-sm); font-size: 14px; }
-  .project-row:hover .add { opacity: 1; }
-  .add:hover { color: var(--text); background: var(--raised); }
-  .session {
-    display: flex; align-items: center; gap: 8px; width: 100%;
-    padding: 4px 8px 4px 22px; border-radius: var(--radius); color: var(--text-2);
-  }
-  .session:hover { background: var(--hover); color: var(--text); }
-  .session.active { background: var(--raised); color: var(--text); }
-  .session .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .session.archived { color: var(--muted); }
-  .session.empty { color: var(--muted); font-size: 12px; }
-  .needs { color: var(--accent); font-weight: 700; font-family: var(--font-mono); }
-  .wt { color: var(--muted); font-size: 11px; }
-  .key { color: var(--faint); font: 500 10.5px var(--font-keys); min-width: 20px; text-align: right; }
-  .archived-toggle { padding: 3px 8px 3px 22px; color: var(--muted); font-size: 11px; }
-  .archived-toggle:hover { color: var(--text-2); }
-  .muted { color: var(--muted); }
-  .empty-projects {
-    display: block; margin: 8px; padding: 14px; text-align: center; color: var(--muted);
-    border: 1px dashed var(--border-strong); border-radius: var(--radius);
-  }
-  .empty-projects:hover { color: var(--text); border-color: var(--muted); }
+  .project-row:is(:hover, :focus-within) { background: var(--row-hover); color: var(--text); }
+  .project-toggle { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; height: var(--row-h); padding: 0 8px; border-radius: var(--radius); }
+  .project-toggle .name { flex: 1; }
+  .needs, .wt { display: inline-grid; place-items: center; flex: none; }
+  .needs { color: var(--accent); }
+  .wt { color: var(--muted); }
+  /* The keycap font, bare: a box on every row would be noise. */
+  .key { color: var(--muted); font: var(--fw-medium) var(--fs-xs) var(--font-keys); min-width: 20px; text-align: right; }
+  .empty-projects { margin: 8px 2px; }
   .footer { border-top: 1px solid var(--border); padding: 6px; display: flex; flex-direction: column; gap: 1px; }
-  .foot-btn {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 8px; border-radius: var(--radius); color: var(--text-2);
-  }
-  .foot-btn:hover, .foot-btn.active { background: var(--hover); color: var(--text); }
-  .count { font: 11px var(--font-mono); color: var(--muted); }
 </style>

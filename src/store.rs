@@ -25,10 +25,11 @@ fn isolation_str(i: &Isolation) -> &'static str {
     }
 }
 
-pub type Result<T> = std::result::Result<T, String>;
+use crate::error::Error;
+pub use crate::error::Result;
 
-fn err(e: impl std::fmt::Display) -> String {
-    e.to_string()
+fn err(e: impl std::fmt::Display) -> Error {
+    Error::Store(e.to_string())
 }
 
 pub fn now() -> f64 {
@@ -276,7 +277,7 @@ impl Store {
                 .fetch_optional(self.db.pool())
                 .await
                 .map_err(err)?
-                .ok_or_else(|| format!("no project {id}"))?;
+                .ok_or_else(|| Error::Store(format!("no project {id}")))?;
         project_from(&row)
     }
 
@@ -344,7 +345,7 @@ impl Store {
         .fetch_optional(self.db.pool())
         .await
         .map_err(err)?
-        .ok_or_else(|| format!("no session {id}"))?;
+        .ok_or_else(|| Error::Store(format!("no session {id}")))?;
         session_from(&row)
     }
 

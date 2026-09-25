@@ -121,7 +121,7 @@ async fn auth(spec: &AgentSpec) -> (Auth, Option<String>) {
             } else {
                 (
                     Auth::LoggedOut,
-                    Some(format!("~/{rel} not found — run `{} login`", spec.cli)),
+                    Some(format!("~/{rel} not found. Run `{} login`.", spec.cli)),
                 )
             }
         }

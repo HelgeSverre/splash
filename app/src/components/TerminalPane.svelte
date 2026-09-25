@@ -2,7 +2,7 @@
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
-  import { api, channel } from "../bindings";
+  import { api, type TermEvent } from "../bindings";
 
   type Instance = { term: Terminal; fit: FitAddon; el: HTMLDivElement; lastSeq: number; exited: boolean; ready: boolean };
   // One xterm per session, kept alive while you switch around.
@@ -10,7 +10,8 @@
 
   const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
-  channel("term").subscribe((ev) => {
+  /** Shell output for whichever terminal it belongs to (lib/live subscribes this). */
+  export function writeTerm(ev: TermEvent | undefined) {
     if (!ev) return;
     const inst = instances.get(ev.session);
     if (!inst || !inst.ready || ev.seq <= inst.lastSeq) return;
@@ -18,9 +19,9 @@
     if (ev.data) inst.term.write(decode(ev.data));
     if (ev.exited) {
       inst.exited = true;
-      inst.term.write("\r\n\x1b[2m[shell exited — press any key for a new one]\x1b[0m\r\n");
+      inst.term.write("\r\n\x1b[2m[shell exited · press any key for a new one]\x1b[0m\r\n");
     }
-  });
+  }
 
   // xterm needs real colour strings: read the terminal tokens from app.css.
   function themeFromCss() {

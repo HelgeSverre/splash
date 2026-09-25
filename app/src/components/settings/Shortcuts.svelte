@@ -1,12 +1,15 @@
 <script lang="ts">
   import Kbd from "../Kbd.svelte";
   import KeyRecorder from "../ui/KeyRecorder.svelte";
+  import PageHeader from "./PageHeader.svelte";
+  import SettingsGroup from "./SettingsGroup.svelte";
+  import SettingsRow from "./SettingsRow.svelte";
   import { ACTIONS, resetAll } from "../../lib/keybindings.svelte";
-  import { prefs } from "../../lib/state.svelte";
+  import { prefs } from "../../lib/prefs.svelte";
 
   const groups = [...new Set(ACTIONS.map((a) => a.group))];
   const anyCustom = $derived((prefs.keybindings ?? "{}") !== "{}");
-  // Keys that only mean something in one place — shown, not rebindable.
+  // Keys that only mean something in one place: shown, not rebindable.
   const contextual = [
     ["⏎", "Send the message"],
     ["⇧ ⏎", "New line in the message"],
@@ -18,31 +21,22 @@
 </script>
 
 <div class="set-page">
-  <div class="title-row">
-    <h2>Keyboard shortcuts</h2>
-    {#if anyCustom}<button class="btn sm ghost" onclick={resetAll}>Reset all</button>{/if}
-  </div>
-  <p class="lede">Click a shortcut and press a new one. Esc cancels, ⌫ removes it. Defaults follow VS Code where there's a convention.</p>
+  <PageHeader title="Keyboard shortcuts">
+    {#snippet actions()}{#if anyCustom}<button class="btn sm ghost" onclick={resetAll}>Reset all</button>{/if}{/snippet}
+    {#snippet lede()}Click a shortcut to change it.{/snippet}
+  </PageHeader>
 
   {#each groups as g (g)}
-    <div class="set-group-title">{g}</div>
-    <div class="set-group">
+    <SettingsGroup title={g} dense>
       {#each ACTIONS.filter((a) => a.group === g) as a (a.id)}
-        <div class="set-row"><div class="set-label">{a.title}</div><KeyRecorder id={a.id} /></div>
+        <SettingsRow label={a.title}><KeyRecorder id={a.id} /></SettingsRow>
       {/each}
-    </div>
+    </SettingsGroup>
   {/each}
 
-  <div class="set-group-title">In context</div>
-  <div class="set-group">
+  <SettingsGroup title="In context" dense>
     {#each contextual as [keys, label] (label)}
-      <div class="set-row"><div class="set-label">{label}</div><Kbd {keys} /></div>
+      <SettingsRow {label}><Kbd {keys} /></SettingsRow>
     {/each}
-  </div>
+  </SettingsGroup>
 </div>
-
-<style>
-  .title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-  .title-row h2 { margin: 0; }
-  .set-row { padding-top: 7px; padding-bottom: 7px; }
-</style>

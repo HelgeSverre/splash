@@ -52,11 +52,8 @@
   /* Diffs and file states */
   --add-bg: rgba(34, 197, 94, 0.1);
   --del-bg: rgba(239, 68, 68, 0.1);
-  --add-fg: #b7e8c4;
   --del-fg: #f2b8b8;
   --modified-fg: #e8d48b;
-  --added-fg: #9fd9b0;
-  --deleted-fg: #f2a3a3;
 
   /* Syntax */
   --syn-keyword: #c4a7e7;
@@ -95,11 +92,68 @@
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
   --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.55);
 
+  /* List rows: one hover and one "you are here" background for every list. */
+  --row-hover: var(--hover);
+  --row-active: var(--raised);
+
+  /* Playground debug overlays (grid, baseline, outlines). */
+  --debug-grid: color-mix(in srgb, var(--info) 22%, transparent);
+  --debug-grid-soft: color-mix(in srgb, var(--info) 8%, transparent);
+  --debug-baseline: color-mix(in srgb, var(--err) 14%, transparent);
+  --debug-outline: color-mix(in srgb, var(--err) 35%, transparent);
+
   --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --font-keys: -apple-system, "SF Pro Text", BlinkMacSystemFont, system-ui, sans-serif;
+
+  /* Type scale. Mono runs about half a pixel larger than Inter optically, so
+     mono only uses --fs-xs (meta) and --fs-sm (values, code). */
+  --fs-2xs: 10.5px;  /* tags, badges */
+  --fs-xs: 11px;     /* eyebrows, mono meta, counts, keycaps */
+  --fs-sm: 12px;     /* secondary UI, descriptions, tabs, mono values, code */
+  --fs-base: 13px;   /* body, controls, rows */
+  --fs-md: 14px;     /* pane titles, markdown h2 */
+  --fs-lg: 16px;     /* page and dialog titles, markdown h1 */
+  --fs-xl: 22px;     /* the Welcome wordmark only */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --lh-tight: 1.3;   /* menus, two-line items, headings */
+  --lh-base: 1.5;
+  --lh-prose: 1.6;   /* transcript, markdown */
+  --lh-code: 1.55;
+  --tracking-title: -0.01em;
+  --tracking-brand: -0.02em;
+
   --radius: 6px;
   --radius-sm: 4px;
+  --radius-lg: 8px;  /* groups, cards, popovers, dialogs */
+  --radius-pill: 999px;
+
+  /* Sizes. Chrome rows share three heights; controls share three. */
+  --h-header: 44px;   /* window-level headers: sidebar brand, session header, dialog heads */
+  --h-tabbar: 32px;   /* every tab bar */
+  --h-toolbar: 36px;  /* secondary bars: diff, file, log, terminal, change summary */
+  --control-h: 28px;     /* buttons, fields, search */
+  --control-h-sm: 24px;  /* small buttons, segmented controls, key recorders */
+  --control-h-xs: 22px;  /* chips, pickers, small icon buttons */
+  --row-h: 28px;      /* navigation rows: sidebar, settings rail */
+  --row-h-sm: 24px;   /* dense lists: changes, file tree, commands */
+  --gutter: 16px;     /* horizontal padding of main-pane bars */
+  --gutter-side: 12px; /* the same in side panels */
+
+  /* Focus: one ring for keyboard focus, drawn outside the box by default and
+     inside it (.focus-inset, tabs, rows, radios) where a scroller would clip it.
+     Text fields show focus on their border instead. */
+  --focus-ring-color: var(--accent);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-inset: calc(-1 * var(--focus-ring-width));
+  --focus-field-border: var(--accent-border);
+  /* A quieter ring for dense content (the chat): a thin tinted outline and a
+     faint wash drawn over whatever background the element already has. */
+  --focus-soft-ring: rgba(250, 204, 21, 0.35);
+  --focus-soft-bg: rgba(250, 204, 21, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -107,60 +161,106 @@ html, body, #app { height: 100%; margin: 0; }
 body {
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.5 var(--font-ui);
+  font: var(--fw-regular) var(--fs-base)/var(--lh-base) var(--font-ui);
   -webkit-font-smoothing: antialiased;
+  /* JetBrains Mono would draw `--` as one long dash and space out `://`:
+     commands and paths must read exactly as typed. font-feature-settings
+     inherits and, unlike font-variant-ligatures, survives a `font:` shorthand. */
+  font-feature-settings: "calt" 0, "liga" 0;
   overflow: hidden;
   user-select: none;
 }
 button, input, textarea, select { font: inherit; color: inherit; }
-/* A button with no chrome of its own. */
-.plain { all: unset; box-sizing: border-box; cursor: pointer; }
-.plain:disabled { cursor: default; }
+/* A button with no chrome of its own. Zero specificity, so the focus ring and
+   any component style win over the reset. */
+:where(.plain) { all: unset; box-sizing: border-box; cursor: pointer; }
+:where(.plain):disabled { cursor: default; }
 code, pre, kbd, .mono { font-family: var(--font-mono); }
+/* The scale stops at semibold. */
+b, strong, th { font-weight: var(--fw-semibold); }
+
+/* ─── Text roles ─────────────────────────────────────────────────────────────
+   Text greys: --text (payload), --text-2 (secondary), --muted (meta). --faint
+   is for decoration only (chevrons, line numbers, dividers, disabled).
+   Errors: sentences and stderr in --del-fg, status words in --err-dim, and
+   full --err only for a dot or an icon. */
+.t-page-title { margin: 0; font-size: var(--fs-lg); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-title); line-height: var(--lh-tight); color: var(--text); }
+.t-pane-title { font-size: var(--fs-md); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-title); color: var(--text); }
+/* Section label over rails, menus and inspector panels. */
+.t-section { font-size: var(--fs-xs); font-weight: var(--fw-semibold); color: var(--muted); }
+/* Content group titles (settings groups, collapsible sections, form labels). */
+.t-group { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text-2); }
+.t-label { font-size: var(--fs-base); font-weight: var(--fw-medium); color: var(--text); }
+.t-body { font-size: var(--fs-base); font-weight: var(--fw-regular); line-height: var(--lh-base); color: var(--text); }
+.t-secondary { font-size: var(--fs-sm); color: var(--text-2); }
+.t-meta { font-size: var(--fs-sm); color: var(--muted); }
+.t-mono-value { font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--text-2); }
+.t-mono-meta { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); }
+.t-code { font-family: var(--font-mono); font-size: var(--fs-sm); line-height: var(--lh-code); }
+.t-count { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Menu and list items: a name over (or beside) a quieter description.
+   Command names add .mono, which drops them to --fs-sm. */
+.t-item-name { font-size: var(--fs-base); color: var(--text); }
+.t-item-name.mono { font-family: var(--font-mono); font-size: var(--fs-sm); }
+.t-item-desc { font-size: var(--fs-sm); line-height: var(--lh-tight); color: var(--muted); }
+/* Layout utilities. */
+.spacer { flex: 1; }
+.muted { color: var(--muted); }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 ::selection { background: var(--accent-soft); color: var(--text); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-hover); }
+::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-hover); } /* hover-only */
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 
 /* Buttons */
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
-  height: 28px; padding: 0 10px;
+  height: var(--control-h); padding: 0 10px;
   background: var(--soft); border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text); font-weight: 500; cursor: pointer; white-space: nowrap;
+  color: var(--text); font-weight: var(--fw-medium); cursor: pointer; white-space: nowrap;
 }
-.btn:hover:not(:disabled) { background: var(--hover); border-color: var(--border-strong); }
+.btn:is(:hover, :focus-visible):not(:disabled) { background: var(--hover); border-color: var(--border-strong); }
 .btn:disabled { color: var(--muted); cursor: default; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-.btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:is(:hover, :focus-visible):not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn.primary:disabled { background: var(--soft); border-color: var(--border); color: var(--muted); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
-.btn.ghost:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-.btn.danger { color: var(--err); }
-.btn.sm { height: 24px; padding: 0 8px; font-size: 12px; }
+.btn.ghost:is(:hover, :focus-visible):not(:disabled) { background: var(--hover); color: var(--text); }
+.btn.danger { color: var(--err-dim); }
+.btn.danger:is(:hover, :focus-visible):not(:disabled) { color: var(--del-fg); }
+.btn.sm { height: var(--control-h-sm); padding: 0 8px; font-size: var(--fs-sm); }
 
 /* Keycaps: SF draws ⌘⌥⇧⏎ with the right metrics, and lines up with Inter. */
 .kbd {
   display: inline-flex; align-items: center; justify-content: center;
   height: 18px; min-width: 18px; padding: 0 5px; box-sizing: border-box;
-  font: 500 11px/1 var(--font-keys);
+  font: var(--fw-medium) var(--fs-xs)/1 var(--font-keys);
   font-variant-numeric: tabular-nums; letter-spacing: 0;
   color: var(--text-2); background: var(--soft);
-  border: 1px solid var(--border-strong); border-radius: 4px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   vertical-align: middle; flex: none;
 }
 .kbds { display: inline-flex; gap: 3px; vertical-align: middle; flex: none; }
 
 input.field, textarea.field, select.field {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 6px 10px; outline: none; user-select: text;
+  padding: 0 10px; user-select: text;
 }
-input.field:focus, textarea.field:focus, select.field:focus { border-color: var(--border-strong); }
+input.field, select.field { height: var(--control-h); }
+textarea.field { padding-block: 6px; }
+input.field.sm { height: var(--control-h-sm); padding: 0 8px; font-size: var(--fs-sm); }
+/* A bordered box that holds a bare input (search fields, the composer). */
+.field-box { border: 1px solid var(--border); border-radius: var(--radius); }
+/* The input inside a .field-box: no chrome, the box shows focus. */
+.bare-input {
+  flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; border-radius: 0;
+  background: transparent; color: var(--text); user-select: text; appearance: none;
+}
+.bare-input::placeholder { color: var(--muted); }
 
-/* Status dots */
+/* Status dots: session states, and ok/warn/err tones for readiness. */
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.running, .dot.starting { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
 .dot.awaiting_permission { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -168,6 +268,9 @@ input.field:focus, textarea.field:focus, select.field:focus { border-color: var(
 .dot.unread { background: var(--ok-dim); }
 .dot.error { background: var(--err-dim); }
 .dot.exited { background: var(--faint); }
+.dot.ok { background: var(--ok-dim); }
+.dot.warn { background: var(--warn-dim); }
+.dot.err { background: var(--err-dim); }
 @keyframes pulse { 50% { opacity: 0.35; } }
 
 .selectable { user-select: text; }
@@ -178,24 +281,75 @@ input.field:focus, textarea.field:focus, select.field:focus { border-color: var(
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Settings pages share these. */
-.set-page h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
-.set-page .lede { margin: 0 0 20px; color: var(--text-2); max-width: 64ch; }
-.set-page .lede.dim { color: var(--muted); font-size: 12.5px; }
-.set-group { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); margin-bottom: 16px; }
-.set-group > .set-row + .set-row { border-top: 1px solid var(--border); }
-.set-group-title { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 20px 0 8px; }
-.set-row { display: flex; align-items: center; gap: 16px; padding: 12px 14px; min-width: 0; }
-.set-row .set-label { flex: 1; min-width: 0; }
-.set-row .set-label > div:first-child { font-weight: 500; }
-.set-row .set-desc { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.set-row .set-value { font: 12px var(--font-mono); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 55%; }
-.set-empty { padding: 18px 14px; color: var(--muted); }
-.seg-control { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; flex: none; }
-.seg-control button { all: unset; cursor: pointer; padding: 3px 10px; font-size: 12px; color: var(--muted); }
-.seg-control button.on { background: var(--raised); color: var(--text); }
-.toggle { position: relative; width: 30px; height: 18px; flex: none; border-radius: 999px; background: var(--border-strong); border: 0; cursor: pointer; transition: background 0.15s; }
-.toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text); transition: transform 0.15s; }
-.toggle.on { background: var(--accent); }
-.toggle.on::after { transform: translateX(12px); background: var(--on-accent); }
-.chip-tag { font: 10.5px var(--font-mono); color: var(--text-2); border: 1px solid var(--border-strong); border-radius: 999px; padding: 0 7px; white-space: nowrap; }
+/* Inline code in settings prose (page ledes, row descriptions). */
+.set-page code { font: var(--fs-sm) var(--font-mono); }
+/* A settings page's filter box, and any toggle beside it. */
+.set-page .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+
+/* A selectable card (radio choices): the soft accent marks the pick, the
+   full accent stays reserved for the focus ring. Pair with .plain. */
+.choice {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  padding: 8px 10px; background: var(--soft); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.choice:is(:hover, :focus-visible):not(:disabled) { border-color: var(--border-strong); }
+.choice.on, .choice[aria-checked="true"] { border-color: var(--accent-border); background: var(--accent-soft); }
+.choice:disabled { opacity: 0.45; cursor: default; }
+
+/* Floating menus (option pickers, the slash list). Items are ui/MenuItem. */
+.popover {
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+  padding: 4px; box-shadow: var(--shadow-pop);
+}
+.popover:focus-visible { outline: none; }
+
+/* Boxed blocks in the transcript and panes. .card-code holds preformatted text. */
+.card { padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.card-code {
+  margin: 0; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  font: var(--fs-sm)/var(--lh-code) var(--font-mono); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+/* Error output: stderr, a failed handshake, an agent error. */
+.card-code.err { color: var(--del-fg); background: var(--del-bg); border-color: var(--err-soft); }
+
+/* Key and value pairs (inspector panels): labels in the first column, values
+   and anything under them (a bar, actions) in the second. */
+.kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 10px; row-gap: 4px; align-items: baseline; }
+.kv > .kv-k { color: var(--muted); font-size: var(--fs-sm); }
+.kv > .kv-full { grid-column: 2; }
+
+/* Reveal a control on hover, and on keyboard focus anywhere in its container. */
+.reveal-on-hover { opacity: 0; transition: opacity 0.1s; }
+:is(:hover, :focus-within) > .reveal-on-hover, .reveal-on-hover:focus-visible { opacity: 1; }
+
+/* ─── Focus (last, so it wins over the component rules above) ──────────────── */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+:focus:not(:focus-visible) { outline: none; }
+/* Rows, tabs, tree nodes, menu items, radios: a ring inside the box, so a
+   scroller or a bordered group can't clip it. */
+.focus-inset:focus-visible,
+[role="tab"]:focus-visible,
+[role="treeitem"]:focus-visible,
+[role="option"]:focus-visible,
+[role="radio"]:focus-visible,
+[role="menuitem"]:focus-visible { outline-offset: var(--focus-ring-inset); }
+/* Scrollable panes Chromium makes focusable: an inset ring on the pane edge. */
+.scroll-region:focus-visible { outline-offset: var(--focus-ring-inset); }
+/* Text fields: the border carries focus, the ring would be noise. */
+input.field, textarea.field, select.field, .field-box :where(input, textarea) { outline: none; }
+/* `html` lifts it over a component's own `.box { border: … }` (a scoped class pair). */
+html .field:focus, html .field-box:focus-within { outline: none; border-color: var(--focus-field-border); }
+
+/* Highlighted code (highlight.js classes), wherever it appears. */
+.syntax .hljs-keyword, .syntax .hljs-selector-tag, .syntax .hljs-built_in { color: var(--syn-keyword); }
+.syntax .hljs-string, .syntax .hljs-regexp, .syntax .hljs-attr { color: var(--syn-string); }
+.syntax .hljs-number, .syntax .hljs-literal { color: var(--syn-number); }
+.syntax .hljs-comment, .syntax .hljs-quote { color: var(--syn-comment); font-style: italic; }
+.syntax .hljs-title, .syntax .hljs-section { color: var(--syn-title); }
+.syntax .hljs-type, .syntax .hljs-title.class_ { color: var(--syn-type); }
+.syntax .hljs-variable, .syntax .hljs-template-variable, .syntax .hljs-params { color: var(--text); }
+.syntax .hljs-tag, .syntax .hljs-name { color: var(--syn-tag); }
+.syntax .hljs-meta, .syntax .hljs-symbol, .syntax .hljs-bullet { color: var(--syn-meta); }

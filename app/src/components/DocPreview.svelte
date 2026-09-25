@@ -2,28 +2,23 @@
   // Read-only preview of a skill or command: the markdown rendered (or its
   // source), with the frontmatter parsed out into a side panel.
   import AgentIcon from "./AgentIcon.svelte";
-  import Icon from "./Icon.svelte";
   import Markdown from "./entries/Markdown.svelte";
   import Modal from "./ui/Modal.svelte";
-  import IconButton from "./ui/IconButton.svelte";
+  import ModalHeader from "./ui/ModalHeader.svelte";
   import RevealButton from "./ui/RevealButton.svelte";
   import CodeView from "./ui/CodeView.svelte";
   import Tag from "./ui/Tag.svelte";
-  import { preview } from "../lib/state.svelte";
-  import { home } from "../lib/paths";
-  import { api, type Doc } from "../bindings";
+  import FilePane from "./FilePane.svelte";
+  import SegmentedControl from "./ui/SegmentedControl.svelte";
+  import PathLabel from "./ui/PathLabel.svelte";
+  import { preview } from "../lib/customize.svelte";
+  import { api } from "../bindings";
+  import { load } from "../lib/load.svelte";
 
   const d = $derived(preview.doc!);
-  let doc: Doc | null = $state(null);
-  let error = $state("");
   let mode: "rendered" | "source" = $state("rendered");
-
-  $effect(() => {
-    const path = d.path;
-    doc = null;
-    error = "";
-    if (path) api.read_doc(path).then((x) => (doc = x)).catch((e) => (error = String(e?.message ?? e)));
-  });
+  const res = load(() => (d.path ? api.read_doc(d.path) : null), true);
+  const doc = $derived(res.value);
 
   // Friendly names for the keys agents actually act on.
   const LABELS: Record<string, string> = {
@@ -45,45 +40,47 @@
 </script>
 
 <Modal label="{d.kind} preview" width="940px" height="660px" onclose={close}>
-  <div class="head">
-    <AgentIcon id={d.agent} size={16} />
-    <span class="title">{d.title}</span>
+  <ModalHeader title={d.title} onclose={close}>
+    {#snippet icon()}<AgentIcon id={d.agent} size={16} />{/snippet}
     <Tag>{d.kind}</Tag>
-    {#if d.path}<span class="path" title={d.path}>{home(d.path)}</span>{/if}
-    <span class="spacer"></span>
-    {#if doc}
-      <div class="seg-control">
-        <button class:on={mode === "rendered"} onclick={() => (mode = "rendered")}>Rendered</button>
-        <button class:on={mode === "source"} onclick={() => (mode = "source")}>Source</button>
-      </div>
-    {/if}
-    {#if d.path}<RevealButton path={d.path} />{/if}
-    <IconButton title="Close (Esc)" onclick={close}><Icon name="close" size={14} /></IconButton>
-  </div>
+    {#if d.path}<PathLabel path={d.path} muted />{/if}
+    {#snippet actions()}
+      {#if doc}
+        <SegmentedControl label="View" value={mode} onchange={(m) => (mode = m)}
+          options={[{ value: "rendered", label: "Rendered" }, { value: "source", label: "Source" }]} />
+      {/if}
+      {#if d.path}<RevealButton path={d.path} size="lg" />{/if}
+    {/snippet}
+  </ModalHeader>
 
   <div class="body">
-    <div class="main">
+    <!-- Scroll panes: tabindex so the keyboard reaches them in WebKit too. -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div class="main scroll-region" tabindex="0" role="region" aria-label="Document">
       {#if !d.path}
         <div class="builtin">
-          <p class="big">{d.title}</p>
+          <p class="big t-page-title">{d.title}</p>
           {#if d.description}<p>{d.description}</p>{/if}
           {#if d.hint}<p class="muted">Arguments: <code>{d.hint}</code></p>{/if}
-          <p class="muted">Built into the agent — there's no file behind this command.</p>
+          <p class="muted">Built into the agent. No file.</p>
         </div>
-      {:else if error}
-        <div class="note err">{error}</div>
-      {:else if !doc}
-        <div class="note"><span class="spinner"></span></div>
-      {:else if mode === "rendered"}
-        <div class="rendered"><Markdown text={doc.body} /></div>
       {:else}
-        <CodeView text={doc.body} path="doc.md" />
+        <FilePane {res}>
+          {#snippet children(doc)}
+            {#if mode === "rendered"}
+              <div class="rendered"><Markdown text={doc.body} /></div>
+            {:else}
+              <CodeView text={doc.body} path="doc.md" />
+            {/if}
+          {/snippet}
+        </FilePane>
       {/if}
     </div>
 
     {#if doc?.frontmatter.length}
-      <aside class="front">
-        <div class="front-title">Frontmatter</div>
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <aside class="front scroll-region" tabindex="0" aria-label="Frontmatter">
+        <div class="front-title t-section">Frontmatter</div>
         {#each doc?.frontmatter ?? [] as f (f.key)}
           {@const list = asList(f.value)}
           <div class="field">
@@ -105,25 +102,18 @@
 </Modal>
 
 <style>
-  .head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 18px; border-bottom: 1px solid var(--border); min-width: 0; }
-  .title { font-weight: 600; font-size: 14px; flex: none; }
-  .path { font: 11.5px var(--font-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .spacer { flex: 1; }
   .body { flex: 1; min-height: 0; display: flex; }
   .main { flex: 1; min-width: 0; overflow: auto; user-select: text; }
   .rendered { padding: 22px 28px 40px; max-width: 720px; }
   .front { width: 260px; flex: none; overflow: auto; border-left: 1px solid var(--border); background: var(--surface); padding: 14px 16px; }
-  .front-title { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+  .front-title { margin-bottom: 10px; }
   .field { margin-bottom: 12px; }
-  .k { font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
-  .v { font-size: 12.5px; color: var(--text); user-select: text; }
-  .v.text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+  .k { font-size: var(--fs-xs); color: var(--muted); margin-bottom: 3px; }
+  .v { font-size: var(--fs-sm); color: var(--text); user-select: text; }
+  .v.text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--lh-base); }
   .v.chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .v.json { margin: 0; font: 11.5px var(--font-mono); color: var(--text-2); white-space: pre-wrap; }
+  .v.json { margin: 0; font: var(--fs-sm)/var(--lh-code) var(--font-mono); color: var(--text-2); white-space: pre-wrap; }
   .builtin { padding: 28px; color: var(--text-2); max-width: 60ch; }
-  .builtin .big { font: 600 18px var(--font-mono); color: var(--accent); margin: 0 0 10px; }
-  .muted { color: var(--muted); }
-  code { font: 12px var(--font-mono); }
-  .note { padding: 28px; color: var(--muted); }
-  .note.err { color: var(--err-dim); }
+  .builtin .big { margin: 0 0 10px; }
+  code { font-size: var(--fs-sm); }
 </style>

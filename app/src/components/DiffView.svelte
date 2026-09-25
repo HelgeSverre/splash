@@ -1,15 +1,33 @@
 <script lang="ts">
   import { diffLines } from "diff";
+  import { highlightLines } from "../lib/highlight";
 
   let {
     oldText,
     newText,
+    path = "",
     mode = "unified",
     context = 3,
     maxHeight = "none",
-  }: { oldText: string; newText: string; mode?: "unified" | "split"; context?: number; maxHeight?: string } = $props();
+  }: {
+    oldText: string;
+    newText: string;
+    /** The file's path, for syntax highlighting (by extension). */
+    path?: string;
+    mode?: "unified" | "split";
+    context?: number;
+    maxHeight?: string;
+  } = $props();
+
+  // Highlight each side whole (multi-line strings and comments stay right),
+  // then take each row's line from its side: deletions from the old text,
+  // additions and context from the new.
+  const oldLines = $derived(highlightLines(oldText, path));
+  const newLines = $derived(highlightLines(newText, path));
 
   type Row = { kind: "ctx" | "add" | "del" | "gap"; a?: number; b?: number; text: string };
+  const html = (r: Row | undefined) =>
+    !r ? "" : (r.kind === "del" ? oldLines[(r.a ?? 1) - 1] : newLines[(r.b ?? 1) - 1]) ?? "";
 
   const rows = $derived.by(() => {
     const out: Row[] = [];
@@ -59,13 +77,11 @@
     return out;
   });
 
-  const stats = $derived({
-    add: rows.filter((r) => r.kind === "add").length,
-    del: rows.filter((r) => r.kind === "del").length,
-  });
 </script>
 
-<div class="diff selectable" style:max-height={maxHeight}>
+<!-- A scroll pane: tabindex so the keyboard reaches it in WebKit too. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div class="diff syntax selectable scroll-region" style:max-height={maxHeight} tabindex="0" role="region" aria-label="Diff">
   {#if mode === "unified"}
     <table>
       <tbody>
@@ -76,7 +92,7 @@
             <tr class={r.kind}>
               <td class="ln">{r.a ?? ""}</td>
               <td class="ln">{r.b ?? ""}</td>
-              <td class="code"><span class="sign">{r.kind === "add" ? "+" : r.kind === "del" ? "-" : " "}</span>{r.text}</td>
+              <td class="code"><span class="sign">{r.kind === "add" ? "+" : r.kind === "del" ? "-" : " "}</span>{@html html(r)}</td>
             </tr>
           {/if}
         {/each}
@@ -91,9 +107,9 @@
           {:else}
             <tr>
               <td class="ln">{p.l?.a ?? ""}</td>
-              <td class="code {p.l && p.l.kind === 'del' ? 'del' : ''}">{p.l?.text ?? ""}</td>
+              <td class="code {p.l && p.l.kind === 'del' ? 'del' : ''}">{@html html(p.l)}</td>
               <td class="ln">{p.r?.b ?? ""}</td>
-              <td class="code {p.r && p.r.kind === 'add' ? 'add' : ''}">{p.r?.text ?? ""}</td>
+              <td class="code {p.r && p.r.kind === 'add' ? 'add' : ''}">{@html html(p.r)}</td>
             </tr>
           {/if}
         {/each}
@@ -101,10 +117,9 @@
     </table>
   {/if}
 </div>
-<span class="stats" hidden>{stats.add}/{stats.del}</span>
 
 <style>
-  .diff { overflow: auto; font: 12px/1.55 var(--font-mono); background: var(--surface); }
+  .diff { overflow: auto; font: var(--fs-sm)/var(--lh-code) var(--font-mono); background: var(--surface); }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 0 8px; white-space: pre; vertical-align: top; }
   .ln { width: 1%; color: var(--faint); text-align: right; user-select: none; padding: 0 6px; }
@@ -112,10 +127,9 @@
   .sign { color: var(--faint); user-select: none; margin-right: 6px; }
   tr.add td, td.add { background: var(--add-bg); }
   tr.del td, td.del { background: var(--del-bg); }
-  tr.add .code, td.add { color: var(--add-fg); }
-  tr.del .code, td.del { color: var(--del-fg); }
+  tr.add .code, td.add, tr.del .code, td.del { color: var(--text); }
   tr.add .sign { color: var(--ok); }
   tr.del .sign { color: var(--err); }
-  .gap td { color: var(--muted); background: var(--soft); padding: 2px 10px; font-size: 11px; }
+  .gap td { color: var(--muted); background: var(--soft); padding: 2px 10px; font-size: var(--fs-xs); }
   .split .code { width: 50%; }
 </style>

@@ -2,28 +2,38 @@
   import AgentIcon from "./AgentIcon.svelte";
   import Picker from "./Picker.svelte";
   import ContextRing from "./ContextRing.svelte";
+  import Icon from "./Icon.svelte";
+  import IconButton from "./ui/IconButton.svelte";
+  import SlashMenu from "./SlashMenu.svelte";
   import { api, type SessionView } from "../bindings";
-  import { showError, projectById, agentById, layout, saveLayout } from "../lib/state.svelte";
+  import { withKey } from "../lib/keybindings.svelte";
+  import { registerComposer } from "../lib/focus";
+  import { projectById, agentById, isBusy, drafts } from "../lib/sessions.svelte";
+  import { showSideTab } from "../lib/layout.svelte";
+  import { showError } from "../lib/system";
 
   let { session }: { session: SessionView } = $props();
 
-  // Drafts survive switching sessions.
-  const drafts: Record<string, string> = ((globalThis as any).__splashDrafts ??= {});
   let text = $state("");
   let input: HTMLTextAreaElement | undefined = $state();
-  let pick = $state(0);
+  let menu: SlashMenu | undefined = $state();
   let lastId = "";
 
+  $effect(() => input && registerComposer(input));
+
+  // Each session keeps its draft: pick it up on arriving, keep it as it changes.
   $effect(() => {
     if (session.id !== lastId) {
-      if (lastId) drafts[lastId] = text;
       lastId = session.id;
       text = drafts[session.id] ?? "";
       queueMicrotask(() => input?.focus());
     }
   });
+  $effect(() => {
+    drafts[lastId] = text;
+  });
 
-  const busy = $derived(session.status === "running" || session.status === "awaiting_permission");
+  const busy = $derived(isBusy(session.status));
   const archived = $derived(session.archived);
   const project = $derived(projectById(session.project_id));
   const agent = $derived(agentById(session.agent_id));
@@ -33,21 +43,6 @@
   const LEFT = new Set(["mode", "collaboration_mode"]);
   const left = $derived(session.meta.options.filter((o) => LEFT.has(o.category)));
   const right = $derived(session.meta.options.filter((o) => !LEFT.has(o.category)));
-
-  // Slash commands: while the draft is "/word" with no space yet.
-  const slash = $derived.by(() => {
-    const m = /^\/(\S*)$/.exec(text);
-    if (!m) return [];
-    const q = m[1].toLowerCase();
-    return session.meta.commands
-      .filter((c) => c.name.toLowerCase().includes(q))
-      .sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)))
-      .slice(0, 8);
-  });
-  $effect(() => {
-    void slash.length;
-    pick = 0;
-  });
 
   function autosize() {
     if (!input) return;
@@ -82,15 +77,7 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
-    if (slash.length) {
-      if (e.key === "ArrowDown") { e.preventDefault(); pick = (pick + 1) % slash.length; return; }
-      if (e.key === "ArrowUp") { e.preventDefault(); pick = (pick - 1 + slash.length) % slash.length; return; }
-      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && text.length > 1 && !slash.some((c) => c.name === text.slice(1)))) {
-        e.preventDefault();
-        complete(slash[pick].name);
-        return;
-      }
-    }
+    if (menu?.keydown(e)) return;
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       send();
@@ -101,45 +88,31 @@
     api.set_option(session.id, option, value).catch(showError);
   }
 
-  function showDetails() {
-    layout.rightOpen = true;
-    layout.rightTab = "details";
-    saveLayout();
-  }
+  const showDetails = () => showSideTab("details");
 </script>
 
 <div class="composer">
   <div class="chips">
     <button class="plain chip" onclick={showDetails} title={session.cwd}>
       {#if session.isolation === "worktree"}
-        <svg width="12" height="12" viewBox="0 0 16 16"><circle cx="4.5" cy="3.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="4.5" cy="12.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="5.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 5.3v5.4M11.5 7.3c0 3-7 2-7 3.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
-        {session.branch ?? "worktree"}
+        <Icon name="branch" size={12} /><span class="truncate">{session.branch ?? "worktree"}</span>
       {:else}
-        <svg width="12" height="12" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 14h6" stroke="currentColor" stroke-width="1.3"/></svg>
-        In place{session.branch ? ` · ${session.branch}` : ""}
+        <Icon name="monitor" size={12} /><span class="truncate">In place{session.branch ? ` · ${session.branch}` : ""}</span>
       {/if}
     </button>
     <button class="plain chip" onclick={showDetails} title={project?.path ?? session.cwd}>
-      <svg width="12" height="12" viewBox="0 0 16 16"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
-      {project?.name ?? "folder"}
+      <Icon name="folder" size={12} /><span class="truncate">{project?.name ?? "folder"}</span>
     </button>
     <span class="spacer"></span>
     <span class="agent" title={agent?.name ?? session.agent_id}><AgentIcon id={session.agent_id} size={16} /></span>
   </div>
 
-  {#if slash.length}
-    <div class="slash">
-      {#each slash as c, i (c.name)}
-        <button class="plain" class:on={i === pick} onmousedown={(e) => { e.preventDefault(); complete(c.name); }}>
-          <span class="name">/{c.name}</span>
-          <span class="desc">{c.description}</span>
-        </button>
-      {/each}
-    </div>
-  {/if}
+  <SlashMenu bind:this={menu} {text} commands={session.meta.commands} oncomplete={complete} />
 
-  <div class="box" class:disabled={archived}>
+  <div class="box field-box" class:disabled={archived}>
     <textarea
+      class="bare-input"
+      aria-label="Message"
       bind:this={input}
       bind:value={text}
       {onkeydown}
@@ -148,11 +121,9 @@
       placeholder={archived ? "This session is archived." : busy ? "The agent is working…" : "Describe a task or ask a question"}
     ></textarea>
     {#if busy}
-      <button class="plain send stop" onclick={stop} title="Stop (⌘.)" aria-label="Stop">
-        <svg width="10" height="10" viewBox="0 0 10 10"><rect width="10" height="10" rx="2" fill="currentColor" /></svg>
-      </button>
+      <IconButton class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" onclick={stop} />
     {:else}
-      <button class="plain send" disabled={!text.trim() || archived} onclick={send} title="Send (⏎)" aria-label="Send">⏎</button>
+      <IconButton size="sm" icon="send" title="Send (⏎)" label="Send" disabled={!text.trim() || archived} onclick={send} />
     {/if}
   </div>
 
@@ -170,42 +141,22 @@
 
 <style>
   .composer { position: relative; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 28px 12px; }
-  button { font: inherit; color: inherit; }
   .chips { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; min-width: 0; }
   .chip {
     display: inline-flex; align-items: center; gap: 6px;
-    height: 22px; padding: 0 8px; border-radius: var(--radius); min-width: 0;
-    font-size: 12px; color: var(--text-2); background: var(--soft); border: 1px solid var(--border);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;
+    height: var(--control-h-xs); padding: 0 8px; border-radius: var(--radius); min-width: 0; max-width: 45%;
+    font-size: var(--fs-sm); color: var(--text-2); background: var(--soft); border: 1px solid var(--border); white-space: nowrap;
   }
-  .chip:hover { color: var(--text); border-color: var(--border-strong); }
-  .chip svg { flex: none; color: var(--muted); }
-  .spacer { flex: 1; }
+  .chip:is(:hover, :focus-visible) { color: var(--text); border-color: var(--border-strong); }
+  .chip :global(svg) { color: var(--muted); }
   .agent { display: inline-flex; padding-right: 4px; }
   .box {
     display: flex; align-items: flex-end; gap: 8px;
-    background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 8px 9px 12px;
+    background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: 8px 8px 8px 12px;
   }
-  .box:focus-within { border-color: var(--border-focus); }
   .box.disabled { opacity: 0.6; }
-  textarea { flex: 1; resize: none; border: 0; outline: none; background: transparent; line-height: 1.5; padding: 1px 0; max-height: 40vh; user-select: text; }
-  textarea::placeholder { color: var(--muted); }
-  .send {
-    flex: none; width: 24px; height: 22px; display: grid; place-items: center;
-    border-radius: var(--radius-sm); color: var(--muted);
-    font: 500 13px/1 var(--font-keys);
-  }
-  .send:hover:not(:disabled) { color: var(--text); background: var(--hover); }
-  .send:disabled { cursor: default; opacity: 0.45; }
-  .send.stop { color: var(--err); }
-  .send.stop:hover { background: var(--del-bg); color: var(--err); }
-  .controls { display: flex; align-items: center; gap: 2px; margin-top: 5px; padding: 0 2px; min-height: 22px; }
-  .slash {
-    position: absolute; left: 28px; right: 28px; bottom: calc(100% - 30px); z-index: 5;
-    background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 4px; max-height: 280px; overflow: auto;
-  }
-  .slash button { display: flex; gap: 12px; width: 100%; padding: 5px 8px; border-radius: var(--radius-sm); }
-  .slash button.on { background: var(--hover); }
-  .slash .name { font: 12px var(--font-mono); color: var(--accent); flex: none; }
-  .slash .desc { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  textarea { resize: none; line-height: var(--lh-base); padding: 1px 0; max-height: 40vh; }
+  .box :global(.stop) { color: var(--err); }
+  .box :global(.stop:is(:hover, :focus-visible)) { background: var(--del-bg); color: var(--err); }
+  .controls { display: flex; align-items: center; gap: 2px; margin-top: 6px; padding: 0 2px; min-height: var(--control-h-xs); }
 </style>

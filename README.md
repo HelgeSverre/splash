@@ -86,6 +86,8 @@ src/
   procs.rs           agent and shell process groups, killed on exit and on SIGTERM/SIGINT/SIGHUP
   app.rs             commands, events and providers (shared by both binaries)
 app/src/
-  lib/state.svelte.ts   the store: applies the transcript, session and workspace event channels
+  lib/*.svelte.ts       the store, one module per concern: sessions, transcripts, tabs, workspace, layout, prefs, customize, route
+  lib/live.ts           subscribes every event channel once, into those modules
+  lib/commands.svelte.ts  what the shortcuts and the command palette do
   components/           Sidebar, SessionView, Transcript, Composer, RightPanel, DiffTab, FileTab, TerminalPane, AgentsScreen…
 ```

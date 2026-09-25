@@ -35,3 +35,30 @@ export function bytes(n: number): string {
 }
 
 export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+const STATUS: Record<string, string> = {
+  starting: "starting",
+  idle: "ready",
+  running: "working",
+  awaiting_permission: "needs you",
+  error: "error",
+  exited: "stopped",
+};
+
+/** A session's status in words: "ready", "working", "needs you", … */
+export const statusLabel = (status: string) => STATUS[status] ?? status.replaceAll("_", " ");
+
+/** 0.4213 → "$0.42" (`digits` for more precision). */
+export const usd = (n: number, digits = 2) => `$${n.toFixed(digits)}`;
+
+/** The message of anything thrown: an Error, a command error, or a plain value. */
+export function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return String((e as { message?: unknown } | null)?.message ?? e);
+}
+
+/** A filter box's test: no query matches everything, else any of `text` contains it. */
+export function matches(query: string, ...text: (string | null | undefined)[]): boolean {
+  const q = query.trim().toLowerCase();
+  return !q || text.join(" ").toLowerCase().includes(q);
+}

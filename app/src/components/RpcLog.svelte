@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { api, channel, type RpcLine } from "../bindings";
+  import EmptyState from "./ui/EmptyState.svelte";
+  import Toolbar from "./ui/Toolbar.svelte";
+  import FilterInput from "./ui/FilterInput.svelte";
+  import Checkbox from "./ui/Checkbox.svelte";
+  import Disclosure from "./ui/Disclosure.svelte";
 
   let { session }: { session: string } = $props();
   let lines: RpcLine[] = $state([]);
@@ -9,7 +14,11 @@
   let scroller: HTMLDivElement | undefined = $state();
   let follow = $state(true);
 
+  // The log belongs to one session: the tab is recreated per session, so
+  // reading the prop once here is deliberate.
+  // svelte-ignore state_referenced_locally
   api.rpc_log(session).then((l) => (lines = l));
+  // svelte-ignore state_referenced_locally
   api.watch_rpc(session, true);
   const unsubscribe = channel("rpc").subscribe((l) => {
     if (!l || l.session !== session) return;
@@ -49,48 +58,47 @@
 </script>
 
 <div class="log">
-  <div class="bar">
-    <input class="field" bind:value={filter} placeholder="Filter (method, text…)" />
-    <label><input type="checkbox" bind:checked={follow} /> follow</label>
-    <span class="count">{shown.length} / {lines.length} lines</span>
-  </div>
+  <Toolbar>
+    <span class="search"><FilterInput bind:value={filter} placeholder="Filter (method, text…)" label="Filter the log" shown={shown.length} total={lines.length} unit="lines" /></span>
+    {#snippet end()}<Checkbox bind:checked={follow} label="Follow" />{/snippet}
+  </Toolbar>
   <div class="lines selectable" bind:this={scroller}>
     {#each shown as { l, i, p } (i)}
       <div class="line {p.kind}">
-        <button class="plain summary" onclick={() => (open[i] = !open[i])}>
-          <span class="t">{time(l.at)}</span>
-          <span class="dir {l.dir}">{l.dir === "out" ? "→" : "←"}</span>
-          <span class="kind">{p.kind}</span>
-          <span class="method">{p.method}</span>
-          {#if p.id}<span class="id">#{p.id}</span>{/if}
-          {#if !open[i]}<span class="preview">{l.line.slice(0, 160)}</span>{/if}
-        </button>
-        {#if open[i]}<pre>{JSON.stringify(p.json, null, 2)}</pre>{/if}
+        <Disclosure class="summary" open={!!open[i]} ontoggle={() => (open[i] = !open[i])}>
+          {#snippet head()}
+            <span class="t">{time(l.at)}</span>
+            <span class="dir {l.dir}">{l.dir === "out" ? "→" : "←"}</span>
+            <span class="kind">{p.kind}</span>
+            <span class="method">{p.method}</span>
+            {#if p.id}<span class="id">#{p.id}</span>{/if}
+            {#if !open[i]}<span class="preview">{l.line.slice(0, 160)}</span>{/if}
+          {/snippet}
+          <pre class="card-code">{JSON.stringify(p.json, null, 2)}</pre>
+        </Disclosure>
       </div>
     {:else}
-      <div class="empty">No traffic yet. Every JSON-RPC line between Splash and the agent shows up here.</div>
+      <EmptyState icon="terminal" title="No traffic yet." detail="JSON-RPC between Splash and the agent shows up here." />
     {/each}
   </div>
 </div>
 
 <style>
   .log { height: 100%; display: flex; flex-direction: column; }
-  .bar { display: flex; gap: 12px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); }
-  .bar .field { width: 280px; padding: 4px 8px; font-size: 12px; }
-  .bar label { display: flex; gap: 6px; align-items: center; color: var(--text-2); font-size: 12px; }
-  .count { margin-left: auto; color: var(--muted); font: 11px var(--font-mono); }
-  .lines { flex: 1; overflow: auto; font: 11.5px/1.5 var(--font-mono); padding: 4px 0; }
-  .summary { display: flex; gap: 10px; width: 100%; padding: 1px 16px; white-space: nowrap; }
-  .summary:hover { background: var(--soft); }
+  .search { display: flex; width: 360px; max-width: 60%; }
+  .search :global(.filter) { height: var(--control-h-sm); min-width: 0; }
+  .lines { flex: 1; overflow: auto; display: flex; flex-direction: column; font: var(--fs-xs)/var(--lh-base) var(--font-mono); padding: 4px 0; }
+  .line :global(.summary) { gap: 10px; padding: 1px var(--gutter); white-space: nowrap; }
+  .line :global(.summary:is(:hover, :focus-visible)) { background: var(--row-hover); }
   .t { color: var(--faint); flex: none; }
   .dir { flex: none; width: 10px; }
   .dir.out { color: var(--info); }
-  .dir.in { color: var(--ok); }
+  .dir.in { color: var(--ok-dim); }
   .kind { flex: none; width: 52px; color: var(--muted); }
-  .error .kind { color: var(--err); }
-  .method { flex: none; color: var(--text); }
-  .id { flex: none; color: var(--faint); }
-  .preview { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
-  pre { margin: 2px 16px 8px 120px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); white-space: pre-wrap; word-break: break-all; color: var(--text-2); }
-  .empty { padding: 24px 16px; color: var(--muted); font-family: var(--font-ui); }
+  .error .kind { color: var(--err-dim); }
+  .method { flex: none; color: var(--text); font-weight: var(--fw-medium); }
+  .id { flex: none; color: var(--muted); }
+  .preview { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+  /* Indented to line up under the method column. */
+  pre { margin: 2px var(--gutter) 8px 120px; font-size: var(--fs-xs); word-break: break-all; }
 </style>

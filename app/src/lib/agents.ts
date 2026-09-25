@@ -12,6 +12,9 @@ export function readiness(a: AgentStatus): Readiness {
   return { tone: "none", label: "not probed" };
 }
 
+/** How Splash talks to the agent: "native ACP" or "ACP adapter". */
+export const transportLabel = (a: Pick<AgentStatus, "transport">) => (a.transport === "native" ? "native ACP" : "ACP adapter");
+
 /** Skills an agent reads: its own folders plus the shared `.agents/skills`. */
 export const skillsFor = (skills: Skill[], agent: string) =>
   skills.filter((s) => s.agents.includes(agent) || s.agents.length === 0);

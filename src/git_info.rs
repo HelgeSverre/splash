@@ -6,7 +6,9 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::worktree::git;
+use crate::git::{self, git};
+use crate::json::str_at;
+use crate::procs::run_with_timeout;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct PullRequest {
@@ -30,10 +32,10 @@ pub struct GitInfo {
 }
 
 pub fn info(dir: &Path) -> GitInfo {
-    if !crate::worktree::is_git(dir) {
+    if !git::is_git(dir) {
         return GitInfo::default();
     }
-    let branch = crate::worktree::current_branch(dir);
+    let branch = git::current_branch(dir);
     let web_url = git(dir, &["remote", "get-url", "origin"])
         .ok()
         .and_then(|r| web_url(&r));
@@ -85,25 +87,14 @@ pub fn web_url(remote: &str) -> Option<String> {
 
 fn pull_request(dir: &Path, branch: &str) -> Option<PullRequest> {
     let gh = crate::agents::env::which("gh")?;
-    let mut child = std::process::Command::new(gh)
-        .args(["pr", "view", branch, "--json", "number,url,state,title"])
-        .current_dir(dir)
-        .env("PATH", crate::agents::env::path())
-        .env("GH_PROMPT_DISABLED", "1")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .ok()?;
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    while child.try_wait().ok()?.is_none() {
-        if std::time::Instant::now() > deadline {
-            let _ = child.kill();
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    let out = child.wait_with_output().ok()?;
+    let out = run_with_timeout(
+        std::process::Command::new(gh)
+            .args(["pr", "view", branch, "--json", "number,url,state,title"])
+            .current_dir(dir)
+            .env("PATH", crate::agents::env::path())
+            .env("GH_PROMPT_DISABLED", "1"),
+        Duration::from_secs(5),
+    )?;
     if !out.status.success() {
         return None;
     }
@@ -111,8 +102,8 @@ fn pull_request(dir: &Path, branch: &str) -> Option<PullRequest> {
     Some(PullRequest {
         number: v["number"].as_f64()?,
         url: v["url"].as_str()?.to_string(),
-        state: v["state"].as_str().unwrap_or("").to_string(),
-        title: v["title"].as_str().unwrap_or("").to_string(),
+        state: str_at(&v, "state"),
+        title: str_at(&v, "title"),
     })
 }
 
