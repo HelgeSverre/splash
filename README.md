@@ -12,6 +12,7 @@
   <a href="https://github.com/HelgeSverre/splash/actions/workflows/ci.yml"><img src="https://github.com/HelgeSverre/splash/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="Platform: macOS">
   <img src="https://img.shields.io/badge/status-early%20development-yellow" alt="Status: early development">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
 </p>
 
 ![Splash with a Claude Code session: the transcript in the middle, changed files on the right](docs/screenshot.png)
@@ -157,3 +158,7 @@ To record a fixture: `just spike claude ./some/repo "a prompt" --record name`.
 **Headless UI.** `just web` serves the real backend and UI on port 4780 with its own data folder, so a headless browser can drive the app. Native dialogs and notifications are stubbed. `#/playground` shows the UI components and design tokens with sample data.
 
 CI runs `just check` on pull requests. Pushing a `v*` tag builds the app and creates a draft release.
+
+## License
+
+[MIT](LICENSE)

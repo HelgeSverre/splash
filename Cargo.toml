@@ -5,6 +5,7 @@
 name = "splash"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 default-run = "splash"
 
 [lib]
