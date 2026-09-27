@@ -1,0 +1,67 @@
+name: Release
+
+# Builds the macOS app and attaches it to a draft release. Runs on a version
+# tag (v0.1.0, ...) or by hand; nothing publishes until the draft is.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS app
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: app
+
+      # rata is Elyra's CLI: it builds the frontend, the release binary and the .app.
+      - name: Install rata
+        run: cargo install --locked --git https://github.com/kwhorne/elyra-framework --tag v0.8.0 ratatosk
+
+      - name: Build and bundle
+        run: |
+          rata build
+          rata bundle
+
+      - name: Package
+        id: package
+        run: |
+          app=$(find target -maxdepth 4 -name '*.app' -type d | head -n1)
+          test -n "$app" || { echo "no .app bundle found" >&2; exit 1; }
+          version=${GITHUB_REF_NAME#v}
+          [ "$GITHUB_REF_TYPE" = tag ] || version="$(git rev-parse --short HEAD)"
+          zip="Splash-${version}-macos-arm64.zip"
+          ditto -c -k --keepParent "$app" "$zip"
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splash-macos
+          path: ${{ steps.package.outputs.zip }}
+
+      # The app is ad-hoc signed by rata bundle, not notarized.
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" \
+            --draft --generate-notes --title "Splash $GITHUB_REF_NAME"

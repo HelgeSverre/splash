@@ -62,6 +62,9 @@
   .md :global(blockquote) { margin: 0 0 0.7em; padding: 6px 12px; background: var(--soft); border-radius: var(--radius); color: var(--text-2); }
   .md :global(table) { border-collapse: collapse; margin: 0 0 0.7em; font-size: var(--fs-sm); }
   .md :global(th), .md :global(td) { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+  /* Keep a code span whole inside a cell; a wide table scrolls instead. */
+  .md :global(td code), .md :global(th code) { white-space: nowrap; }
+  .md :global(table) { display: block; max-width: 100%; overflow-x: auto; }
   .md :global(th) { background: var(--soft); font-weight: var(--fw-semibold); }
   .md :global(hr) { border: 0; border-top: 1px solid var(--border); margin: 1em 0; }
 </style>

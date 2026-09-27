@@ -12,7 +12,7 @@ default:
 setup:
     cd app && npm ci
     @command -v {{ rata }} >/dev/null 2>&1 || cargo install --locked --git https://github.com/kwhorne/elyra-framework --tag v0.8.0 ratatosk
-    @echo "splash: ready — the agents themselves (claude, codex, glue, pi, pool) are installed separately; check them with just detect"
+    @echo "splash: ready. Agents are installed separately; check them with just detect"
 
 # Start the app with hot reload (UI edits apply live; Rust changes need a restart)
 [group('build')]

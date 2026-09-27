@@ -1,0 +1,49 @@
+name: CI
+
+# Pull requests only: pushes to main are not tested again.
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: just check
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: app
+
+      # rust-embed needs app/dist to exist at compile time.
+      - name: Build frontend
+        run: npm run build
+        working-directory: app
+
+      - name: Lint and test
+        run: just check
