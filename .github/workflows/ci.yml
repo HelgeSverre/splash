@@ -37,7 +37,10 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,actionlint,shellcheck
+          tool: just,shellcheck
+
+      - name: Install actionlint
+        run: brew install actionlint
 
       - name: Validate release automation
         run: |
