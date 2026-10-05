@@ -8,6 +8,7 @@
 use std::collections::HashSet;
 use std::io::Read;
 use std::process::{Command, Output, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Once;
 use std::time::{Duration, Instant};
 
@@ -50,6 +51,12 @@ pub fn run_with_timeout(cmd: &mut Command, timeout: Duration) -> Option<Output> 
 
 static GROUPS: Mutex<Option<HashSet<i32>>> = Mutex::new(None);
 static INSTALL: Once = Once::new();
+static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+
+/// Child exits during app shutdown are expected, not session failures.
+pub(crate) fn is_shutting_down() -> bool {
+    SHUTTING_DOWN.load(Ordering::Acquire)
+}
 
 /// Track a process group (spawned with `process_group(0)`, so pgid == pid).
 pub fn register(pgid: i32) {
@@ -96,6 +103,7 @@ extern "C" fn on_signal(sig: libc::c_int) {
 }
 
 extern "C" fn kill_all_at_exit() {
+    SHUTTING_DOWN.store(true, Ordering::Release);
     // Don't block on the lock during exit; if it's held, skip rather than hang.
     let Some(guard) = GROUPS.try_lock() else {
         return;

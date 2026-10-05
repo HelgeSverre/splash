@@ -70,7 +70,8 @@ unsigned fallback. No Installer certificate is needed for the app ZIP.
 ## Create a release
 
 1. Set the same version in `Cargo.toml` and `elyra.toml`, and update `Cargo.lock`.
-2. Commit the changes and push a matching tag, for example `v0.1.0`.
+2. Write `.github/release-notes-VERSION.md`, commit the changes and push a
+   matching tag, for example `v0.1.0`.
 3. The Release workflow runs the reusable CI gate on that exact commit before
    building the app. It then signs with hardened runtime and a secure timestamp,
    submits to Apple, requires an accepted notarization result, and staples the app.

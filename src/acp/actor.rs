@@ -330,6 +330,9 @@ async fn run(
                             transcript.push(Entry::Error { text });
                         }
                         Inbound::Exited(why) => {
+                            if crate::procs::is_shutting_down() {
+                                return Ok(());
+                            }
                             if prompt.is_some() {
                                 transcript.end_turn("error", turn_started.elapsed().as_secs_f64() * 1000.0);
                             }
@@ -484,6 +487,9 @@ fn flush(sink: &dyn Sink, key: &str, transcript: &mut Transcript, checkpoint: bo
 }
 
 fn fail(sink: &dyn Sink, key: &str, transcript: &mut Transcript, msg: &str) {
+    if crate::procs::is_shutting_down() {
+        return;
+    }
     transcript.push(Entry::Error {
         text: msg.to_string(),
     });
