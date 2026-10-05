@@ -5,6 +5,6 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 export default defineConfig({
   plugins: [svelte()],
   base: "./",
-  build: { outDir: "dist", emptyOutDir: true, target: "esnext" },
+  build: { outDir: "dist", emptyOutDir: true, target: "safari17" },
   server: { port: 5173, strictPort: true },
 });

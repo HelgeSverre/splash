@@ -27,7 +27,7 @@ Splash is an early personal project, developed and tested on macOS only.
 
 ### Download the app
 
-On an Apple silicon Mac, download the ZIP from [Releases](https://github.com/HelgeSverre/splash/releases),
+On an Apple silicon Mac running macOS 14 Sonoma or later, download the ZIP from [Releases](https://github.com/HelgeSverre/splash/releases),
 extract it, and move **Splash.app** to **Applications**. Release apps are Developer
 ID signed and notarized. A SHA-256 checksum is included with each download.
 

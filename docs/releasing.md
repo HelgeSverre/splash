@@ -83,7 +83,8 @@ unsigned fallback. No Installer certificate is needed for the app ZIP.
 
 Manual workflow runs also require signing and notarization. They upload Actions
 artifacts; runs on branches do not create a GitHub release. The ZIP name records
-the build host architecture. The current `macos-15` runner builds for Apple Silicon.
+the build host architecture. The current `macos-15` runner builds for Apple Silicon. The frontend targets
+Safari 17, and packaging sets macOS 14 as the minimum supported version.
 
 ## Local verification
 

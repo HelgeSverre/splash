@@ -19,7 +19,7 @@ Download `Splash-0.1.0-macos-arm64.zip`, extract it, and move **Splash.app** int
 **Applications**. The app is signed with a Developer ID, notarized by Apple, and
 includes a stapled notarization ticket. A SHA-256 checksum accompanies the ZIP.
 
-The binary is for Apple silicon Macs. Install and authenticate your agent CLI
+The binary requires an Apple silicon Mac running macOS 14 Sonoma or later. Install and authenticate your agent CLI
 separately. Adapters launched through `npx` also need Node.js and npm; git is
 required for worktrees.
 

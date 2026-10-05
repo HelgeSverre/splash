@@ -36,6 +36,11 @@ signing_args=(--force --options runtime --timestamp --sign "$APPLE_APPLICATION_S
 if [[ -n "${APPLE_SIGNING_KEYCHAIN:-}" ]]; then
   signing_args+=(--keychain "$APPLE_SIGNING_KEYCHAIN")
 fi
+# rata defaults to macOS 11; the UI targets Safari 17 (macOS Sonoma).
+plutil -replace LSMinimumSystemVersion -string "14.0" "$app_path/Contents/Info.plist"
+plutil -replace LSApplicationCategoryType -string "public.app-category.developer-tools" "$app_path/Contents/Info.plist"
+plutil -replace NSHumanReadableCopyright -string "Copyright © 2026 Helge Sverre. MIT License." "$app_path/Contents/Info.plist"
+
 # Splash has one executable and no embedded frameworks or helper apps.
 codesign "${signing_args[@]}" "$app_path"
 codesign --verify --deep --strict --verbose=2 "$app_path"
