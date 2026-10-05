@@ -123,8 +123,8 @@ export async function createSession(projectId: string, agentId: string, isolatio
   return s;
 }
 
-export async function deleteSession(id: string) {
-  await api.delete_session(id);
+export async function deleteSession(id: string, force = false) {
+  await api.delete_session(id, force);
   app.sessions = app.sessions.filter((s) => s.id !== id);
   forgetSession(id);
   if (currentId() === id) app.view = { kind: "welcome" };

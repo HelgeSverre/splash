@@ -8,6 +8,7 @@ dir = "app"
 out = "app/src/bindings.ts"
 
 [bundle]
-identifier = "com.example.splash"
-name = "splash"
+identifier = "no.helgesverre.splash"
+name = "Splash"
 version = "0.1.0"
+icon = "app/public/icon.png"

@@ -47,10 +47,21 @@
         label: "Delete…",
         action: async () => {
           if (await confirm(`Delete "${title}"? The transcript is removed; a worktree is removed too (its branch stays).`, { danger: true, confirmLabel: "Delete" }))
-            deleteSession(id).catch(showError);
+            await removeSession(id);
         },
       },
     ]);
+  }
+
+  async function removeSession(id: string) {
+    try {
+      await deleteSession(id);
+    } catch (e) {
+      if (errorMessage(e) === "dirty") {
+        if (await confirm("The worktree has uncommitted changes. Delete anyway and permanently discard them? Keeping the branch does not preserve uncommitted changes.", { danger: true, confirmLabel: "Discard & delete" }))
+          await deleteSession(id, true).catch(showError);
+      } else showError(e);
+    }
   }
 
   async function archive(id: string) {

@@ -41,6 +41,15 @@ export type AgentStatus = {
 	extra_args: string,
 };
 
+/**  Release metadata shared by the settings page and native About dialog. */
+export type AppInfo = {
+	version: string,
+	description: string,
+	author: string,
+	repository: string,
+	license: string,
+};
+
 export type Auth = "ok" | "logged_out" | "unknown";
 
 /**
@@ -337,6 +346,9 @@ export const api = {
   add_project(path: string): Promise<Project> {
     return invoke("add_project", path);
   },
+  app_info(): Promise<AppInfo> {
+    return invoke("app_info");
+  },
   archive_session(id: string, force: boolean): Promise<null> {
     return invoke("archive_session", id, force);
   },
@@ -346,8 +358,8 @@ export const api = {
   create_session(project_id: string, agent_id: string, isolation: Isolation, title: string | null): Promise<SessionView> {
     return invoke("create_session", project_id, agent_id, isolation, title);
   },
-  delete_session(id: string): Promise<null> {
-    return invoke("delete_session", id);
+  delete_session(id: string, force: boolean): Promise<null> {
+    return invoke("delete_session", id, force);
   },
   file_diff(id: string, path: string): Promise<FileDiff> {
     return invoke("file_diff", id, path);

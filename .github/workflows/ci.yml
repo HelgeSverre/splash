@@ -1,12 +1,15 @@
 name: CI
 
-# Pull requests only: pushes to main are not tested again.
+# Reused by Release so every artifact is checked at its exact commit.
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -34,7 +37,13 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just,actionlint,shellcheck
+
+      - name: Validate release automation
+        run: |
+          actionlint
+          shellcheck scripts/import-signing-assets.sh scripts/package-release.sh
+          python3 -B scripts/test_release.py
 
       - name: Install frontend dependencies
         run: npm ci

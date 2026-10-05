@@ -69,6 +69,18 @@ lint:
 [group('qa')]
 check: lint test
 
+# Check notarization credentials and GitHub release settings
+[group('release')]
+release-status:
+    python3 scripts/release.py status
+
+# Check, build, sign, notarize and verify a local release ZIP (does not publish)
+[group('release')]
+release: frontend check _rata
+    {{ rata }} build
+    {{ rata }} bundle
+    python3 scripts/release.py package
+
 # Serve the real backend + UI on :4780 for headless browser testing (own data dir)
 [group('harness')]
 web *FOLDERS: frontend

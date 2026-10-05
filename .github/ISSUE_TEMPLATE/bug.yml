@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a broken workflow or agent compatibility problem.
+title: "[Bug] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Splash version
+      description: Find this in Settings → About.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac model
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and CLI version
+      description: If this involves an agent, include its name and version from Settings.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, what happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Error messages or screenshots
+      description: Remove API keys, credentials, private prompts and sensitive paths before sharing logs.

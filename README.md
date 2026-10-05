@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/public/icon.svg" width="72" height="72" alt="">
+  <img src="app/public/icon.png" width="96" height="96" alt="Splash app icon">
 </p>
 
 <h1 align="center">Splash</h1>
@@ -25,6 +25,18 @@ Splash is an early personal project, developed and tested on macOS only.
 
 ## Getting started
 
+### Download the app
+
+On an Apple silicon Mac, download the ZIP from [Releases](https://github.com/HelgeSverre/splash/releases),
+extract it, and move **Splash.app** to **Applications**. Release apps are Developer
+ID signed and notarized. A SHA-256 checksum is included with each download.
+
+Install and sign in to at least one [supported agent](#agents) before starting a
+session. Git is required for worktrees; Node.js and npm are needed for agents
+launched through `npx`. The app itself does not require Rust or just.
+
+### Build from source
+
 Requirements:
 
 - macOS, git, a stable Rust toolchain (rustup), Node.js 20.19+ or 22.12+, and [just](https://github.com/casey/just).
@@ -32,6 +44,8 @@ Requirements:
 - Optional: `gh`, to show a branch's pull request.
 
 ```bash
+git clone https://github.com/HelgeSverre/splash.git
+cd splash
 just setup                  # frontend dependencies, and rata (Elyra's CLI, built with cargo)
 just run                    # build the frontend and start the app
 just run ~/code/some-repo   # the same, adding a folder as a project
@@ -43,7 +57,7 @@ Data lives in `~/Library/Application Support/Splash`. Set `SPLASH_DATA_DIR` to u
 
 ## Features
 
-- **Sessions.** In place or in a worktree on a `splash/…` branch. Archiving removes the worktree (after a confirmation if it has uncommitted changes) and keeps the branch.
+- **Sessions.** In place or in a worktree on a `splash/…` branch. Archiving or deleting removes the worktree and keeps the branch. Both require an explicit discard confirmation if there are uncommitted changes; deleting also removes the transcript.
 - **Transcript.** Markdown with syntax highlighting, collapsible thinking, tool calls with status and diffs, plans as checklists, and permission requests answered with the 1–9 keys.
 - **Agent controls.** Model, mode and effort pickers when the agent offers them, slash-command completion, and context and cost readouts when the agent reports them.
 - **Workbench.** A side panel with the session's git changes, a file tree and session details; diff and file tabs; a terminal in the session folder (⌘J).
@@ -157,8 +171,11 @@ To record a fixture: `just spike claude ./some/repo "a prompt" --record name`.
 
 **Headless UI.** `just web` serves the real backend and UI on port 4780 with its own data folder, so a headless browser can drive the app. Native dialogs and notifications are stubbed. `#/playground` shows the UI components and design tokens with sample data.
 
-CI runs `just check` on pull requests. Pushing a `v*` tag builds the app and creates a draft release.
+CI runs `just check` on pushes to main, pull requests and before every release build. Pushing a `v*` tag builds, signs and notarizes the app, then creates a draft release with a verified ZIP and checksum. The tag must match the Cargo and bundle versions. See [Releasing](docs/releasing.md) for signing configuration and local verification.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Created by [Helge Sverre](https://github.com/HelgeSverre).
+
+Splash is an independent project and is not affiliated with the agent providers.
+Report bugs and compatibility problems through [GitHub Issues](https://github.com/HelgeSverre/splash/issues).

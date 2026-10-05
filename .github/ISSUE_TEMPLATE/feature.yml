@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest an improvement to Splash.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: Describe the workflow or problem you want Splash to support.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested solution
+      description: Include alternatives or examples if helpful.

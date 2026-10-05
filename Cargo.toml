@@ -6,6 +6,13 @@ name = "splash"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+description = "A macOS workspace for coding agents, powered by the Agent Client Protocol."
+authors = ["Helge Sverre"]
+repository = "https://github.com/HelgeSverre/splash"
+homepage = "https://github.com/HelgeSverre/splash"
+readme = "README.md"
+keywords = ["acp", "coding-agents", "desktop", "macos"]
+categories = ["development-tools", "gui"]
 default-run = "splash"
 
 [lib]

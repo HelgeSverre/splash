@@ -275,7 +275,7 @@ async fn archiving_a_dirty_worktree_needs_force_and_keeps_the_branch() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn delete_forgets_the_session() {
+async fn deleting_a_dirty_worktree_requires_force() {
     let (data, repo) = (temp("data"), repo());
     let (hub, _) = hub(&data, "claude/read");
     let project = hub
@@ -289,13 +289,78 @@ async fn delete_forgets_the_session() {
         .await
         .unwrap();
     let (id, cwd) = (s.record.id, s.record.cwd);
+    let branch = s.record.branch.unwrap();
+    idle(&hub, &id).await;
+    std::fs::write(Path::new(&cwd).join("a.txt"), "edited").unwrap();
     std::fs::write(Path::new(&cwd).join("b.txt"), "b").unwrap();
-    hub.sessions.delete(&id).await.unwrap();
+    assert_eq!(
+        hub.sessions
+            .delete(&id, false)
+            .await
+            .unwrap_err()
+            .to_string(),
+        "dirty"
+    );
+    assert!(hub.sessions.record(&id).is_ok());
+    assert!(hub.core.store().await.unwrap().session(&id).await.is_ok());
+    assert_eq!(status(&hub, &id).await, Some(Status::Idle));
+    assert_eq!(
+        std::fs::read_to_string(Path::new(&cwd).join("a.txt")).unwrap(),
+        "edited"
+    );
+    assert_eq!(
+        std::fs::read_to_string(Path::new(&cwd).join("b.txt")).unwrap(),
+        "b"
+    );
+
+    hub.sessions.delete(&id, true).await.unwrap();
     assert!(hub.sessions.record(&id).is_err());
     assert!(hub.sessions.list().await.unwrap().is_empty());
     assert!(hub.core.store().await.unwrap().session(&id).await.is_err());
     assert!(!Path::new(&cwd).exists());
     assert!(hub.sessions.rpc_log(&id).is_empty());
+    git(&repo, &["rev-parse", "--verify", &branch]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn deleting_without_force_handles_clean_worktrees_and_in_place_files() {
+    for isolation in [Isolation::Worktree, Isolation::InPlace] {
+        let (data, repo) = (temp("data"), repo());
+        let (hub, _) = hub(&data, "claude/read");
+        let project = hub
+            .sessions
+            .add_project(&repo.to_string_lossy())
+            .await
+            .unwrap();
+        let in_place = isolation == Isolation::InPlace;
+        let s = hub
+            .sessions
+            .create(&project.id, "fake", isolation, None)
+            .await
+            .unwrap();
+        idle(&hub, &s.record.id).await;
+        if in_place {
+            std::fs::write(repo.join("a.txt"), "unsaved work").unwrap();
+        }
+        hub.sessions.delete(&s.record.id, false).await.unwrap();
+        assert!(hub.sessions.record(&s.record.id).is_err());
+        assert!(hub
+            .core
+            .store()
+            .await
+            .unwrap()
+            .session(&s.record.id)
+            .await
+            .is_err());
+        if in_place {
+            assert_eq!(
+                std::fs::read_to_string(repo.join("a.txt")).unwrap(),
+                "unsaved work"
+            );
+        } else {
+            assert!(!Path::new(&s.record.cwd).exists());
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

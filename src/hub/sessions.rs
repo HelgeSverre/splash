@@ -478,9 +478,10 @@ impl Sessions {
         Ok(())
     }
 
-    pub async fn delete(&self, id: &str) -> Result<()> {
+    /// Delete a session, refusing to discard worktree changes unless `force`.
+    pub async fn delete(&self, id: &str, force: bool) -> Result<()> {
         if let Ok(record) = self.record(id) {
-            self.remove_worktree(&record, true).await?;
+            self.remove_worktree(&record, force).await?;
         }
         self.stop(id);
         self.store().await?.delete_session(id).await?;

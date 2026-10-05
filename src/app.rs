@@ -22,6 +22,27 @@ use crate::workspace::{DirEntry, FileChange, FileContent, FileDiff};
 #[folder = "app/dist"]
 pub struct Assets;
 
+/// Release metadata shared by the settings page and native About dialog.
+#[derive(serde::Serialize, specta::Type)]
+pub struct AppInfo {
+    version: String,
+    description: String,
+    author: String,
+    repository: String,
+    license: String,
+}
+
+#[command]
+fn app_info(_ctx: Ctx) -> AppInfo {
+    AppInfo {
+        version: env!("CARGO_PKG_VERSION").into(),
+        description: env!("CARGO_PKG_DESCRIPTION").into(),
+        author: env!("CARGO_PKG_AUTHORS").into(),
+        repository: env!("CARGO_PKG_REPOSITORY").into(),
+        license: env!("CARGO_PKG_LICENSE").into(),
+    }
+}
+
 // ── agents ─────────────────────────────────────────────────────────────────
 
 #[command]
@@ -135,8 +156,8 @@ async fn archive_session(ctx: Ctx, id: String, force: bool) -> elyra::Result<()>
 }
 
 #[command]
-async fn delete_session(ctx: Ctx, id: String) -> elyra::Result<()> {
-    Ok(ctx.get::<Sessions>().delete(&id).await?)
+async fn delete_session(ctx: Ctx, id: String, force: bool) -> elyra::Result<()> {
+    Ok(ctx.get::<Sessions>().delete(&id, force).await?)
 }
 
 #[command]
@@ -279,8 +300,11 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
         .batch_window(std::time::Duration::from_millis(16))
         .about(
             AboutInfo::new("Splash", env!("CARGO_PKG_VERSION"))
-                .description("A small harness for coding agents.")
-                .icon("/icon.svg"),
+                .description(env!("CARGO_PKG_DESCRIPTION"))
+                .website(env!("CARGO_PKG_HOMEPAGE"))
+                .repository(env!("CARGO_PKG_REPOSITORY"))
+                .author(env!("CARGO_PKG_AUTHORS"), "https://github.com/HelgeSverre")
+                .icon("/icon.png"),
         );
     let hub = Hub::new(data_dir, app.events());
     app.bind_as::<Sessions>(hub.sessions)
@@ -296,6 +320,7 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
         .event::<Project>("project")
         .event::<TermEvent>("term")
         .commands(commands![
+            app_info,
             list_agents,
             probe_agent,
             set_agent_args,
