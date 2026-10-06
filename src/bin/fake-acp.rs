@@ -22,6 +22,16 @@ struct Turn {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let option = |name: &str| {
+        args.iter()
+            .position(|s| s == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+    let audit = option("--audit");
+    let required_root = option("--require-root");
+    let state = option("--state");
     let path = std::env::args()
         .nth(1)
         .expect("usage: fake-acp <fixture.jsonl>");
@@ -29,12 +39,32 @@ async fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(10.0);
-    let rows: Vec<Value> = std::fs::read_to_string(&path)
+    let mut rows: Vec<Value> = std::fs::read_to_string(&path)
         .expect("fixture")
         .lines()
         .filter(|l| !l.trim().is_empty())
         .map(|l| serde_json::from_str(l).expect("row"))
         .collect();
+    fn substitute(value: &mut Value, cwd: &str) {
+        match value {
+            Value::String(s) => *s = s.replace("$CWD", cwd),
+            Value::Array(items) => items.iter_mut().for_each(|v| substitute(v, cwd)),
+            Value::Object(map) => map.values_mut().for_each(|v| substitute(v, cwd)),
+            _ => {}
+        }
+    }
+    let cwd = std::env::current_dir()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    for row in &mut rows {
+        substitute(row, &cwd);
+    }
+    let mut deleted: Vec<String> = state
+        .as_ref()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
 
     let result_of = |method: &str| -> Value {
         let id = rows
@@ -76,21 +106,77 @@ async fn main() {
 
     let mut next_id = 1000u64;
     while let Some(msg) = rx.recv().await {
+        if let Some(path) = &audit {
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .unwrap();
+            writeln!(file, "{msg}").unwrap();
+        }
         let Some(method) = msg["method"].as_str() else {
             continue;
         };
         let id = msg["id"].clone();
+        if matches!(
+            method,
+            "session/new" | "session/load" | "session/resume" | "session/fork"
+        ) {
+            if let Some(root) = &required_root {
+                if !msg["params"]["additionalDirectories"]
+                    .as_array()
+                    .is_some_and(|roots| roots.contains(&json!(root)))
+                {
+                    send(
+                        json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32602,"message":"Required workspace root was lost"}}),
+                    );
+                    continue;
+                }
+            }
+        }
+        if method == "session/load" && args.iter().any(|s| s == "--fail-load") {
+            send(
+                json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32603,"message":"Replay failed"}}),
+            );
+            continue;
+        }
         match method {
             "initialize" => send(json!({"jsonrpc": "2.0", "id": id, "result": init})),
             "session/new" => send(json!({"jsonrpc": "2.0", "id": id, "result": new_session})),
             "session/list" => {
-                let result = if msg["params"]["cursor"] == "page-2" {
+                let mut result = if msg["params"]["cursor"] == "page-2" {
                     json!({"sessions":[]})
                 } else {
                     listed.clone()
                 };
+                if let Some(sessions) = result["sessions"].as_array_mut() {
+                    sessions.retain(|s| !deleted.iter().any(|id| s["sessionId"] == *id));
+                }
                 send(json!({"jsonrpc":"2.0", "id":id, "result":result}));
             }
+            "session/close" => {
+                if !args.iter().any(|s| s == "--hang-close") {
+                    send(json!({"jsonrpc":"2.0", "id":id, "result":{}}));
+                }
+            }
+            "session/delete" => {
+                if args.iter().any(|s| s == "--fail-delete") {
+                    send(
+                        json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32603,"message":"Delete failed"}}),
+                    );
+                } else {
+                    if let Some(id) = msg["params"]["sessionId"].as_str() {
+                        deleted.push(id.into());
+                    }
+                    if let Some(path) = &state {
+                        std::fs::write(path, serde_json::to_string(&deleted).unwrap()).unwrap();
+                    }
+                    send(json!({"jsonrpc":"2.0", "id":id, "result":{}}));
+                }
+            }
+            "session/fork" => send(
+                json!({"jsonrpc":"2.0", "id":id, "result":{"sessionId": format!("fork-{}", uuid::Uuid::new_v4())}}),
+            ),
             "session/resume" if msg["params"]["sessionId"] == "missing-session" => send(
                 json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32602,"message":"Session not found"}}),
             ),

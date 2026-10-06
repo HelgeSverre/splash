@@ -4,6 +4,7 @@
   import RpcLog from "./RpcLog.svelte";
   import FileTab from "./FileTab.svelte";
   import DiffTab from "./DiffTab.svelte";
+  import SessionHistoryActions from "./SessionHistoryActions.svelte";
   import SessionHeader from "./SessionHeader.svelte";
   import Tabs, { type TabItem } from "./ui/Tabs.svelte";
   import { modalOpen, isComposer, isTypingTarget } from "../lib/focus";
@@ -56,6 +57,7 @@
 
 <div class="session">
   <SessionHeader {session} />
+  {#key session.id}<SessionHistoryActions {session} />{/key}
 
   <Tabs items={tabItems} active={String(tabs.active)} {prefix} label="Session tabs"
     onselect={(id) => selectTab(Number(id))} onclose={(id) => closeTab(Number(id))}>

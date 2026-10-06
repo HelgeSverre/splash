@@ -12,6 +12,7 @@
   import { app, agentById, createSession, pickFolder, projectById } from "../lib/sessions.svelte";
   import { prefs } from "../lib/prefs.svelte";
   import { showError } from "../lib/system";
+  import { foldersFromText } from "../lib/session-history";
   import type { AgentStatus, Isolation } from "../bindings";
 
 
@@ -21,6 +22,7 @@
   let agentId = $state(prefs.default_agent ?? "claude");
   let isolation: Isolation = $state((prefs.default_isolation ?? "worktree") as Isolation);
   let busy = $state(false);
+  let additionalFolders = $state("");
 
   const project = $derived(projectById(projectId));
   const canWorktree = $derived(project?.is_git ?? false);
@@ -53,7 +55,7 @@
     if (!canStart) return;
     busy = true;
     try {
-      await createSession(projectId, agentId, prHead ? "worktree" : effectiveIsolation, context?.title ?? null, context, prHead);
+      await createSession(projectId, agentId, prHead ? "worktree" : effectiveIsolation, context?.title ?? null, context, prHead, foldersFromText(additionalFolders));
       app.newSession = null;
     } catch (e) {
       showError(e);
@@ -68,6 +70,7 @@
   function onKey(e: KeyboardEvent) {
     const el = e.target as HTMLElement;
     if (e.key !== "Enter" || !dialogEl?.contains(el)) return;
+    if (el.tagName === "TEXTAREA" && !e.metaKey) return;
     if (e.metaKey || el.tagName !== "BUTTON" || el.getAttribute("role") === "radio") {
       e.preventDefault();
       create();
@@ -117,6 +120,11 @@
     </ChoiceGroup>
 
     {/if}
+    {#if !prHead}
+      <label class="label t-group" for="ns-extra-folders">Additional workspace folders</label>
+      <textarea id="ns-extra-folders" class="field extra-folders" rows="2" bind:value={additionalFolders} placeholder="Optional absolute paths, one per line" disabled={busy}></textarea>
+      <p class="desc">These folders are restored when you reconnect. The selected agent must support additional workspace folders.</p>
+    {/if}
     <div class="actions">
       <span class="hint">{agent?.transport === "adapter" ? "First start may download the ACP adapter via npx." : ""}</span>
       <button class="btn ghost" onclick={close}>Cancel</button>
@@ -131,7 +139,8 @@
 <style>
   .dialog { overflow: auto; max-height: 80vh; padding: 16px 18px 18px; }
   /* The content group-title role, as in settings. */
-  .label { margin: 16px 0 6px; }
+  .extra-folders { display: block; width: 100%; min-height: 64px; resize: vertical; }
+  .label { display: block; margin: 16px 0 6px; }
   .label.first { margin-top: 0; }
   .add { display: block; margin-top: 4px; }
   .name { flex: none; font-weight: var(--fw-medium); white-space: nowrap; }

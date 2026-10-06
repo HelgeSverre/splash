@@ -452,7 +452,14 @@ async fn discovery_preview_import_deduplicate_and_preserve_external_directory() 
         .is_empty());
     let preview = hub
         .sessions
-        .preview("fake", path, "native-1")
+        .preview(
+            "fake",
+            splash::acp::history::ExternalSession {
+                session_id: "native-1".into(),
+                cwd: path.into(),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     assert_eq!(preview.entries.len(), 2);

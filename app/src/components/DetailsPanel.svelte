@@ -57,7 +57,11 @@
     {@render row("Branch", session.branch, undefined, true)}
     {@render row("Base", session.base_sha, session.base_sha?.slice(0, 10), true)}
     {@render row("Folder", session.cwd, home(session.cwd), true)}
-    {@render row("Created", when(session.created_at))}
+    {#each (session.additional_directories ?? []) as path, i}{@render row(`Extra folder ${i + 1}`, path, home(path), true)}{/each}
+    {@render row("Added to Splash", when(session.created_at))}
+    {@render row("Agent activity", session.source?.updated_at)}
+    {@render row("Last synced", session.source?.last_synced_at ? when(session.source?.last_synced_at) : null)}
+    {@render row("Forked from", session.parent_id, undefined, true)}
     {@render row("Splash id", session.id, undefined, true)}
     <div class="actions kv-full">
       <RevealButton path={session.cwd} />

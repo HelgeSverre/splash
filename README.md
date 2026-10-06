@@ -23,9 +23,39 @@ Splash is an early personal project, developed and tested on macOS only.
 
 ## Screenshots
 
-Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories. The session library, ACP preview, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness.
+Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories. The session library, ACP history, fork, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness.
 
 <table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Browse history across agents and folders</strong><br>
+      <a href="screenshots/agent-session-browser.jpg"><img src="screenshots/agent-session-browser.jpg" alt="Unified agent history with independent pagination, loaded-session search, activity filters and sorting" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Refresh a conversation continued elsewhere</strong><br>
+      <a href="screenshots/session-history-refresh.jpg"><img src="screenshots/session-history-refresh.jpg" alt="Refreshed transcript with source activity, synchronization time and additional workspace folders" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Fork a conversation</strong><br>
+      <a href="screenshots/session-fork.jpg"><img src="screenshots/session-fork.jpg" alt="Experimental conversation fork choices showing the workspace folders shared with the original session" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Prepare a review in a fork</strong><br>
+      <a href="screenshots/session-fork-review.jpg"><img src="screenshots/session-fork-review.jpg" alt="Forked conversation linked to its parent, with an editable review draft ready to send" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Inspect native history and capabilities</strong><br>
+      <a href="screenshots/session-history-management.jpg"><img src="screenshots/session-history-management.jpg" alt="Agent history metadata, workspace folders and advertised lifecycle capabilities" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Delete agent history with confirmation</strong><br>
+      <a href="screenshots/session-history-delete.jpg"><img src="screenshots/session-history-delete.jpg" alt="Explicit confirmation to delete native agent history while keeping the saved Splash transcript" width="100%"></a>
+    </td>
+  </tr>
   <tr>
     <td width="50%" valign="top">
       <strong>Session library</strong><br>
@@ -62,8 +92,8 @@ Click any screenshot to open it at full size. Session and workbench captures use
       <a href="screenshots/session-search-match.jpg"><img src="screenshots/session-search-match.jpg" alt="Archived conversation opened at the highlighted transcript search match" width="100%"></a>
     </td>
     <td width="50%" valign="top">
-      <strong>History loading error</strong><br>
-      <a href="screenshots/agent-session-error.jpg"><img src="screenshots/agent-session-error.jpg" alt="Missing agent session shown as an error while keeping the folder and session ID available to correct" width="100%"></a>
+      <strong>Retry one agent while keeping other results</strong><br>
+      <a href="screenshots/agent-session-error.jpg"><img src="screenshots/agent-session-error.jpg" alt="One agent's discovery error and retry action beside successful results from the other agents" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -112,8 +142,8 @@ Click any screenshot to open it at full size. Session and workbench captures use
       <a href="screenshots/issue-preview.png"><img src="screenshots/issue-preview.png" alt="Splash: Markdown issue preview" width="100%"></a>
     </td>
     <td width="50%" valign="top">
-      <strong>New session setup</strong><br>
-      <a href="screenshots/new-session.png"><img src="screenshots/new-session.png" alt="Splash: New session setup" width="100%"></a>
+      <strong>New session with additional folders</strong><br>
+      <a href="screenshots/new-session-folders.jpg"><img src="screenshots/new-session-folders.jpg" alt="New session setup with additional workspace folders, mode, model and permission choices" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -241,27 +271,33 @@ Data lives in `~/Library/Application Support/Splash`. Set `SPLASH_DATA_DIR` to u
 - **Actions.** Cross-repository workflow runs, filters, workflow catalog, attempt details, job steps and searchable log previews.
 - **Workbench.** A side panel with the session's git changes, a file tree and session details; diff and file tabs; a terminal in the session folder (⌘J).
 - **Session library.** Search titles, folders, and saved transcript text across agents, including archived conversations. Filter by project, agent, or status. Search results open the matching message; session URLs survive reloads.
-- **Existing agent history.** Discover conversations through ACP, preview their transcript, and add a local copy to Splash. Agents without discovery can be opened by a known session ID when they support loading history.
+- **Existing agent history.** Browse all installed agents and folders together, with independent loading, errors, pagination, and cached lists. Search and sort loaded results, preview their transcripts and workspace folders, then add or update a local copy.
 - **Needs attention.** Permissions, connection failures, and completed turns stay in a persistent queue. Open the conversation, reconnect or recheck the agent, and mark finished work reviewed.
 - **Review.** See the latest response, failed tools, changed files, and an associated PR when available. Open every changed file as a diff, send feedback, or ask the agent to review its work.
+- **History controls.** Refresh conversations continued outside Splash, preserve additional workspace folders, disconnect gracefully, and choose between removing a local copy or deleting agent history. Fork a conversation into a separate approach or prepare a review draft when the agent supports it.
 - **Resume.** Cached conversations open without starting an agent. Continue or send a message to reconnect using `session/resume` or `session/load` when supported. A failed reconnect preserves the original session ID and history, with the unsent draft available to retry.
 - **Settings.** Per-agent status and version, a connection test that sends no prompt, extra launch arguments, read-only lists of each agent's skills, commands and MCP servers, and rebindable shortcuts.
 - **Log.** Each session's JSON-RPC traffic, kept in memory for the current run.
 
 ## Existing sessions and review
 
-Open **Sessions → Open from agent**, choose an installed agent and the
-conversation's original working directory, then **Find sessions**. **Load more
-sessions** follows the agent's pagination. Select a conversation to preview it,
-then **Add to Splash** to save the replay locally. A known ID also works when
-the agent supports history loading but does not offer a session list.
+Open **Sessions → Open from agent** and choose **All installed agents** and
+**All folders**, or narrow either filter, then **Find sessions**. Each agent has
+its own progress, retry controls, and **Load more** button. Lists stay cached
+for the current app run; **Refresh lists** checks again. Search, activity
+filters, and sorting apply to the pages loaded so far, not the agent's entire
+history. Agents without listing can still be opened by a known session ID.
 
-Splash negotiates ACP v1 and checks the running adapter's capabilities. In v1,
-[`session/list`](https://github.com/agentclientprotocol/agent-client-protocol/blob/main/docs/rfds/session-list.mdx)
-discovers conversations, while
-[`session/load`](https://github.com/agentclientprotocol/agent-client-protocol/blob/main/docs/protocol/v1/session-setup.mdx)
-replays history. `session/resume` reconnects without replay, so Splash uses it
-when a local transcript already exists.
+Select a conversation to preview its transcript and complete workspace folder
+list. **Add to Splash** saves a local copy; **Update local copy** replaces an
+existing disconnected conversation's cached transcript. Neither sends a prompt.
+
+Splash negotiates ACP v1 and checks the running adapter's capabilities.
+[`session/list`](https://agentclientprotocol.com/protocol/v1/session-list)
+discovers conversations; omitting its folder filter requests all known sessions.
+[`session/load`](https://agentclientprotocol.com/protocol/v1/session-setup)
+replays history. `session/resume` reconnects without replay, so reconnecting a
+cached conversation is separate from refreshing it.
 
 The repository's recorded initialization fixtures establish this baseline:
 
@@ -281,11 +317,41 @@ or attach to another running process. ACP v2-only adapters need a separate
 protocol integration.
 
 Previewing starts a short-lived agent connection and sends no prompt. Import
-stores the returned transcript, original agent session ID, directory, and launch
-arguments. Repeated imports of the same agent session and launch profile open
-the existing local copy. Imported conversations stay in their original folders;
-archiving or deleting the Splash copy leaves the external folder and provider
-history intact. Previews expire after 15 minutes and can be loaded again.
+stores the transcript, original agent session ID, working directory, additional
+workspace folders, source metadata, and launch arguments. Imported conversations
+stay in their original folders. Previews expire after 15 minutes.
+
+**Refresh from agent** reloads a disconnected conversation, replacing its
+transcript and search index together. A failed refresh leaves the cached copy
+intact. Splash keeps user-chosen titles, records when history was last synced,
+and shows **New activity at agent** when discovery reports newer source activity.
+This is a manual refresh, not a live attachment to another agent process.
+Workspace roots are included on supported new, load, resume, and fork requests;
+an adapter that cannot restore a saved root set reports an error instead of
+silently dropping folders.
+
+**Disconnect agent** uses `session/close` when advertised, with a bounded wait
+and process termination as a fallback. Stop an active turn before disconnecting.
+**Manage history** shows the source metadata and separate removal actions:
+
+- **Remove local copy** removes Splash's transcript while keeping provider
+  history and external folders. Deleting an owned worktree session also removes
+  its worktree; a worktree shared by a fork must be kept until that fork is
+  archived or removed.
+- **Delete agent history** requires confirmation and advertised
+  [`session/delete`](https://agentclientprotocol.com/protocol/v1/session-delete)
+  support. The conversation disappears from the agent's list; storage erasure
+  depends on the agent. Splash retains a read-only local transcript.
+
+**Fork conversation** creates a new native conversation from the provider's
+current context and links it to its parent. **Try another approach** opens the
+fork; **Fork for review** also prepares a review message for you to send. Forks
+share workspace files with their parent. Arbitrary branching from a selected
+message is not supported. The
+[`session/fork` extension](https://agentclientprotocol.com/rfds/session-fork)
+is experimental; Splash enables it only for agents advertising fork and history
+loading. Recorded Claude and Codex fixtures advertise these capabilities, but
+availability still depends on the running adapter.
 
 The **In Splash** search uses literal word prefixes in persisted transcript
 text and tool output, with up to 200 transcript matches per query. Narrow the

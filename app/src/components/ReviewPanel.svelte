@@ -20,7 +20,7 @@
   const answer = $derived(turn.findLast((e) => e.kind === "agent"));
   const failures = $derived(turn.filter((e) => e.kind === "error" || (e.kind === "tool" && e.status === "failed")));
   const changes = $derived(workspace(session.id).changes);
-  const available = $derived(!session.archived && !["starting", "running", "awaiting_permission"].includes(session.status));
+  const available = $derived(!session.archived && !session.source?.deleted && !["starting", "running", "awaiting_permission"].includes(session.status));
   $effect(() => {
     const id = session.id;
     const status = session.status;
@@ -71,7 +71,7 @@
   <section>
     <form onsubmit={(e) => { e.preventDefault(); send(`Review feedback for this conversation:\n\n${feedback.trim()}`); }}>
       <label for="review-feedback">Feedback for the agent</label>
-      <textarea id="review-feedback" class="field" bind:value={feedback} required rows="4" placeholder="Describe what to change, including file names or line numbers." disabled={session.archived}></textarea>
+      <textarea id="review-feedback" class="field" bind:value={feedback} required rows="4" placeholder="Describe what to change, including file names or line numbers." disabled={session.archived || session.source?.deleted}></textarea>
       <div class="actions"><button class="btn primary sm" type="submit" disabled={!available || busy}>{busy ? "Connecting…" : "Send feedback"}</button><button class="btn sm" type="button" disabled={!available || busy} onclick={() => send("Review the changes you made in this conversation. Check for correctness, regressions, and missing validation. Report concrete findings with file locations, and explain what you verified before making further changes.")}>Ask agent to review</button></div>
     </form>
     {#if error}<p class="err failure" role="alert">{error}</p>{/if}

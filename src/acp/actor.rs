@@ -63,6 +63,7 @@ pub enum SessionCmd {
         option_id: Option<String>,
     },
     Shutdown,
+    Disconnect(tokio::sync::oneshot::Sender<()>),
 }
 
 /// Where a session's output goes. The app implements it with the EventBus
@@ -87,6 +88,8 @@ pub struct SessionSpec {
     pub resume: Option<String>,
     /// The transcript so far (from the database).
     pub history: Vec<Entry>,
+    pub additional_directories: Vec<PathBuf>,
+    pub source: crate::store::SessionSource,
 }
 
 enum Inbound {
@@ -134,6 +137,9 @@ async fn run(
 ) {
     let key = spec.key.clone();
     let mut transcript = Transcript::restore(spec.history);
+    transcript.meta.title = spec.source.title;
+    transcript.meta.source_updated_at = spec.source.updated_at;
+    transcript.meta.source_metadata_json = spec.source.metadata_json;
     sink.status(&key, Status::Starting, None, &transcript.meta);
 
     let tap = {
@@ -255,13 +261,22 @@ async fn run(
             )
             .await
             .map_err(|_| agent_client_protocol::Error::internal_error().data("initialize timed out"))??;
+            if init.protocol_version != ProtocolVersion::V1 {
+                return Err(agent_client_protocol::Error::invalid_params().data("This agent did not negotiate ACP v1"));
+            }
+            let caps = super::history::HistoryCapabilities::from(&init.agent_capabilities);
+            if !spec.additional_directories.is_empty() && !caps.additional_directories {
+                return Err(agent_client_protocol::Error::invalid_params().data("This agent does not support the session's additional workspace folders."));
+            }
+            transcript.meta.history_capabilities = Some(caps.clone());
+            let roots = spec.additional_directories;
             let can_load = init.agent_capabilities.load_session;
             let can_resume = init.agent_capabilities.session_capabilities.resume.is_some();
 
             let session_id: SessionId = match resume {
                 Some(prev) => {
                     if can_resume && !transcript.is_empty() {
-                        let resp = tokio::time::timeout(INIT_TIMEOUT, cx.send_request(ResumeSessionRequest::new(SessionId::new(prev.clone()), cwd.clone())).block_task()).await
+                        let resp = tokio::time::timeout(INIT_TIMEOUT, cx.send_request(ResumeSessionRequest::new(SessionId::new(prev.clone()), cwd.clone()).additional_directories(roots.clone())).block_task()).await
                             .map_err(|_| agent_client_protocol::Error::internal_error().data("Resuming the saved conversation timed out"))??;
                         transcript.set_session_state(&serde_json::to_value(&resp).unwrap_or_default());
                     } else {
@@ -269,7 +284,7 @@ async fn run(
                             return Err(agent_client_protocol::Error::invalid_params().data("This agent cannot restore the saved conversation. Its history is still available; create a separate session to start over."));
                         }
                         replaying.store(true, Ordering::Release);
-                        let loaded = tokio::time::timeout(INIT_TIMEOUT, cx.send_request(LoadSessionRequest::new(SessionId::new(prev.clone()), cwd.clone())).block_task()).await;
+                        let loaded = tokio::time::timeout(INIT_TIMEOUT, cx.send_request(LoadSessionRequest::new(SessionId::new(prev.clone()), cwd.clone()).additional_directories(roots.clone())).block_task()).await;
                         replaying.store(false, Ordering::Release);
                         // Never replace a failed resume with an unrelated conversation.
                         let resp = loaded.map_err(|_| agent_client_protocol::Error::internal_error().data("Loading the saved conversation timed out"))??;
@@ -277,7 +292,7 @@ async fn run(
                     }
                     SessionId::new(prev)
                 }
-                None => new_session(&cx, &cwd, &mut transcript).await?,
+                None => new_session(&cx, &cwd, roots, &mut transcript).await?,
             };
             sink.agent_session(&key, &session_id.0);
 
@@ -415,7 +430,13 @@ async fn run(
                                 status = if prompt.is_some() { Status::Running } else { Status::Idle };
                             }
                         }
-                        SessionCmd::Shutdown => break,
+                        cmd @ (SessionCmd::Shutdown | SessionCmd::Disconnect(_)) => {
+                            flush(&*sink, &key, &mut transcript, true);
+                            if caps.close { super::history::close(&cx, session_id.clone()).await; }
+                            sink.status(&key, Status::Exited, None, &transcript.meta);
+                            if let SessionCmd::Disconnect(done) = cmd { let _ = done.send(()); }
+                            break;
+                        },
                     },
                     _ = ticker.tick() => {
                         ticks = ticks.wrapping_add(1);
@@ -456,10 +477,14 @@ async fn run(
 async fn new_session(
     cx: &ConnectionTo<Agent>,
     cwd: &std::path::Path,
+    additional_directories: Vec<PathBuf>,
     transcript: &mut Transcript,
 ) -> Result<SessionId, agent_client_protocol::Error> {
     let resp = cx
-        .send_request(NewSessionRequest::new(cwd.to_path_buf()))
+        .send_request(
+            NewSessionRequest::new(cwd.to_path_buf())
+                .additional_directories(additional_directories),
+        )
         .block_task()
         .await?;
     transcript.set_session_state(&serde_json::to_value(&resp).unwrap_or_default());

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import AgentIcon from "./AgentIcon.svelte";
   import Picker from "./Picker.svelte";
   import ContextRing from "./ContextRing.svelte";
@@ -35,7 +36,7 @@
   });
 
   const busy = $derived(isBusy(session.status));
-  const archived = $derived(session.archived);
+  const archived = $derived(session.archived || session.source?.deleted);
   const project = $derived(projectById(session.project_id));
   const agent = $derived(agentById(session.agent_id));
 
@@ -52,7 +53,8 @@
   }
   $effect(() => {
     void text;
-    autosize();
+    // Measure after a restored draft has reached the textarea.
+    void tick().then(autosize);
   });
 
   async function send() {
@@ -124,7 +126,7 @@
       {onkeydown}
       rows="1"
       disabled={archived}
-      placeholder={archived ? "This session is archived." : busy ? "The agent is working…" : "Describe a task or ask a question"}
+      placeholder={archived ? (session.source?.deleted ? "Agent history was deleted. This local copy is read-only." : "This session is archived.") : busy ? "The agent is working…" : "Describe a task or ask a question"}
     ></textarea>
     {#if busy}
       <IconButton class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" onclick={stop} />

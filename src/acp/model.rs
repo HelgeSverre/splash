@@ -176,4 +176,12 @@ pub struct SessionMeta {
     pub commands: Vec<SlashCommand>,
     pub usage: Option<Usage>,
     pub title: Option<String>,
+    #[serde(default)]
+    pub source_updated_at: Option<String>,
+    #[serde(default)]
+    pub source_metadata_json: Option<String>,
+    #[serde(default)]
+    pub info_revision: u32,
+    #[serde(default)]
+    pub history_capabilities: Option<super::history::HistoryCapabilities>,
 }

@@ -152,6 +152,7 @@ async fn github_work_session(
             Isolation::Worktree,
             Some(title),
             Some(sha),
+            vec![],
         )
         .await?)
 }
@@ -235,10 +236,18 @@ async fn create_session(
     agent_id: String,
     isolation: Isolation,
     title: Option<String>,
+    additional_directories: Vec<String>,
 ) -> elyra::Result<SessionView> {
     Ok(ctx
         .get::<Sessions>()
-        .create(&project_id, &agent_id, isolation, title)
+        .create_at(
+            &project_id,
+            &agent_id,
+            isolation,
+            title,
+            None,
+            additional_directories,
+        )
         .await?)
 }
 
@@ -264,13 +273,9 @@ async fn discover_sessions(
 async fn preview_session(
     ctx: Ctx,
     agent_id: String,
-    cwd: String,
-    session_id: String,
+    session: crate::acp::history::ExternalSession,
 ) -> elyra::Result<crate::hub::SessionPreview> {
-    Ok(ctx
-        .get::<Sessions>()
-        .preview(&agent_id, &cwd, &session_id)
-        .await?)
+    Ok(ctx.get::<Sessions>().preview(&agent_id, session).await?)
 }
 #[command]
 async fn import_session(ctx: Ctx, token: String) -> elyra::Result<SessionView> {
@@ -290,6 +295,30 @@ async fn acknowledge_session(ctx: Ctx, id: String) -> elyra::Result<()> {
 #[command]
 async fn restart_session(ctx: Ctx, id: String) -> elyra::Result<()> {
     Ok(ctx.get::<Sessions>().restart(&id).await?)
+}
+
+#[command]
+async fn refresh_session_history(ctx: Ctx, id: String) -> elyra::Result<SessionView> {
+    Ok(ctx.get::<Sessions>().refresh_history(&id).await?)
+}
+#[command]
+async fn session_history_capabilities(
+    ctx: Ctx,
+    id: String,
+) -> elyra::Result<crate::acp::history::HistoryCapabilities> {
+    Ok(ctx.get::<Sessions>().history_capabilities(&id).await?)
+}
+#[command]
+async fn disconnect_session(ctx: Ctx, id: String) -> elyra::Result<()> {
+    Ok(ctx.get::<Sessions>().disconnect(&id).await?)
+}
+#[command]
+async fn delete_agent_history(ctx: Ctx, id: String) -> elyra::Result<SessionView> {
+    Ok(ctx.get::<Sessions>().delete_native(&id).await?)
+}
+#[command]
+async fn fork_session(ctx: Ctx, id: String) -> elyra::Result<SessionView> {
+    Ok(ctx.get::<Sessions>().fork_history(&id).await?)
 }
 
 /// The transcript alone, for a resync (the agent isn't started).
@@ -525,6 +554,11 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
             discover_sessions,
             preview_session,
             import_session,
+            refresh_session_history,
+            session_history_capabilities,
+            disconnect_session,
+            delete_agent_history,
+            fork_session,
             search_sessions,
             acknowledge_session,
             restart_session,

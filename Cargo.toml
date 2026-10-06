@@ -31,7 +31,8 @@ serde_json = "1"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
 rust-embed = "8"
 # ACP. The SDK's API moved a lot between majors — pin exactly.
-agent-client-protocol = "=2.2.0"
+agent-client-protocol = { version = "=2.2.0", features = ["unstable_session_fork"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "io-std", "sync", "time"] }
 tokio-stream = { version = "0.1", features = ["io-util"] }
 futures = "0.3"

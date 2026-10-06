@@ -103,6 +103,8 @@ fn start(
             extra_args: vec![],
             resume: resume.map(String::from),
             history,
+            additional_directories: vec![],
+            source: Default::default(),
         },
         rec.clone() as Arc<dyn Sink>,
     );
@@ -330,6 +332,8 @@ async fn a_missing_program_reports_an_error() {
             extra_args: vec![],
             resume: None,
             history: vec![],
+            additional_directories: vec![],
+            source: Default::default(),
         },
         rec.clone() as Arc<dyn Sink>,
     );

@@ -14,7 +14,7 @@ use crate::acp::model::Entry;
 
 macro_rules! session_cols {
     () => {
-        "id, project_id, agent_id, title, cwd, isolation, branch, base_sha, agent_session_id, archived, created_at, updated_at, usage_json, external, launch_args, attention_json"
+        "id, project_id, agent_id, title, cwd, isolation, branch, base_sha, agent_session_id, archived, created_at, updated_at, usage_json, external, launch_args, attention_json, source_json, additional_directories_json, parent_id, title_override"
     };
 }
 
@@ -85,6 +85,54 @@ pub struct SessionRecord {
     pub launch_args: Option<String>,
     #[serde(default)]
     pub attention: Option<Attention>,
+    #[serde(default)]
+    pub source: SessionSource,
+    #[serde(default)]
+    pub additional_directories: Vec<String>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub title_override: bool,
+}
+
+/// Provider metadata is separate from local activity and user-chosen titles.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(default)]
+pub struct SessionSource {
+    pub capabilities: Option<crate::acp::history::HistoryCapabilities>,
+    pub title: Option<String>,
+    pub updated_at: Option<String>,
+    pub metadata_json: Option<String>,
+    pub synced_updated_at: Option<String>,
+    pub last_synced_at: Option<f64>,
+    pub last_local_activity_at: Option<f64>,
+    pub deleted: bool,
+}
+
+pub fn timestamp(value: Option<&str>) -> Option<f64> {
+    chrono::DateTime::parse_from_rfc3339(value?)
+        .ok()
+        .map(|t| t.timestamp_millis() as f64 / 1000.0)
+}
+
+struct SessionLifecycle;
+impl RustMigration for SessionLifecycle {
+    fn version(&self) -> &str {
+        "20261006000002"
+    }
+    fn name(&self) -> &str {
+        "session_lifecycle"
+    }
+    fn up(&self, _driver: Driver) -> Vec<String> {
+        vec![
+            "ALTER TABLE sessions ADD COLUMN source_json TEXT NOT NULL DEFAULT '{}'".into(),
+            "ALTER TABLE sessions ADD COLUMN additional_directories_json TEXT NOT NULL DEFAULT '[]'".into(),
+            "ALTER TABLE sessions ADD COLUMN parent_id TEXT".into(),
+            "ALTER TABLE sessions ADD COLUMN title_override INTEGER NOT NULL DEFAULT 0".into(),
+            // Existing titles may have been chosen by the user. Keep them on refresh.
+            "UPDATE sessions SET title_override = 1 WHERE title <> 'New session'".into(),
+        ]
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -236,6 +284,14 @@ enum Write {
         session: String,
         json: Option<String>,
     },
+    Title {
+        session: String,
+        title: String,
+    },
+    Source {
+        session: String,
+        json: String,
+    },
     Barrier(tokio::sync::oneshot::Sender<()>),
 }
 
@@ -269,6 +325,7 @@ impl Store {
             Box::new(Settings),
             Box::new(SessionUsage),
             Box::new(SessionLibrary),
+            Box::new(SessionLifecycle),
         ];
         db.migrator(std::path::PathBuf::from("migrations"))
             .run_rust(&migrations, Driver::Sqlite)
@@ -301,6 +358,22 @@ impl Store {
                     }
                     Write::Attention { session, json } => {
                         sqlx::query("UPDATE sessions SET attention_json = ? WHERE id = ?")
+                            .bind(json)
+                            .bind(session)
+                            .execute(&pool)
+                            .await
+                            .map(|_| ())
+                    }
+                    Write::Title { session, title } => sqlx::query(
+                        "UPDATE sessions SET title = ? WHERE id = ? AND title_override = 0",
+                    )
+                    .bind(title)
+                    .bind(session)
+                    .execute(&pool)
+                    .await
+                    .map(|_| ()),
+                    Write::Source { session, json } => {
+                        sqlx::query("UPDATE sessions SET source_json = ? WHERE id = ?")
                             .bind(json)
                             .bind(session)
                             .execute(&pool)
@@ -431,6 +504,58 @@ impl Store {
             .execute(self.db.pool())
             .await
             .map_err(err)?;
+        Ok(())
+    }
+
+    pub async fn rename(&self, id: &str, title: &str) -> Result<()> {
+        sqlx::query("UPDATE sessions SET title = ?, title_override = 1 WHERE id = ?")
+            .bind(title)
+            .bind(id)
+            .execute(self.db.pool())
+            .await
+            .map_err(err)?;
+        Ok(())
+    }
+
+    pub fn queue_title(&self, session: &str, title: &str) {
+        let _ = self.writer.send(Write::Title {
+            session: session.into(),
+            title: title.into(),
+        });
+    }
+
+    pub fn queue_source(&self, session: &str, source: &SessionSource) {
+        if let Ok(json) = serde_json::to_string(source) {
+            let _ = self.writer.send(Write::Source {
+                session: session.into(),
+                json,
+            });
+        }
+    }
+
+    /// Swap the full replay and its metadata in one transaction. Deletes also
+    /// update FTS, so shortened histories cannot leave stale search matches.
+    pub async fn replace_history(&self, s: &SessionRecord, entries: &[Entry]) -> Result<()> {
+        self.settle().await;
+        let mut tx = self.db.pool().begin().await.map_err(err)?;
+        sqlx::query("UPDATE sessions SET title = ?, updated_at = ?, source_json = ?, additional_directories_json = ?, launch_args = ? WHERE id = ?")
+            .bind(&s.title).bind(s.updated_at)
+            .bind(serde_json::to_string(&s.source).map_err(err)?)
+            .bind(serde_json::to_string(&s.additional_directories).map_err(err)?)
+            .bind(&s.launch_args).bind(&s.id).execute(&mut *tx).await.map_err(err)?;
+        sqlx::query("DELETE FROM entries WHERE session_id = ?")
+            .bind(&s.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(err)?;
+        write_entries_on(
+            &mut tx,
+            &s.id,
+            entries.iter().cloned().enumerate().collect(),
+        )
+        .await
+        .map_err(err)?;
+        tx.commit().await.map_err(err)?;
         Ok(())
     }
 
@@ -647,7 +772,7 @@ async fn write_entries_on(
 async fn insert_record(conn: &mut sqlx::AnyConnection, s: &SessionRecord) -> Result<()> {
     sqlx::query(
             "INSERT INTO sessions (id, project_id, agent_id, title, cwd, isolation, branch, base_sha,
-             agent_session_id, archived, created_at, updated_at, external, launch_args, attention_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             agent_session_id, archived, created_at, updated_at, external, launch_args, attention_json, source_json, additional_directories_json, parent_id, title_override) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&s.id)
         .bind(&s.project_id)
@@ -664,6 +789,10 @@ async fn insert_record(conn: &mut sqlx::AnyConnection, s: &SessionRecord) -> Res
         .bind(s.external as i64)
         .bind(&s.launch_args)
         .bind(s.attention.as_ref().and_then(|a| serde_json::to_string(a).ok()))
+        .bind(serde_json::to_string(&s.source).map_err(err)?)
+        .bind(serde_json::to_string(&s.additional_directories).map_err(err)?)
+        .bind(&s.parent_id)
+        .bind(s.title_override as i64)
         .execute(conn)
         .await
         .map_err(err)?;
@@ -701,6 +830,15 @@ fn session_from(r: &sqlx::any::AnyRow) -> Result<SessionRecord> {
         updated_at: r.try_get("updated_at").map_err(err)?,
         external: r.try_get::<i64, _>("external").map_err(err)? != 0,
         launch_args: r.try_get("launch_args").map_err(err)?,
+        source: serde_json::from_str(&r.try_get::<String, _>("source_json").map_err(err)?)
+            .map_err(err)?,
+        additional_directories: serde_json::from_str(
+            &r.try_get::<String, _>("additional_directories_json")
+                .map_err(err)?,
+        )
+        .map_err(err)?,
+        parent_id: r.try_get("parent_id").map_err(err)?,
+        title_override: r.try_get::<i64, _>("title_override").map_err(err)? != 0,
         attention: r
             .try_get::<Option<String>, _>("attention_json")
             .map_err(err)?

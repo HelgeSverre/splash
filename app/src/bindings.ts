@@ -212,6 +212,8 @@ export type ExternalSession = {
 	cwd: string,
 	title: string | null,
 	updated_at: string | null,
+	additional_directories?: string[],
+	metadata_json?: string | null,
 };
 
 export type FileChange = {
@@ -316,9 +318,13 @@ export type GithubSearch = {
 };
 
 export type HistoryCapabilities = {
-	list: boolean,
-	load: boolean,
-	resume: boolean,
+	list?: boolean,
+	load?: boolean,
+	resume?: boolean,
+	close?: boolean,
+	delete?: boolean,
+	fork?: boolean,
+	additional_directories?: boolean,
 };
 
 export type HistoryPage = {
@@ -413,6 +419,10 @@ export type SessionMeta = {
 	commands: SlashCommand[],
 	usage: Usage | null,
 	title: string | null,
+	source_updated_at?: string | null,
+	source_metadata_json?: string | null,
+	info_revision?: number,
+	history_capabilities?: HistoryCapabilities | null,
 };
 
 export type SessionPreview = {
@@ -422,6 +432,8 @@ export type SessionPreview = {
 	cwd: string,
 	title: string,
 	entries: Entry[],
+	additional_directories: string[],
+	source: SessionSource,
 };
 
 export type SessionRecord = {
@@ -444,6 +456,22 @@ export type SessionRecord = {
 	/**  The launch profile used when importing (None follows current settings). */
 	launch_args?: string | null,
 	attention?: Attention | null,
+	source?: SessionSource,
+	additional_directories?: string[],
+	parent_id?: string | null,
+	title_override?: boolean,
+};
+
+/**  Provider metadata is separate from local activity and user-chosen titles. */
+export type SessionSource = {
+	capabilities?: HistoryCapabilities | null,
+	title?: string | null,
+	updated_at?: string | null,
+	metadata_json?: string | null,
+	synced_updated_at?: string | null,
+	last_synced_at?: number | null,
+	last_local_activity_at?: number | null,
+	deleted?: boolean,
 };
 
 /**  A session as the UI sees it: the stored record plus live state. */
@@ -499,6 +527,7 @@ export type ToolContent = { type: "text"; text: string } | { type: "diff"; path:
 export type TranscriptEvent = {
 	session: string,
 	changes: Change[],
+	reset: TranscriptSnapshot | null,
 };
 
 /**  A transcript with per-entry versions, for (re)syncing the frontend. */
@@ -548,17 +577,26 @@ export const api = {
   cancel(id: string): Promise<null> {
     return invoke("cancel", id);
   },
-  create_session(project_id: string, agent_id: string, isolation: Isolation, title: string | null): Promise<SessionView> {
-    return invoke("create_session", project_id, agent_id, isolation, title);
+  create_session(project_id: string, agent_id: string, isolation: Isolation, title: string | null, additional_directories: string[]): Promise<SessionView> {
+    return invoke("create_session", project_id, agent_id, isolation, title, additional_directories);
+  },
+  delete_agent_history(id: string): Promise<SessionView> {
+    return invoke("delete_agent_history", id);
   },
   delete_session(id: string, force: boolean): Promise<null> {
     return invoke("delete_session", id, force);
+  },
+  disconnect_session(id: string): Promise<null> {
+    return invoke("disconnect_session", id);
   },
   discover_sessions(agent_id: string, cwd: string, cursor: string | null): Promise<HistoryPage> {
     return invoke("discover_sessions", agent_id, cwd, cursor);
   },
   file_diff(id: string, path: string): Promise<FileDiff> {
     return invoke("file_diff", id, path);
+  },
+  fork_session(id: string): Promise<SessionView> {
+    return invoke("fork_session", id);
   },
   get_settings(): Promise<{ [key in string]: string }> {
     return invoke("get_settings");
@@ -623,8 +661,8 @@ export const api = {
   open_session(id: string): Promise<TranscriptSnapshot> {
     return invoke("open_session", id);
   },
-  preview_session(agent_id: string, cwd: string, session_id: string): Promise<SessionPreview> {
-    return invoke("preview_session", agent_id, cwd, session_id);
+  preview_session(agent_id: string, session: ExternalSession): Promise<SessionPreview> {
+    return invoke("preview_session", agent_id, session);
   },
   probe_agent(id: string): Promise<AgentStatus> {
     return invoke("probe_agent", id);
@@ -634,6 +672,9 @@ export const api = {
   },
   read_file(id: string, path: string): Promise<FileContent> {
     return invoke("read_file", id, path);
+  },
+  refresh_session_history(id: string): Promise<SessionView> {
+    return invoke("refresh_session_history", id);
   },
   remove_project(id: string): Promise<null> {
     return invoke("remove_project", id);
@@ -658,6 +699,9 @@ export const api = {
   },
   session_git(id: string, refresh: boolean): Promise<GitInfo> {
     return invoke("session_git", id, refresh);
+  },
+  session_history_capabilities(id: string): Promise<HistoryCapabilities> {
+    return invoke("session_history_capabilities", id);
   },
   session_transcript(id: string): Promise<TranscriptSnapshot> {
     return invoke("session_transcript", id);

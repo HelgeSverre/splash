@@ -38,6 +38,7 @@ pub struct SessionView {
 pub struct TranscriptEvent {
     pub session: String,
     pub changes: Vec<Change>,
+    pub reset: Option<TranscriptSnapshot>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, specta::Type)]
@@ -67,7 +68,6 @@ type OnStop = Box<dyn Fn(&str) + Send + Sync>;
 pub struct Sessions {
     core: Arc<Core>,
     previews: Mutex<HashMap<String, library::CachedPreview>>,
-    import_lock: tokio::sync::Mutex<()>,
     startup_lock: tokio::sync::Mutex<()>,
     callbacks: Mutex<()>,
     /// Set once `records` holds what the store has.
@@ -88,7 +88,6 @@ impl Sessions {
         Self {
             core,
             previews: Mutex::default(),
-            import_lock: tokio::sync::Mutex::new(()),
             startup_lock: tokio::sync::Mutex::new(()),
             callbacks: Mutex::new(()),
             loaded: OnceCell::new(),
@@ -240,7 +239,7 @@ impl Sessions {
         isolation: Isolation,
         title: Option<String>,
     ) -> Result<SessionView> {
-        self.create_at(project_id, agent_id, isolation, title, None)
+        self.create_at(project_id, agent_id, isolation, title, None, vec![])
             .await
     }
 
@@ -251,8 +250,12 @@ impl Sessions {
         isolation: Isolation,
         title: Option<String>,
         revision: Option<String>,
+        additional_directories: Vec<String>,
     ) -> Result<SessionView> {
         let store = self.store().await?;
+        for path in &additional_directories {
+            library::validate_directory(path)?;
+        }
         let project = store.project(project_id).await?;
         self.core.agent(agent_id)?;
         let id = store::new_id("s");
@@ -297,6 +300,7 @@ impl Sessions {
             }
         };
         let now = store::now();
+        let title_is_custom = title != NEW_SESSION;
         let record = SessionRecord {
             id: id.clone(),
             project_id: project.id,
@@ -314,6 +318,10 @@ impl Sessions {
             external: false,
             launch_args: None,
             attention: None,
+            source: store::SessionSource::default(),
+            additional_directories,
+            parent_id: None,
+            title_override: title_is_custom,
         };
         store.insert_session(&record).await?;
         if record.title == NEW_SESSION {
@@ -375,8 +383,10 @@ impl Sessions {
         warm_env().await;
         let store = self.store().await?;
         let record = self.record(id)?;
-        if record.archived {
-            return Err(Error::Other("Archived sessions are read-only.".into()));
+        if record.archived || record.source.deleted {
+            return Err(Error::Other(
+                "Archived sessions and deleted agent histories are read-only.".into(),
+            ));
         }
         let agent = self.core.agent(&record.agent_id)?;
         let history = store.entries(id).await?;
@@ -395,6 +405,12 @@ impl Sessions {
             extra_args: extra,
             resume: record.agent_session_id,
             history,
+            additional_directories: record
+                .additional_directories
+                .iter()
+                .map(PathBuf::from)
+                .collect(),
+            source: record.source,
         })
     }
 
@@ -420,7 +436,8 @@ impl Sessions {
     }
 
     pub async fn prompt(self: &Arc<Self>, id: &str, text: &str) -> Result<()> {
-        if self.record(id)?.archived {
+        let _startup = self.startup_lock.lock().await;
+        if self.record(id)?.archived || self.record(id)?.source.deleted {
             return Err(Error::Other("Archived sessions are read-only.".into()));
         }
         let text = text.trim();
@@ -434,7 +451,6 @@ impl Sessions {
             .map(|l| matches!(l.status, Status::Exited | Status::Error))
             .unwrap_or(true);
         if exited {
-            let _startup = self.startup_lock.lock().await;
             let needs_start = self
                 .live
                 .lock()
@@ -527,7 +543,7 @@ impl Sessions {
     /// Retitle a session Splash named itself (queued write; no-op if unchanged).
     fn set_auto_title(&self, id: &str, title: &str) {
         let title = title.trim();
-        if title.is_empty() || !self.auto_titled.lock().contains(id) {
+        if title.is_empty() || self.record(id).map_or(true, |r| r.title_override) {
             return;
         }
         let changed = self.records.lock().get_mut(id).is_some_and(|r| {
@@ -538,20 +554,21 @@ impl Sessions {
         if !changed {
             return;
         }
-        if let Some(store) = self.core.opened_store().cloned() {
-            let (id, title) = (id.to_string(), title.to_string());
-            tokio::spawn(async move {
-                let _ = store.set_title(&id, &title).await;
-            });
+        if let Some(store) = self.core.opened_store() {
+            store.queue_title(id, title);
         }
         self.emit(id);
     }
 
     pub async fn rename(&self, id: &str, title: &str) -> Result<()> {
+        let _guard = self.startup_lock.lock().await;
         let title = title.trim();
         self.auto_titled.lock().remove(id);
-        self.store().await?.set_title(id, title).await?;
-        self.update_record(id, |r| r.title = title.to_string());
+        self.store().await?.rename(id, title).await?;
+        self.update_record(id, |r| {
+            r.title = title.to_string();
+            r.title_override = true;
+        });
         Ok(())
     }
 
@@ -569,6 +586,7 @@ impl Sessions {
     /// Stop the agent and, for worktree sessions, remove the worktree (the
     /// branch stays). Refuses a dirty worktree unless `force`.
     pub async fn archive(&self, id: &str, force: bool) -> Result<()> {
+        let _guard = self.startup_lock.lock().await;
         let record = self.record(id)?;
         self.remove_worktree(&record, force).await?;
         self.stop(id);
@@ -583,6 +601,7 @@ impl Sessions {
 
     /// Delete a session, refusing to discard worktree changes unless `force`.
     pub async fn delete(&self, id: &str, force: bool) -> Result<()> {
+        let _guard = self.startup_lock.lock().await;
         if let Ok(record) = self.record(id) {
             self.remove_worktree(&record, force).await?;
         }
@@ -604,6 +623,17 @@ impl Sessions {
             || !Path::new(&record.cwd).exists()
         {
             return Ok(());
+        }
+        if self
+            .records
+            .lock()
+            .values()
+            .any(|r| r.id != record.id && !r.archived && r.cwd == record.cwd)
+        {
+            return Err(Error::Other(
+                "Another conversation uses this worktree. Archive or remove its local copy first."
+                    .into(),
+            ));
         }
         let dir = PathBuf::from(&record.cwd);
         let d = dir.clone();
@@ -639,6 +669,10 @@ impl Sink for Sessions {
     fn changes(&self, key: &str, changes: Vec<Change>) {
         if let Some(r) = self.records.lock().get_mut(key) {
             r.updated_at = store::now();
+            r.source.last_local_activity_at = Some(r.updated_at);
+            if let Some(store) = self.core.opened_store() {
+                store.queue_source(key, &r.source);
+            }
         }
         {
             let mut mirrors = self.mirrors.lock();
@@ -652,22 +686,27 @@ impl Sink for Sessions {
             &TranscriptEvent {
                 session: key.to_string(),
                 changes,
+                reset: None,
             },
         );
     }
 
     fn status(&self, key: &str, status: Status, detail: Option<&str>, meta: &SessionMeta) {
-        let before = {
+        let (before, info_changed) = {
             let mut live = self.live.lock();
             let Some(l) = live.get_mut(key) else { return };
             let before = l.status;
+            let info_changed =
+                meta.info_revision != 0 && l.meta.info_revision != meta.info_revision;
             l.status = status;
             l.detail = detail.map(String::from);
-            // An exiting actor reports empty meta; keep the last known pickers.
-            if status != Status::Exited || meta != &SessionMeta::default() {
+            // A broken transport can report empty meta; keep the last known
+            // pickers and source information until an actual update arrives.
+            if !matches!(status, Status::Exited | Status::Error) || meta != &SessionMeta::default()
+            {
                 l.meta = meta.clone();
             }
-            before
+            (before, info_changed)
         };
         if before != status {
             use store::{Attention, AttentionKind};
@@ -721,9 +760,38 @@ impl Sink for Sessions {
                 }
             }
         }
+        // Persist provider metadata independently of local activity and renames.
+        let source = self.records.lock().get_mut(key).and_then(|r| {
+            let previous = r.source.clone();
+            if let Some(caps) = &meta.history_capabilities {
+                r.source.capabilities = Some(caps.clone());
+            }
+            if info_changed {
+                r.source.title = meta.title.clone();
+                r.source.updated_at = meta.source_updated_at.clone();
+                r.source.metadata_json = meta.source_metadata_json.clone();
+            }
+            (previous != r.source).then(|| r.source.clone())
+        });
+        if let (Some(source), Some(store)) = (source, self.core.opened_store()) {
+            store.queue_source(key, &source);
+        }
         // An agent-generated name beats ours.
         if let Some(t) = &meta.title {
             self.set_auto_title(key, &short_title(t));
+        } else if info_changed {
+            let title = self
+                .mirrors
+                .lock()
+                .get(key)
+                .and_then(|snap| {
+                    snap.entries.iter().find_map(|e| match e {
+                        Entry::User { text } => Some(short_title(text)),
+                        _ => None,
+                    })
+                })
+                .unwrap_or_else(|| NEW_SESSION.into());
+            self.set_auto_title(key, &title);
         }
         if let Some(usage) = &meta.usage {
             let changed = self.records.lock().get_mut(key).is_some_and(|r| {

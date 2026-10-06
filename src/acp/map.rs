@@ -375,10 +375,17 @@ impl Transcript {
                 fx.meta_changed = true;
             }
             "session_info_update" => {
-                if let Some(t) = update["title"].as_str() {
-                    self.meta.title = Some(t.to_string());
-                    fx.meta_changed = true;
+                if let Some(value) = update.get("title") {
+                    self.meta.title = value.as_str().map(String::from);
                 }
+                if let Some(value) = update.get("updatedAt") {
+                    self.meta.source_updated_at = value.as_str().map(String::from);
+                }
+                if let Some(value) = update.get("_meta") {
+                    self.meta.source_metadata_json = (!value.is_null()).then(|| value.to_string());
+                }
+                self.meta.info_revision = self.meta.info_revision.wrapping_add(1);
+                fx.meta_changed = true;
             }
             _ => {
                 self.close_open();

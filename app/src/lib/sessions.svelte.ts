@@ -117,10 +117,10 @@ export async function removeProject(id: string) {
   if (app.view.kind === "session" && !app.sessions.some((s) => s.id === currentId())) app.view = { kind: "welcome" };
 }
 
-export async function createSession(projectId: string, agentId: string, isolation: Isolation, title: string | null, context?: GithubItem, prHead = false) {
+export async function createSession(projectId: string, agentId: string, isolation: Isolation, title: string | null, context?: GithubItem, prHead = false, additionalDirectories: string[] = []) {
   const s = context && prHead && context.number
     ? await api.github_work_session(projectId, agentId, context.repository, context.number, title ?? context.title)
-    : await api.create_session(projectId, agentId, isolation, title);
+    : await api.create_session(projectId, agentId, isolation, title, additionalDirectories);
   if (context) {
     const prompt = `Work on ${context.repository}${context.number ? ` #${context.number}` : ""}: ${context.title}\n${context.url}\n\n${context.body}`;
     drafts[s.id] = prompt;

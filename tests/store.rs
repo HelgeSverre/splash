@@ -27,6 +27,10 @@ fn record(project: &str) -> SessionRecord {
         external: false,
         launch_args: None,
         attention: None,
+        source: Default::default(),
+        additional_directories: vec![],
+        parent_id: None,
+        title_override: false,
     }
 }
 

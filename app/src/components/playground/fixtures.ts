@@ -74,9 +74,11 @@ export function fakeSession(status: SessionView["status"] = "idle", usage: Usage
     created_at: 0,
     updated_at: 0,
     usage,
+    external: false, launch_args: null, attention: null, additional_directories: [], parent_id: null, title_override: false,
+    source: { capabilities: null, title: null, updated_at: null, metadata_json: null, synced_updated_at: null, last_synced_at: null, deleted: false },
     status,
     detail: null,
-    meta: { options: [MODE_OPTION, MODEL_OPTION], legacy_modes: false, commands: [], usage, title: null },
+    meta: { options: [MODE_OPTION, MODEL_OPTION], legacy_modes: false, commands: [], usage, title: null, source_updated_at: null, source_metadata_json: null, info_revision: 0, history_capabilities: null },
   } as SessionView;
 }
 

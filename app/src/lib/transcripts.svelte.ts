@@ -38,6 +38,7 @@ export function dropTranscript(id: string) {
 export function applyTranscript(ev: TranscriptEvent | undefined) {
   if (!ev) return;
   const t = transcripts[ev.session];
+  if (ev.reset && t) { t.entries = ev.reset.entries; t.versions = ev.reset.versions; t.loading = false; return; }
   if (!t || t.loading) return; // not open — it loads in full when opened
   for (const c of ev.changes) {
     const local = t.versions[c.index] ?? 0;

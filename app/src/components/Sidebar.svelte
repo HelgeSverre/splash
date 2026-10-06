@@ -45,9 +45,9 @@
         : [{ label: "Archive", action: () => archive(id) }]),
       { separator: true },
       {
-        label: "Delete…",
+        label: "Remove local session…",
         action: async () => {
-          if (await confirm(`Delete "${title}"? The transcript is removed; a worktree is removed too (its branch stays).`, { danger: true, confirmLabel: "Delete" }))
+          if (await confirm(`Remove "${title}" from Splash? The local transcript and any owned worktree are removed. The agent’s saved history and Git branch remain.`, { danger: true, confirmLabel: "Delete" }))
             await removeSession(id);
         },
       },
