@@ -15,13 +15,150 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
 </p>
 
-![Splash with a Claude Code session: the transcript in the middle, changed files on the right](docs/screenshot.png)
-
 Splash talks to agents over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP), a JSON-RPC protocol many coding agents implement for use in editors. It starts the agent as a child process, sends it your prompts and shows what it streams back: messages, tool calls, diffs, plans and permission requests.
 
 Each session is one agent working in one project folder. It runs in the folder itself or, in a git repository, in a separate worktree: a second checkout of the repo on its own branch.
 
 Splash is an early personal project, developed and tested on macOS only.
+
+## Screenshots
+
+Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Sessions and transcripts</strong><br>
+      <a href="screenshots/session.png"><img src="screenshots/session.png" alt="Splash: Sessions and transcripts" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>GitHub triage</strong><br>
+      <a href="screenshots/github-triage.png"><img src="screenshots/github-triage.png" alt="Splash: GitHub triage" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Actions run overview</strong><br>
+      <a href="screenshots/actions-overview.png"><img src="screenshots/actions-overview.png" alt="Splash: Actions run overview" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Failed jobs and searchable logs</strong><br>
+      <a href="screenshots/actions-detail.png"><img src="screenshots/actions-detail.png" alt="Splash: Failed jobs and searchable logs" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Workflow catalog</strong><br>
+      <a href="screenshots/actions-workflows.png"><img src="screenshots/actions-workflows.png" alt="Splash: Workflow catalog" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>GitHub search</strong><br>
+      <a href="screenshots/github-search.png"><img src="screenshots/github-search.png" alt="Splash: GitHub search" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Repository scope picker</strong><br>
+      <a href="screenshots/repository-picker.png"><img src="screenshots/repository-picker.png" alt="Splash: Repository scope picker" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Issue editor</strong><br>
+      <a href="screenshots/issue-editor.png"><img src="screenshots/issue-editor.png" alt="Splash: Issue editor" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Markdown issue preview</strong><br>
+      <a href="screenshots/issue-preview.png"><img src="screenshots/issue-preview.png" alt="Splash: Markdown issue preview" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>New session setup</strong><br>
+      <a href="screenshots/new-session.png"><img src="screenshots/new-session.png" alt="Splash: New session setup" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>File browser</strong><br>
+      <a href="screenshots/files.png"><img src="screenshots/files.png" alt="Splash: File browser" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Diff viewer</strong><br>
+      <a href="screenshots/diff.png"><img src="screenshots/diff.png" alt="Splash: Diff viewer" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Terminal</strong><br>
+      <a href="screenshots/terminal.png"><img src="screenshots/terminal.png" alt="Splash: Terminal" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Session details</strong><br>
+      <a href="screenshots/session-details.png"><img src="screenshots/session-details.png" alt="Splash: Session details" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>JSON-RPC log</strong><br>
+      <a href="screenshots/rpc-log.png"><img src="screenshots/rpc-log.png" alt="Splash: JSON-RPC log" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Command palette</strong><br>
+      <a href="screenshots/command-palette.png"><img src="screenshots/command-palette.png" alt="Splash: Command palette" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Welcome</strong><br>
+      <a href="screenshots/welcome.png"><img src="screenshots/welcome.png" alt="Splash: Welcome" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>General settings</strong><br>
+      <a href="screenshots/settings-general.png"><img src="screenshots/settings-general.png" alt="Splash: General settings" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Agent overview</strong><br>
+      <a href="screenshots/settings-agents.png"><img src="screenshots/settings-agents.png" alt="Splash: Agent overview" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Agent configuration</strong><br>
+      <a href="screenshots/settings-agent.png"><img src="screenshots/settings-agent.png" alt="Splash: Agent configuration" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Agent skills</strong><br>
+      <a href="screenshots/settings-skills.png"><img src="screenshots/settings-skills.png" alt="Splash: Agent skills" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Agent commands</strong><br>
+      <a href="screenshots/settings-commands.png"><img src="screenshots/settings-commands.png" alt="Splash: Agent commands" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>MCP servers</strong><br>
+      <a href="screenshots/settings-mcp.png"><img src="screenshots/settings-mcp.png" alt="Splash: MCP servers" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Keyboard shortcuts</strong><br>
+      <a href="screenshots/settings-shortcuts.png"><img src="screenshots/settings-shortcuts.png" alt="Splash: Keyboard shortcuts" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>About Splash</strong><br>
+      <a href="screenshots/settings-about.png"><img src="screenshots/settings-about.png" alt="Splash: About Splash" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Design system playground</strong><br>
+      <a href="screenshots/design-system.png"><img src="screenshots/design-system.png" alt="Splash: Design system playground" width="100%"></a>
+    </td>
+  </tr>
+</table>
+
+The [screenshots folder](screenshots/) also preserves the [original session capture](screenshots/session-original.png) and the [early GitHub design explorations](screenshots/design-explorations/). Those concepts are not screenshots of the current app. Images are tracked in Git, excluded from the Cargo package, and kept outside the embedded frontend and app bundle.
 
 ## Getting started
 
@@ -41,7 +178,7 @@ Requirements:
 
 - macOS, git, a stable Rust toolchain (rustup), Node.js 20.19+ or 22.12+, and [just](https://github.com/casey/just).
 - At least one agent from the [table below](#agents), installed and signed in.
-- Optional: `gh`, to show a branch's pull request.
+- Optional: `gh`, signed in with `gh auth login --hostname github.com`, for the GitHub view and branch pull requests.
 
 ```bash
 git clone https://github.com/HelgeSverre/splash.git
@@ -60,10 +197,88 @@ Data lives in `~/Library/Application Support/Splash`. Set `SPLASH_DATA_DIR` to u
 - **Sessions.** In place or in a worktree on a `splash/…` branch. Archiving or deleting removes the worktree and keeps the branch. Both require an explicit discard confirmation if there are uncommitted changes; deleting also removes the transcript.
 - **Transcript.** Markdown with syntax highlighting, collapsible thinking, tool calls with status and diffs, plans as checklists, and permission requests answered with the 1–9 keys.
 - **Agent controls.** Model, mode and effort pickers when the agent offers them, slash-command completion, and context and cost readouts when the agent reports them.
+- **GitHub.** A triage view across personal and organization repositories, with repository/owner filters, issues, PRs, branches, recent activity and discussions. Git remotes connect items to local projects and sessions; additional projects can be linked manually. Create issues in any accessible repository with a Markdown editor and preview.
+- **Actions.** Cross-repository workflow runs, filters, workflow catalog, attempt details, job steps and searchable log previews.
 - **Workbench.** A side panel with the session's git changes, a file tree and session details; diff and file tabs; a terminal in the session folder (⌘J).
 - **Resume.** Sessions are saved in SQLite. Agents that support `session/load` continue the same conversation after a restart. Otherwise, or if loading fails, a new agent session starts and the transcript marks the break.
 - **Settings.** Per-agent status and version, a connection test that sends no prompt, extra launch arguments, read-only lists of each agent's skills, commands and MCP servers, and rebindable shortcuts.
 - **Log.** Each session's JSON-RPC traffic, kept in memory for the current run.
+
+## GitHub view
+
+Open **GitHub** in the sidebar (or the command palette). Splash uses the active
+`github.com` account in GitHub CLI; it does not store a separate token. Private
+repositories and organizations are visible only when that login has access,
+including any required organization SSO authorization.
+
+Use **Repositories** to choose a set across owners, or **Linked to Splash** to
+focus on local projects. Owner, repository scope and selected tab survive a
+restart. The catalog includes repositories outside Splash. Matching GitHub
+remotes link projects automatically; **Link to Splash** connects other folders.
+Select a row to read its description/discussion, open GitHub, or continue a local
+session. **New issue** is also available from the command palette. Closing the
+composer retains the draft for the current app run; submission requires pressing
+**Create issue**.
+
+Activity loads progressively, with up to four requests in flight. The first page
+contains up to 30 items per repository/feed; **Load more**
+continues pagination. Filters and counts describe loaded items, not a complete
+historical total. **Needs me** includes direct review requests, assignments, and
+your PRs with failed checks or requested changes; team review requests are not
+included. Branch dates refer to the last commit. GitHub's event feed has limited
+history and may be delayed. Discussions show the latest 30 comments, with a link
+to older comments and inline PR reviews on GitHub. Refresh is manual; failures
+remain visible with retry controls.
+
+The repository picker supports **Clear all**, search, and **Select matches** /
+**Deselect matches** without losing selections outside the search. **Save view**
+stores the repository scope, owner, linked filter, type, state, inbox filter and
+search fields. Saved views and inbox state are local and scoped to the GitHub login.
+
+**Search GitHub** searches issues and PRs beyond the loaded activity, with author,
+assignee, label and review filters. Text is literal; use the fields for qualifiers.
+Search runs explicitly, two requests at a time, with pause/resume and pagination.
+GitHub caps search at 1,000 matches per group of up to ten repositories/type and indexing can lag;
+narrow your scope if you reach that limit.
+Saved searches restore their fields; press **Search GitHub** to run them. Branches
+and events remain available in **Loaded activity**.
+
+**Unread** tracks updates since you first opened this inbox or last marked an item
+read. Mark individual items read/unread or mark the matching loaded list read.
+Snooze until tomorrow at 9 AM local time or until new activity; a newer update wakes
+either kind of snooze. Use **Snoozed** to review or unsnooze deferred items. These
+controls do not modify GitHub notifications. Refresh to check for new activity.
+
+**Work on this** opens session setup and prepares the item title, description and
+URL in the composer for review before sending. For PRs, choose a fresh worktree
+from the PR head, including fork PRs. This requires a matching local GitHub remote
+and working Git authentication. Splash fetches a unique temporary ref and creates
+its own branch without switching the current checkout. Existing sessions are
+labelled when their branch or saved source URL matches the item.
+
+## GitHub Actions
+
+Open **Actions** in the sidebar, command palette, or GitHub triage header. The
+repository picker, owner filter and **Linked to Splash** scope are shared with
+triage, including clear/search/select-matches controls.
+
+**Runs** combines recent runs across the selected repositories, newest first.
+Status, time range, exact branch and event filters are sent to GitHub; the text
+field filters the loaded results. Counts describe loaded runs. The initial page
+contains 30 runs per repository, with **Load more run history**, pause/resume and
+visible per-repository errors. GitHub limits filtered history to 1,000 results per
+repository. Refresh is manual; refreshing runs also reloads the selected run’s jobs.
+
+**Workflows** lists workflows separately, including disabled ones and workflows
+without recent runs. **View runs** narrows the run list to that workflow. Clear
+**All workflows** to return to the full repository scope.
+
+Select a run to inspect a specific attempt’s jobs, step outcomes, runner, timings,
+and matching Splash sessions. Completed jobs have searchable plain-text log
+previews, capped at 512 KiB; **Full job and logs** opens GitHub for live logs or the
+rest of a long log. Expired logs and missing Actions permissions appear as errors.
+The Actions integration only reads GitHub data; it does not dispatch, rerun or
+cancel workflows.
 
 ## Agents
 
@@ -116,11 +331,12 @@ flowchart LR
 2. **Starting an agent.** Opening a session starts its agent. `acp/transport.rs` runs the launch command in the session folder, in its own process group, with your login shell's `PATH`. Its stdin and stdout carry ACP through the [`agent-client-protocol`](https://crates.io/crates/agent-client-protocol) crate. Splash offers no file-system or terminal capabilities to the agent: the agent edits files itself, and Splash sees the results through git and a file watcher.
 3. **The session actor.** `acp/actor.rs` is one task per running agent. It runs `initialize` and `session/new` (or `session/load`), then handles prompts, cancels, permission answers and option changes. It owns the session's transcript, which `acp/map.rs` builds from each `session/update` notification. Every 33 ms it hands the changes to the hub.
 4. **Keeping the UI in step.** Each change is either a full entry or a text append, with a version number per entry. The UI ignores stale versions and, when an append doesn't follow the last version it has, fetches the whole transcript again from a copy kept in Rust.
-5. **The hub** (`src/hub/`) has four services:
+5. **The hub** wires these services:
    - `sessions.rs`: projects, sessions, worktrees, running actors and the in-memory transcript copies. Finished entries, plus a checkpoint of streaming ones about every 2 s, are queued to a single SQLite writer in `store.rs`.
    - `workspace.rs`: git status and diffs, file reads, the file watcher and terminals, on top of `src/workspace.rs`, `src/terminal.rs` and `src/git_info.rs`.
    - `agents.rs`: finding installed agents and the connection test.
    - `customize.rs`: app settings, and reading each agent's skills, commands and MCP config.
+   - `src/github.rs`: GitHub CLI requests, repository discovery, pagination, project links and issue creation.
 6. **Processes.** `procs.rs` kills every agent and shell process group when the app quits, including on SIGTERM, SIGINT and SIGHUP, but not after a crash or SIGKILL. Quitting mid-turn can lose the last couple of seconds of streamed output.
 
 On the frontend, `app/src/lib` holds the state modules. `live.ts` subscribes them to the event channels at startup; the Log tab subscribes to its own channel while it is open.

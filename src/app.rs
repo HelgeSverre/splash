@@ -9,6 +9,9 @@ use crate::acp::map::TranscriptSnapshot;
 use crate::agents::customize::{CommandFile, Doc, McpList, Skill};
 use crate::agents::detect::AgentStatus;
 use crate::git_info::GitInfo;
+use crate::github::{
+    Github, GithubCatalog, GithubComments, GithubItem, GithubKind, GithubPage, GithubSearch,
+};
 use crate::hub::{
     Agents, Customize, Hub, RpcLine, SessionView, Sessions, TranscriptEvent, Workspace,
     WorkspaceEvent,
@@ -58,6 +61,147 @@ async fn probe_agent(ctx: Ctx, id: String) -> elyra::Result<AgentStatus> {
 #[command]
 async fn set_agent_args(ctx: Ctx, id: String, args: String) -> elyra::Result<AgentStatus> {
     Ok(ctx.get::<Agents>().set_args(&id, &args).await?)
+}
+
+// GitHub credentials stay in the local GitHub CLI.
+#[command]
+async fn github_catalog(ctx: Ctx) -> elyra::Result<GithubCatalog> {
+    Ok(ctx.get::<Github>().catalog().await?)
+}
+
+#[command]
+async fn github_page(
+    ctx: Ctx,
+    repository: String,
+    kind: GithubKind,
+    cursor: Option<String>,
+) -> elyra::Result<GithubPage> {
+    Ok(ctx.get::<Github>().page(&repository, kind, cursor).await?)
+}
+
+#[command]
+async fn github_comments(
+    ctx: Ctx,
+    repository: String,
+    number: u32,
+    kind: GithubKind,
+) -> elyra::Result<GithubComments> {
+    Ok(ctx
+        .get::<Github>()
+        .comments(&repository, number, kind)
+        .await?)
+}
+
+#[command]
+async fn github_create_issue(
+    ctx: Ctx,
+    repository: String,
+    title: String,
+    body: String,
+) -> elyra::Result<GithubItem> {
+    Ok(ctx
+        .get::<Github>()
+        .create_issue(&repository, &title, &body)
+        .await?)
+}
+
+#[command]
+async fn github_link_project(
+    ctx: Ctx,
+    repository: String,
+    project_id: Option<String>,
+) -> elyra::Result<()> {
+    Ok(ctx
+        .get::<Github>()
+        .link(&repository, project_id.as_deref())
+        .await?)
+}
+
+#[command]
+async fn github_search(
+    ctx: Ctx,
+    repositories: Vec<String>,
+    kind: GithubKind,
+    filters: GithubSearch,
+    cursor: Option<String>,
+) -> elyra::Result<GithubPage> {
+    Ok(ctx
+        .get::<Github>()
+        .search(&repositories, kind, filters, cursor)
+        .await?)
+}
+
+#[command]
+async fn github_work_session(
+    ctx: Ctx,
+    project_id: String,
+    agent_id: String,
+    repository: String,
+    number: u32,
+    title: String,
+) -> elyra::Result<SessionView> {
+    let sha = ctx
+        .get::<Github>()
+        .pull_request_revision(&project_id, &repository, number)
+        .await?;
+    Ok(ctx
+        .get::<Sessions>()
+        .create_at(
+            &project_id,
+            &agent_id,
+            Isolation::Worktree,
+            Some(title),
+            Some(sha),
+        )
+        .await?)
+}
+
+#[command]
+async fn github_actions_runs(
+    ctx: Ctx,
+    repository: String,
+    filters: crate::github_actions::ActionsFilters,
+    page: u32,
+) -> elyra::Result<crate::github_actions::ActionsRuns> {
+    Ok(ctx
+        .get::<Github>()
+        .actions_runs(&repository, filters, page)
+        .await?)
+}
+#[command]
+async fn github_actions_workflows(
+    ctx: Ctx,
+    repository: String,
+    page: u32,
+) -> elyra::Result<crate::github_actions::ActionsWorkflows> {
+    Ok(ctx
+        .get::<Github>()
+        .actions_workflows(&repository, page)
+        .await?)
+}
+#[command]
+async fn github_actions_jobs(
+    ctx: Ctx,
+    repository: String,
+    run_id: String,
+    attempt: u32,
+    page: u32,
+) -> elyra::Result<crate::github_actions::ActionsJobs> {
+    Ok(ctx
+        .get::<Github>()
+        .actions_jobs(&repository, &run_id, attempt, page)
+        .await?)
+}
+#[command]
+async fn github_actions_log(
+    ctx: Ctx,
+    repository: String,
+    job_id: String,
+) -> elyra::Result<crate::github_actions::ActionsLog> {
+    Ok(ctx
+        .get::<Github>()
+        .actions_log(&repository, &job_id)
+        .await?)
 }
 
 // ── projects ───────────────────────────────────────────────────────────────
@@ -308,6 +452,7 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
         );
     let hub = Hub::new(data_dir, app.events());
     app.bind_as::<Sessions>(hub.sessions)
+        .bind_as::<Github>(hub.github)
         .bind_as::<Agents>(hub.agents)
         .bind_as::<Workspace>(hub.workspace)
         .bind_as::<Customize>(hub.customize)
@@ -321,6 +466,17 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
         .event::<TermEvent>("term")
         .commands(commands![
             app_info,
+            github_catalog,
+            github_actions_runs,
+            github_actions_workflows,
+            github_actions_jobs,
+            github_actions_log,
+            github_search,
+            github_work_session,
+            github_page,
+            github_comments,
+            github_create_issue,
+            github_link_project,
             list_agents,
             probe_agent,
             set_agent_args,

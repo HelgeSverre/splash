@@ -1,4 +1,8 @@
 <script lang="ts">
+  import ActionsView from "./components/github/ActionsView.svelte";
+  import GithubView from "./components/github/GithubView.svelte";
+  import IssueComposer from "./components/github/IssueComposer.svelte";
+  import { github } from "./lib/github.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import SessionView from "./components/SessionView.svelte";
   import Settings from "./components/settings/Settings.svelte";
@@ -51,7 +55,11 @@
   <main>
     <div class="top">
       <div class="center">
-        {#if app.view.kind === "playground"}
+        {#if app.view.kind === "actions"}
+          <ActionsView />
+        {:else if app.view.kind === "github"}
+          <GithubView />
+        {:else if app.view.kind === "playground"}
           {#await loadPlayground() then m}<m.default />{/await}
         {:else if app.view.kind === "session" && session}
           {#key session.id}
@@ -71,6 +79,8 @@
     {/if}
   </main>
 </div>
+
+{#if github.issueOpen}<IssueComposer />{/if}
 
 {#if app.newSession}
   <NewSession />

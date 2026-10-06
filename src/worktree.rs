@@ -31,6 +31,16 @@ pub struct Created {
 pub fn create(repo: &Path, dest: &Path, branch: &str) -> Result<Created> {
     let base_sha =
         head_sha(repo).ok_or_else(|| Error::Git("the repository has no commits yet".into()))?;
+    create_from(repo, dest, branch, &base_sha)
+}
+
+pub fn create_from(repo: &Path, dest: &Path, branch: &str, revision: &str) -> Result<Created> {
+    let base_sha = git(
+        repo,
+        &["rev-parse", "--verify", &format!("{revision}^{{commit}}")],
+    )?
+    .trim()
+    .to_owned();
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -114,6 +124,31 @@ mod tests {
         // The same branch name again gets a suffix.
         let second = create(&repo, &root.join("wt2"), "splash/demo").unwrap();
         assert_eq!(second.branch, "splash/demo-2");
+
+        // A fetched PR revision can differ from the user's current HEAD.
+        std::fs::write(repo.join("a.txt"), "newer checkout").unwrap();
+        git(&repo, &["add", "."]).unwrap();
+        git(
+            &repo,
+            &[
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "-qm",
+                "newer",
+            ],
+        )
+        .unwrap();
+        let checkout_head = head_sha(&repo).unwrap();
+        std::fs::write(repo.join("untracked.txt"), "keep me").unwrap();
+        let pr = create_from(&repo, &root.join("pr"), "splash/pr", &first.base_sha).unwrap();
+        assert_eq!(head_sha(&pr.path).as_deref(), Some(first.base_sha.as_str()));
+        assert_eq!(head_sha(&repo).as_deref(), Some(checkout_head.as_str()));
+        assert_eq!(std::fs::read_to_string(pr.path.join("a.txt")).unwrap(), "a");
+        assert!(repo.join("untracked.txt").exists());
+        assert!(create_from(&repo, &root.join("bad"), "splash/bad", "missing-ref").is_err());
 
         std::fs::write(first.path.join("b.txt"), "b").unwrap();
         assert!(is_dirty(&first.path));

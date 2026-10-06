@@ -227,6 +227,18 @@ impl Sessions {
         isolation: Isolation,
         title: Option<String>,
     ) -> Result<SessionView> {
+        self.create_at(project_id, agent_id, isolation, title, None)
+            .await
+    }
+
+    pub async fn create_at(
+        self: &Arc<Self>,
+        project_id: &str,
+        agent_id: &str,
+        isolation: Isolation,
+        title: Option<String>,
+        revision: Option<String>,
+    ) -> Result<SessionView> {
         let store = self.store().await?;
         let project = store.project(project_id).await?;
         self.core.agent(agent_id)?;
@@ -259,7 +271,11 @@ impl Sessions {
                     .join("worktrees")
                     .join(worktree::slug(&project.name, 40))
                     .join(&id);
-                let created = blocking(move || worktree::create(&repo, &dest, &branch)).await??;
+                let created = blocking(move || match revision {
+                    Some(sha) => worktree::create_from(&repo, &dest, &branch, &sha),
+                    None => worktree::create(&repo, &dest, &branch),
+                })
+                .await??;
                 (
                     created.path.to_string_lossy().into_owned(),
                     Some(created.branch),

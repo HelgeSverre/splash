@@ -11,6 +11,8 @@ authors = ["Helge Sverre"]
 repository = "https://github.com/HelgeSverre/splash"
 homepage = "https://github.com/HelgeSverre/splash"
 readme = "README.md"
+# Documentation images are tracked in Git, but never shipped in the crate.
+exclude = ["/screenshots/**"]
 keywords = ["acp", "coding-agents", "desktop", "macos"]
 categories = ["development-tools", "gui"]
 default-run = "splash"

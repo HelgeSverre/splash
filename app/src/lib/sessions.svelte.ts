@@ -1,9 +1,9 @@
 // Projects, sessions and agents: the app's data, fed by commands and the
 // session, agents and project channels (lib/live), and which view shows.
 import { dialog, notify } from "@elyra/runtime";
-import { api, type AgentStatus, type Isolation, type Project, type SessionView, type Status } from "../bindings";
+import { api, type GithubItem, type AgentStatus, type Isolation, type Project, type SessionView, type Status } from "../bindings";
 import type { View } from "./route.svelte";
-import { prefs } from "./prefs.svelte";
+import { prefs, setPref } from "./prefs.svelte";
 import { showError } from "./system";
 import { dropTranscript, newTranscript, openTranscript } from "./transcripts.svelte";
 import { dropTabs, ensureTabs } from "./tabs.svelte";
@@ -17,7 +17,7 @@ export const app = $state({
   view: { kind: "welcome" } as View,
   unread: {} as Record<string, boolean>,
   collapsed: {} as Record<string, boolean>,
-  newSession: null as null | { projectId?: string },
+  newSession: null as null | { projectId?: string; githubItem?: GithubItem },
   /** The open Settings page, or null when Settings is closed. */
   settings: null as null | string,
 });
@@ -113,8 +113,15 @@ export async function removeProject(id: string) {
   if (app.view.kind === "session" && !app.sessions.some((s) => s.id === currentId())) app.view = { kind: "welcome" };
 }
 
-export async function createSession(projectId: string, agentId: string, isolation: Isolation, title: string | null) {
-  const s = await api.create_session(projectId, agentId, isolation, title);
+export async function createSession(projectId: string, agentId: string, isolation: Isolation, title: string | null, context?: GithubItem, prHead = false) {
+  const s = context && prHead && context.number
+    ? await api.github_work_session(projectId, agentId, context.repository, context.number, title ?? context.title)
+    : await api.create_session(projectId, agentId, isolation, title);
+  if (context) {
+    const prompt = `Work on ${context.repository}${context.number ? ` #${context.number}` : ""}: ${context.title}\n${context.url}\n\n${context.body}`;
+    drafts[s.id] = prompt;
+    await setPref(`session.github.${s.id}`, context.url);
+  }
   if (!app.sessions.some((x) => x.id === s.id)) app.sessions.unshift(s);
   newTranscript(s.id);
   ensureTabs(s.id);

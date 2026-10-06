@@ -63,6 +63,7 @@ impl Core {
 
 /// Every service, wired together; `app.rs` binds each one.
 pub struct Hub {
+    pub github: Arc<crate::github::Github>,
     pub core: Arc<Core>,
     pub sessions: Arc<Sessions>,
     pub agents: Arc<Agents>,
@@ -92,6 +93,7 @@ impl Hub {
             }
         });
         Self {
+            github: Arc::new(crate::github::Github::new(core.clone())),
             agents: Arc::new(Agents::new(core.clone())),
             customize: Arc::new(Customize::new(core.clone())),
             core,

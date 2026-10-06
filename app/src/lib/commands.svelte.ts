@@ -10,7 +10,8 @@ import { app, currentId, currentSession, isBusy, openSession, orderedSessions, p
 import { closeTab, sessionTabs } from "./tabs.svelte";
 import { toggleBottom, toggleLeft, toggleRight } from "./layout.svelte";
 import { openSettings } from "./customize.svelte";
-import { openPlayground } from "./route.svelte";
+import { openPlayground, openGithub, openActions } from "./route.svelte";
+import { newIssue, loadCatalog } from "./github.svelte";
 import { showError } from "./system";
 
 function cycleSession(step: number) {
@@ -68,6 +69,9 @@ export function installCommands() {
       fromAction("view.terminal", "terminal", () => currentSession() && toggleBottom()),
       fromAction("view.right", "panel", () => currentSession() && toggleRight()),
       fromAction("view.left", "sidebar", toggleLeft),
+      { id: "actions", title: "GitHub Actions", subtitle: "Workflow runs, jobs and logs across repositories", action: openActions },
+      { id: "github", title: "GitHub", subtitle: "Repositories, issues, pull requests and activity", action: openGithub },
+      { id: "github-issue", title: "New GitHub issue", action: () => { openGithub(); void loadCatalog().then(() => newIssue()); } },
       { id: "playground", title: "Design system playground", subtitle: "Debug", action: openPlayground },
       ...app.sessions
         .filter((s) => !s.archived)

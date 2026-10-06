@@ -1,5 +1,6 @@
 <script lang="ts">
   import { contextMenu, confirm } from "@elyra/runtime";
+  import { openGithub, openActions } from "../lib/route.svelte";
   import AgentIcon from "./AgentIcon.svelte";
   import SplashMark from "./SplashMark.svelte";
   import Icon from "./Icon.svelte";
@@ -89,6 +90,10 @@
     <IconButton title={withKey("Settings", "app.settings")} label="Settings" icon="gear" onclick={() => openSettings()} />
   </div>
 
+  <div class="global-nav"><NavItem label="GitHub" active={app.view.kind === "github"} onclick={openGithub}>
+    {#snippet lead()}<Icon name="github" size={14} />{/snippet}
+  </NavItem><NavItem label="Actions" active={app.view.kind === "actions"} onclick={openActions}>{#snippet lead()}<Icon name="activity" size={14}/>{/snippet}</NavItem></div>
+
   <div class="section t-section">
     <span>Projects</span>
     <IconButton title="Add a project folder" size="sm" icon="plus" onclick={addFolder} />
@@ -169,6 +174,7 @@
     display: flex; align-items: center; gap: 8px;
     height: var(--h-header); padding: 0 8px 0 14px; flex: none; font: var(--fw-semibold) var(--fs-md) var(--font-mono); letter-spacing: var(--tracking-brand);
   }
+  .global-nav { padding: 4px 6px 8px; }
   .section {
     display: flex; align-items: center; justify-content: space-between;
     padding: 6px 10px 0 14px;

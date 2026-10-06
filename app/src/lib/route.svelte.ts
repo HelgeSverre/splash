@@ -1,8 +1,15 @@
-// Which screen shows: the welcome page, a session, or the hidden
-// design-system playground (#/playground, the one view with a URL).
+// Screens with stable URLs: GitHub and the design-system playground.
+// Session navigation stays in memory.
 import { app } from "./sessions.svelte";
 
-export type View = { kind: "welcome" } | { kind: "session"; id: string } | { kind: "playground" };
+export type View = { kind: "welcome" } | { kind: "session"; id: string } | { kind: "playground" } | { kind: "github" } | { kind: "actions" };
+
+export function openActions() { app.view = { kind: "actions" }; setHash("#/actions"); }
+
+export function openGithub() {
+  app.view = { kind: "github" };
+  setHash("#/github");
+}
 
 const PLAYGROUND_HASH = "#/playground";
 
@@ -22,14 +29,18 @@ export function closePlayground() {
   if (location.hash === PLAYGROUND_HASH) setHash("");
 }
 
-/** Leaving the playground another way (a session) drops the hash with it. */
+/** Leaving a named view through another navigation action drops its hash. */
 export function syncPlaygroundHash() {
+  if (app.view.kind !== "actions" && location.hash === "#/actions") setHash("");
+  if (app.view.kind !== "github" && location.hash === "#/github") setHash("");
   if (app.view.kind !== "playground" && location.hash === PLAYGROUND_HASH) setHash("");
 }
 
 function routeFromHash() {
-  if (location.hash === PLAYGROUND_HASH) app.view = { kind: "playground" };
-  else if (app.view.kind === "playground") app.view = { kind: "welcome" };
+  if (location.hash === "#/actions") app.view = { kind: "actions" };
+  else if (location.hash === "#/github") app.view = { kind: "github" };
+  else if (location.hash === PLAYGROUND_HASH) app.view = { kind: "playground" };
+  else if (app.view.kind === "playground" || app.view.kind === "github" || app.view.kind === "actions") app.view = { kind: "welcome" };
 }
 
 let installed = false;

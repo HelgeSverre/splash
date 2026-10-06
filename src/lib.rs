@@ -7,6 +7,8 @@ pub mod app;
 pub mod error;
 pub mod git;
 pub mod git_info;
+pub mod github;
+pub mod github_actions;
 pub mod hub;
 pub mod json;
 pub mod procs;

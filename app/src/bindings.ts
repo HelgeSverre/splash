@@ -6,6 +6,85 @@ import { invoke, channel as rawChannel } from "@elyra/runtime";
 /** Any JSON value — `serde_json::Value` on the Rust side. */
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
+export type ActionsFilters = {
+	status: string,
+	branch: string,
+	event: string,
+	created: string,
+	workflow_id: string | null,
+};
+
+export type ActionsJob = {
+	id: string,
+	name: string,
+	status: string,
+	conclusion: string | null,
+	started_at: string | null,
+	completed_at: string | null,
+	runner: string,
+	url: string,
+	steps: ActionsStep[],
+};
+
+export type ActionsJobs = {
+	jobs: ActionsJob[],
+	next_page: number | null,
+};
+
+export type ActionsLog = {
+	text: string,
+	truncated: boolean,
+};
+
+export type ActionsRun = {
+	id: string,
+	repository: string,
+	workflow_id: string,
+	workflow: string,
+	title: string,
+	number: number,
+	attempt: number,
+	status: string,
+	conclusion: string | null,
+	branch: string,
+	sha: string,
+	event: string,
+	actor: string,
+	created_at: string,
+	updated_at: string,
+	started_at: string | null,
+	url: string,
+};
+
+export type ActionsRuns = {
+	runs: ActionsRun[],
+	next_page: number | null,
+	total: number,
+};
+
+export type ActionsStep = {
+	number: number,
+	name: string,
+	status: string,
+	conclusion: string | null,
+	started_at: string | null,
+	completed_at: string | null,
+};
+
+export type ActionsWorkflow = {
+	id: string,
+	repository: string,
+	name: string,
+	path: string,
+	state: string,
+	url: string,
+};
+
+export type ActionsWorkflows = {
+	workflows: ActionsWorkflow[],
+	next_page: number | null,
+};
+
 export type AgentProbe = {
 	ok: boolean,
 	error: string | null,
@@ -155,6 +234,68 @@ export type GitInfo = {
 	/**  The branch on the web, when there is a web URL. */
 	branch_url: string | null,
 	pr: PullRequest | null,
+};
+
+export type GithubCatalog = {
+	login: string,
+	repositories: GithubRepository[],
+};
+
+export type GithubComment = {
+	author: string,
+	body: string,
+	url: string,
+	created_at: string,
+};
+
+export type GithubComments = {
+	comments: GithubComment[],
+	has_more: boolean,
+};
+
+export type GithubItem = {
+	id: string,
+	repository: string,
+	kind: GithubKind,
+	number: number | null,
+	title: string,
+	body: string,
+	url: string,
+	state: string,
+	updated_at: string,
+	author: string,
+	assignees: string[],
+	reviewers: string[],
+	labels: string[],
+	branch: string | null,
+	checks: string | null,
+	review_decision: string | null,
+};
+
+export type GithubKind = "issue" | "pull_request" | "branch" | "activity";
+
+export type GithubPage = {
+	items: GithubItem[],
+	next_cursor: string | null,
+};
+
+export type GithubRepository = {
+	full_name: string,
+	owner: string,
+	private: boolean,
+	archived: boolean,
+	has_issues: boolean,
+	updated_at: string,
+	project_ids: string[],
+};
+
+export type GithubSearch = {
+	text: string,
+	author: string,
+	assignee: string,
+	label: string,
+	review: string,
+	state: string,
 };
 
 export type Isolation = "in_place" | "worktree";
@@ -366,6 +507,39 @@ export const api = {
   },
   get_settings(): Promise<{ [key in string]: string }> {
     return invoke("get_settings");
+  },
+  github_actions_jobs(repository: string, run_id: string, attempt: number, page: number): Promise<ActionsJobs> {
+    return invoke("github_actions_jobs", repository, run_id, attempt, page);
+  },
+  github_actions_log(repository: string, job_id: string): Promise<ActionsLog> {
+    return invoke("github_actions_log", repository, job_id);
+  },
+  github_actions_runs(repository: string, filters: ActionsFilters, page: number): Promise<ActionsRuns> {
+    return invoke("github_actions_runs", repository, filters, page);
+  },
+  github_actions_workflows(repository: string, page: number): Promise<ActionsWorkflows> {
+    return invoke("github_actions_workflows", repository, page);
+  },
+  github_catalog(): Promise<GithubCatalog> {
+    return invoke("github_catalog");
+  },
+  github_comments(repository: string, number: number, kind: GithubKind): Promise<GithubComments> {
+    return invoke("github_comments", repository, number, kind);
+  },
+  github_create_issue(repository: string, title: string, body: string): Promise<GithubItem> {
+    return invoke("github_create_issue", repository, title, body);
+  },
+  github_link_project(repository: string, project_id: string | null): Promise<null> {
+    return invoke("github_link_project", repository, project_id);
+  },
+  github_page(repository: string, kind: GithubKind, cursor: string | null): Promise<GithubPage> {
+    return invoke("github_page", repository, kind, cursor);
+  },
+  github_search(repositories: string[], kind: GithubKind, filters: GithubSearch, cursor: string | null): Promise<GithubPage> {
+    return invoke("github_search", repositories, kind, filters, cursor);
+  },
+  github_work_session(project_id: string, agent_id: string, repository: string, number: number, title: string): Promise<SessionView> {
+    return invoke("github_work_session", project_id, agent_id, repository, number, title);
   },
   list_agents(refresh: boolean): Promise<AgentStatus[]> {
     return invoke("list_agents", refresh);

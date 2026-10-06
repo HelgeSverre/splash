@@ -15,7 +15,9 @@
   import type { AgentStatus, Isolation } from "../bindings";
 
 
-  let projectId = $state(app.newSession?.projectId ?? app.projects[0]?.id ?? "");
+  const context = app.newSession?.githubItem;
+  let prHead = $state(context?.kind === "pull_request");
+  let projectId = $state(app.newSession?.projectId ?? (context ? "" : app.projects[0]?.id ?? ""));
   let agentId = $state(prefs.default_agent ?? "claude");
   let isolation: Isolation = $state((prefs.default_isolation ?? "worktree") as Isolation);
   let busy = $state(false);
@@ -30,7 +32,7 @@
     const r = agentReadiness(a);
     return r.tone === "err" || r.tone === "warn" ? r : { tone: "ok" as const, label: a.version ? `v${a.version}` : "ready" };
   }
-  const close = () => (app.newSession = null);
+  const close = () => { if (!busy) app.newSession = null; };
   const agentOff = (a: AgentStatus) => readiness(a).tone === "err";
   const canStart = $derived(!!projectId && !!agent && !agentOff(agent) && !busy);
 
@@ -51,7 +53,7 @@
     if (!canStart) return;
     busy = true;
     try {
-      await createSession(projectId, agentId, effectiveIsolation, null);
+      await createSession(projectId, agentId, prHead ? "worktree" : effectiveIsolation, context?.title ?? null, context, prHead);
       app.newSession = null;
     } catch (e) {
       showError(e);
@@ -85,6 +87,7 @@
 <Modal label="New session" width="620px" top onclose={close}>
   <ModalHeader title="New session" onclose={close} />
   <div class="dialog" bind:this={dialogEl}>
+    {#if context}<p class="desc">{context.repository} #{context.number}: {context.title}</p><p class="desc">The description and GitHub link will be ready in the composer for you to review and send.</p>{/if}
     <div class="label t-group first" id="ns-project">Project</div>
     <ChoiceGroup items={app.projects} value={projectId} key={(p) => p.id} title={(p) => p.path} labelledby="ns-project"
       variant="stack" onchange={(p) => (projectId = p.id)}>
@@ -105,12 +108,15 @@
       {#snippet empty()}<EmptyState inline loading title="Detecting agents…" />{/snippet}
     </ChoiceGroup>
 
+    {#if context?.kind === "pull_request"}<label class="desc"><input type="checkbox" bind:checked={prHead} disabled={busy} /> Start a new worktree from PR #{context.number} ({context.branch})</label>{/if}
+    {#if !prHead}
     <div class="label t-group" id="ns-where">Where it works</div>
     <ChoiceGroup items={isolations} value={effectiveIsolation} key={(x) => x.id} disabled={(x) => x.id === "worktree" && !canWorktree}
       labelledby="ns-where" layout="grid" variant="stack" onchange={(x) => (isolation = x.id)}>
       {#snippet item(x)}<span class="name">{x.title}</span><span class="desc">{isolationDesc(x.id)}</span>{/snippet}
     </ChoiceGroup>
 
+    {/if}
     <div class="actions">
       <span class="hint">{agent?.transport === "adapter" ? "First start may download the ACP adapter via npx." : ""}</span>
       <button class="btn ghost" onclick={close}>Cancel</button>
