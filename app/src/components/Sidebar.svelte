@@ -1,6 +1,6 @@
 <script lang="ts">
   import { contextMenu, confirm } from "@elyra/runtime";
-  import { openGithub, openActions } from "../lib/route.svelte";
+  import { openGithub, openActions, openLibrary, openAttention } from "../lib/route.svelte";
   import AgentIcon from "./AgentIcon.svelte";
   import SplashMark from "./SplashMark.svelte";
   import Icon from "./Icon.svelte";
@@ -90,7 +90,8 @@
     <IconButton title={withKey("Settings", "app.settings")} label="Settings" icon="gear" onclick={() => openSettings()} />
   </div>
 
-  <div class="global-nav"><NavItem label="GitHub" active={app.view.kind === "github"} onclick={openGithub}>
+  <div class="global-nav"><NavItem label="Sessions" active={app.view.kind === "library"} onclick={openLibrary}>{#snippet lead()}<Icon name="search" size={14} />{/snippet}</NavItem>
+    <NavItem label="Needs attention" active={app.view.kind === "attention"} onclick={openAttention}>{#snippet lead()}<Icon name="alert" size={14} />{/snippet}{#snippet trail()}<span class="t-count">{app.sessions.filter((s) => !s.archived && s.attention).length || ""}</span>{/snippet}</NavItem><NavItem label="GitHub" active={app.view.kind === "github"} onclick={openGithub}>
     {#snippet lead()}<Icon name="github" size={14} />{/snippet}
   </NavItem><NavItem label="Actions" active={app.view.kind === "actions"} onclick={openActions}>{#snippet lead()}<Icon name="activity" size={14}/>{/snippet}</NavItem></div>
 

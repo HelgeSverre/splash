@@ -327,3 +327,30 @@ fn pool_usage_meta_becomes_labelled_extras() {
     assert!(labels.contains(&"Input tokens"), "{labels:?}");
     assert!(labels.contains(&"Cached read tokens"), "{labels:?}");
 }
+
+#[test]
+fn replay_preserves_user_chunks_turn_boundaries_and_message_ids() {
+    use splash::acp::map::Replay;
+    let mut replay = Replay::default();
+    for update in [
+        serde_json::json!({"sessionUpdate":"user_message_chunk","messageId":"u1","content":{"type":"text","text":"First "}}),
+        serde_json::json!({"sessionUpdate":"user_message_chunk","messageId":"u1","content":{"type":"text","text":"question"}}),
+        serde_json::json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"Thinking"}}),
+        serde_json::json!({"sessionUpdate":"agent_message_chunk","messageId":"a1","content":{"type":"text","text":"One"}}),
+        serde_json::json!({"sessionUpdate":"agent_message_chunk","messageId":"a2","content":{"type":"text","text":"Two"}}),
+        serde_json::json!({"sessionUpdate":"user_message_chunk","messageId":"u2","content":{"type":"text","text":"Next question"}}),
+        serde_json::json!({"sessionUpdate":"tool_call","toolCallId":"t1","title":"Read a file","status":"completed"}),
+        serde_json::json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Answer"}}),
+    ] {
+        replay.apply(&update);
+    }
+    let entries = replay.finish();
+    assert_eq!(entries.len(), 7);
+    assert!(matches!(&entries[0], Entry::User { text } if text == "First question"));
+    assert!(matches!(&entries[1], Entry::Thought { text, streaming: false } if text == "Thinking"));
+    assert!(matches!(&entries[2], Entry::Agent { text, streaming: false } if text == "One"));
+    assert!(matches!(&entries[3], Entry::Agent { text, streaming: false } if text == "Two"));
+    assert!(matches!(&entries[4], Entry::User { text } if text == "Next question"));
+    assert!(matches!(&entries[5], Entry::Tool { id, .. } if id == "t1"));
+    assert!(matches!(&entries[6], Entry::Agent { text, streaming: false } if text == "Answer"));
+}

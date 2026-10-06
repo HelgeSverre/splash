@@ -51,6 +51,13 @@ async fn main() {
     };
     let init = result_of("initialize");
     let new_session = result_of("session/new");
+    let listed = result_of("session/list");
+    let replay: Vec<Value> = rows
+        .iter()
+        .filter(|r| r["dir"] == "in" && r["line"]["method"] == "session/update")
+        .map(|r| r["line"].clone())
+        .collect();
+    let has_load = rows.iter().any(|r| r["line"]["method"] == "session/load");
     let recorded_sid = new_session["sessionId"].clone();
     let turns = extract_turns(&rows);
     let mut turns = turns.into_iter();
@@ -76,7 +83,32 @@ async fn main() {
         match method {
             "initialize" => send(json!({"jsonrpc": "2.0", "id": id, "result": init})),
             "session/new" => send(json!({"jsonrpc": "2.0", "id": id, "result": new_session})),
+            "session/list" => {
+                let result = if msg["params"]["cursor"] == "page-2" {
+                    json!({"sessions":[]})
+                } else {
+                    listed.clone()
+                };
+                send(json!({"jsonrpc":"2.0", "id":id, "result":result}));
+            }
+            "session/resume" if msg["params"]["sessionId"] == "missing-session" => send(
+                json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32602,"message":"Session not found"}}),
+            ),
+            "session/resume" => send(json!({"jsonrpc":"2.0", "id":id, "result":{}})),
             "session/load" => {
+                if msg["params"]["sessionId"] == "missing-session" {
+                    send(
+                        json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32602,"message":"Session not found"}}),
+                    );
+                    continue;
+                }
+                if has_load {
+                    for notification in &replay {
+                        let mut notification = notification.clone();
+                        notification["params"]["sessionId"] = msg["params"]["sessionId"].clone();
+                        send(notification);
+                    }
+                }
                 let mut r = new_session.clone();
                 r.as_object_mut().map(|o| o.remove("sessionId"));
                 send(json!({"jsonrpc": "2.0", "id": id, "result": r}));

@@ -5,7 +5,7 @@
   import { home } from "../lib/paths";
   import SplashMark from "./SplashMark.svelte";
   import EmptyState from "./ui/EmptyState.svelte";
-  import { agentById } from "../lib/sessions.svelte";
+  import { agentById, app } from "../lib/sessions.svelte";
   import { pendingPermission } from "../lib/transcripts.svelte";
 
   let { session, entries, loading }: { session: SessionView; entries: Entry[]; loading: boolean } = $props();
@@ -25,15 +25,24 @@
     void entries.length;
     void (last && "text" in last ? last.text.length : 0);
     void (last && last.kind === "tool" ? last.status : "");
-    if (!pinned) return;
+    if (!pinned || app.focusEntry !== null) return;
     tick().then(() => scroller && (scroller.scrollTop = scroller.scrollHeight));
   });
 
   // Jump to the bottom when switching sessions.
   $effect(() => {
     void session.id;
-    pinned = true;
+    pinned = app.focusEntry === null;
+    if (!pinned) return;
     tick().then(() => scroller && (scroller.scrollTop = scroller.scrollHeight));
+  });
+
+  $effect(() => {
+    const index = app.focusEntry;
+    if (index !== null && !loading && entries[index]) {
+      pinned = false;
+      tick().then(() => document.getElementById(`entry-${session.id}-${index}`)?.scrollIntoView({ block: "center" }));
+    }
   });
 
   const agentName = $derived(agentById(session.agent_id)?.name ?? session.agent_id);
@@ -62,7 +71,7 @@
     {/if}
 
     {#each entries as e, i (i)}
-      <EntryView entry={e} {session} />
+      <div id={`entry-${session.id}-${i}`} class:matched={app.focusEntry === i}><EntryView entry={e} {session} /></div>
     {/each}
 
     {#if quiet}
@@ -90,6 +99,7 @@
   .scroller:focus-visible { outline-offset: -1px; }
   .scroller :global(:focus-visible) { background-image: linear-gradient(var(--focus-soft-bg), var(--focus-soft-bg)); }
   .scroller { position: relative; height: 100%; overflow-y: auto; overflow-x: hidden; }
+  .matched { background: var(--accent-soft); border-radius: var(--radius); }
   .column { max-width: 860px; margin: 0 auto; padding: 24px 28px 32px; }
   /* Centred on the whole scroller, not the padded column. */
   .empty { position: absolute; inset: 0; display: flex; pointer-events: none; }

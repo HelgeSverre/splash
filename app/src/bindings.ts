@@ -92,6 +92,8 @@ export type AgentProbe = {
 	agent_version: string | null,
 	protocol_version: number | null,
 	load_session: boolean,
+	list_sessions?: boolean,
+	resume_session?: boolean,
 	image: boolean,
 	audio: boolean,
 	embedded_context: boolean,
@@ -128,6 +130,14 @@ export type AppInfo = {
 	repository: string,
 	license: string,
 };
+
+export type Attention = {
+	kind: AttentionKind,
+	detail: string,
+	at: number,
+};
+
+export type AttentionKind = "permission" | "failed" | "review";
 
 export type Auth = "ok" | "logged_out" | "unknown";
 
@@ -196,6 +206,13 @@ resolution: string | null } | { kind: "divider"; text: string } | { kind: "error
 { kind: "notice"; text: string } | 
 /**  A `session/update` we don't understand, kept verbatim. */
 { kind: "unknown"; json: string } | { kind: "turn_end"; stop_reason: string; duration_ms: number };
+
+export type ExternalSession = {
+	session_id: string,
+	cwd: string,
+	title: string | null,
+	updated_at: string | null,
+};
 
 export type FileChange = {
 	/**  Relative to the session folder. */
@@ -298,6 +315,18 @@ export type GithubSearch = {
 	state: string,
 };
 
+export type HistoryCapabilities = {
+	list: boolean,
+	load: boolean,
+	resume: boolean,
+};
+
+export type HistoryPage = {
+	capabilities: HistoryCapabilities,
+	sessions: ExternalSession[],
+	next_cursor: string | null,
+};
+
 export type Isolation = "in_place" | "worktree";
 
 export type Location = {
@@ -369,6 +398,12 @@ export type RpcLine = {
 	line: string,
 };
 
+export type SessionMatch = {
+	session_id: string,
+	entry_index: number,
+	excerpt: string,
+};
+
 /**  Everything about a live session that isn't transcript. */
 export type SessionMeta = {
 	/**  Config options, falling back to legacy `modes` as a synthetic "mode" option. */
@@ -378,6 +413,15 @@ export type SessionMeta = {
 	commands: SlashCommand[],
 	usage: Usage | null,
 	title: string | null,
+};
+
+export type SessionPreview = {
+	token: string,
+	agent_id: string,
+	session_id: string,
+	cwd: string,
+	title: string,
+	entries: Entry[],
 };
 
 export type SessionRecord = {
@@ -395,6 +439,11 @@ export type SessionRecord = {
 	updated_at: number,
 	/**  The last usage the agent reported (context, cost), kept across restarts. */
 	usage: Usage | null,
+	/**  External conversations never own their directory or provider history. */
+	external?: boolean,
+	/**  The launch profile used when importing (None follows current settings). */
+	launch_args?: string | null,
+	attention?: Attention | null,
 };
 
 /**  A session as the UI sees it: the stored record plus live state. */
@@ -484,6 +533,9 @@ export type WorkspaceEvent = {
 };
 
 export const api = {
+  acknowledge_session(id: string): Promise<null> {
+    return invoke("acknowledge_session", id);
+  },
   add_project(path: string): Promise<Project> {
     return invoke("add_project", path);
   },
@@ -501,6 +553,9 @@ export const api = {
   },
   delete_session(id: string, force: boolean): Promise<null> {
     return invoke("delete_session", id, force);
+  },
+  discover_sessions(agent_id: string, cwd: string, cursor: string | null): Promise<HistoryPage> {
+    return invoke("discover_sessions", agent_id, cwd, cursor);
   },
   file_diff(id: string, path: string): Promise<FileDiff> {
     return invoke("file_diff", id, path);
@@ -541,6 +596,9 @@ export const api = {
   github_work_session(project_id: string, agent_id: string, repository: string, number: number, title: string): Promise<SessionView> {
     return invoke("github_work_session", project_id, agent_id, repository, number, title);
   },
+  import_session(token: string): Promise<SessionView> {
+    return invoke("import_session", token);
+  },
   list_agents(refresh: boolean): Promise<AgentStatus[]> {
     return invoke("list_agents", refresh);
   },
@@ -565,6 +623,9 @@ export const api = {
   open_session(id: string): Promise<TranscriptSnapshot> {
     return invoke("open_session", id);
   },
+  preview_session(agent_id: string, cwd: string, session_id: string): Promise<SessionPreview> {
+    return invoke("preview_session", agent_id, cwd, session_id);
+  },
   probe_agent(id: string): Promise<AgentStatus> {
     return invoke("probe_agent", id);
   },
@@ -583,8 +644,14 @@ export const api = {
   resolve_permission(id: string, request_id: string, option_id: string | null): Promise<null> {
     return invoke("resolve_permission", id, request_id, option_id);
   },
+  restart_session(id: string): Promise<null> {
+    return invoke("restart_session", id);
+  },
   rpc_log(id: string): Promise<RpcLine[]> {
     return invoke("rpc_log", id);
+  },
+  search_sessions(query: string): Promise<SessionMatch[]> {
+    return invoke("search_sessions", query);
   },
   send_prompt(id: string, text: string): Promise<null> {
     return invoke("send_prompt", id, text);

@@ -11,7 +11,7 @@ const saved = (() => {
   }
 })();
 
-export type SideTab = "changes" | "files" | "details";
+export type SideTab = "changes" | "files" | "details" | "review";
 
 export const layout = $state({
   left: saved.left ?? 260,

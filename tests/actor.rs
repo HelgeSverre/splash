@@ -21,6 +21,7 @@ struct Recorder {
     persisted: Mutex<Vec<(usize, Entry)>>,
     agent_session: Mutex<Option<String>>,
     rpc_lines: Mutex<usize>,
+    methods: Mutex<Vec<String>>,
 }
 
 impl Sink for Recorder {
@@ -42,8 +43,16 @@ impl Sink for Recorder {
     fn agent_session(&self, _key: &str, id: &str) {
         *self.agent_session.lock() = Some(id.to_string());
     }
-    fn rpc(&self, _key: &str, _dir: Dir, _line: &str) {
+    fn rpc(&self, _key: &str, dir: Dir, line: &str) {
         *self.rpc_lines.lock() += 1;
+        if dir == Dir::Out {
+            if let Some(method) = serde_json::from_str::<serde_json::Value>(line)
+                .ok()
+                .and_then(|v| v["method"].as_str().map(String::from))
+            {
+                self.methods.lock().push(method);
+            }
+        }
     }
     fn workspace_dirty(&self, _key: &str) {}
 }
@@ -329,4 +338,70 @@ async fn a_missing_program_reports_an_error() {
         .entries()
         .iter()
         .any(|e| matches!(e, Entry::Error { text } if text.contains("not found"))));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn failed_resume_does_not_create_a_replacement_session_or_send_queued_prompt() {
+    for fixture in ["history/read", "codex/read"] {
+        let (tx, rec) = start(
+            fixture,
+            vec![Entry::User {
+                text: "original".into(),
+            }],
+            Some("missing-session"),
+        );
+        let _ = tx.send(SessionCmd::Prompt("never send this".into()));
+        wait_for(&rec, "failed resume", |r| {
+            r.last_status() == Some(Status::Error)
+        })
+        .await;
+        assert!(
+            rec.agent_session.lock().is_none(),
+            "must not replace original provider ID"
+        );
+        assert!(!rec
+            .entries()
+            .iter()
+            .any(|e| matches!(e, Entry::User { text } if text == "never send this")));
+        assert!(!rec
+            .methods
+            .lock()
+            .iter()
+            .any(|m| m == "session/new" || m == "session/prompt"));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cached_history_uses_resume_when_advertised() {
+    let (tx, rec) = start(
+        "codex/read",
+        vec![Entry::User {
+            text: "earlier".into(),
+        }],
+        Some("native-session"),
+    );
+    wait_for(&rec, "resumed", |r| r.last_status() == Some(Status::Idle)).await;
+    assert_eq!(rec.agent_session.lock().as_deref(), Some("native-session"));
+    let methods = rec.methods.lock();
+    assert!(methods.iter().any(|m| m == "session/resume"));
+    assert!(!methods
+        .iter()
+        .any(|m| m == "session/new" || m == "session/load" || m == "session/prompt"));
+    tx.send(SessionCmd::Shutdown).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn unsupported_resume_keeps_history_and_reports_error() {
+    let (_tx, rec) = start(
+        "glue/read",
+        vec![Entry::User {
+            text: "original".into(),
+        }],
+        Some("native"),
+    );
+    wait_for(&rec, "unsupported resume", |r| {
+        r.last_status() == Some(Status::Error)
+    })
+    .await;
+    assert!(rec.agent_session.lock().is_none());
 }

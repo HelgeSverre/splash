@@ -1,5 +1,6 @@
 <script lang="ts">
   // The side panel: the session's changes, its files, and its details.
+  import ReviewPanel from "./ReviewPanel.svelte";
   import ChangesList from "./ChangesList.svelte";
   import FileTree from "./FileTree.svelte";
   import DetailsPanel from "./DetailsPanel.svelte";
@@ -19,6 +20,7 @@
   });
 
   const tabs = $derived([
+    { id: "review", label: "Review", count: session.attention?.kind === "review" ? 1 : undefined },
     { id: "changes", label: "Changes", count: w.changes.length },
     { id: "files", label: "Files" },
     { id: "details", label: "Details" },
@@ -37,7 +39,9 @@
     {/snippet}
   </Tabs>
   <div class="tabpanel" id="rp-panel-{layout.rightTab}" role="tabpanel" aria-labelledby="rp-tab-{layout.rightTab}">
-    {#if layout.rightTab === "changes"}
+    {#if layout.rightTab === "review"}
+      {#key session.id}<ReviewPanel {session} />{/key}
+    {:else if layout.rightTab === "changes"}
       <ChangesList {session} />
     {:else if layout.rightTab === "details"}
       <DetailsPanel {session} />

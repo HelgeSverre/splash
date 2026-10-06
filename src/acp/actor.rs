@@ -19,8 +19,9 @@ use std::time::{Duration, Instant};
 use agent_client_protocol::schema::v1::{
     CancelNotification, ClientCapabilities, ContentBlock, Implementation, InitializeRequest,
     LoadSessionRequest, NewSessionRequest, PromptRequest, PromptResponse, RequestPermissionOutcome,
-    RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome, SessionId,
-    SetSessionConfigOptionRequest, SetSessionModeRequest, TextContent,
+    RequestPermissionRequest, RequestPermissionResponse, ResumeSessionRequest,
+    SelectedPermissionOutcome, SessionId, SetSessionConfigOptionRequest, SetSessionModeRequest,
+    TextContent,
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{Agent, ConnectionTo, Responder, UntypedMessage};
@@ -255,38 +256,28 @@ async fn run(
             .await
             .map_err(|_| agent_client_protocol::Error::internal_error().data("initialize timed out"))??;
             let can_load = init.agent_capabilities.load_session;
+            let can_resume = init.agent_capabilities.session_capabilities.resume.is_some();
 
-            let session_id: SessionId = match resume.filter(|_| can_load) {
+            let session_id: SessionId = match resume {
                 Some(prev) => {
-                    replaying.store(true, Ordering::Release);
-                    let loaded = cx
-                        .send_request(LoadSessionRequest::new(SessionId::new(prev.clone()), cwd.clone()))
-                        .block_task()
-                        .await;
-                    replaying.store(false, Ordering::Release);
-                    match loaded {
-                        Ok(resp) => {
-                            transcript.set_session_state(&serde_json::to_value(&resp).unwrap_or_default());
-                            SessionId::new(prev)
+                    if can_resume && !transcript.is_empty() {
+                        let resp = tokio::time::timeout(INIT_TIMEOUT, cx.send_request(ResumeSessionRequest::new(SessionId::new(prev.clone()), cwd.clone())).block_task()).await
+                            .map_err(|_| agent_client_protocol::Error::internal_error().data("Resuming the saved conversation timed out"))??;
+                        transcript.set_session_state(&serde_json::to_value(&resp).unwrap_or_default());
+                    } else {
+                        if !can_load {
+                            return Err(agent_client_protocol::Error::invalid_params().data("This agent cannot restore the saved conversation. Its history is still available; create a separate session to start over."));
                         }
-                        Err(e) => {
-                            transcript.push(Entry::Divider {
-                                text: format!("Couldn't resume the previous {} session ({e}); started a new one.", spec_agent.name),
-                            });
-                            new_session(&cx, &cwd, &mut transcript).await?
-                        }
+                        replaying.store(true, Ordering::Release);
+                        let loaded = tokio::time::timeout(INIT_TIMEOUT, cx.send_request(LoadSessionRequest::new(SessionId::new(prev.clone()), cwd.clone())).block_task()).await;
+                        replaying.store(false, Ordering::Release);
+                        // Never replace a failed resume with an unrelated conversation.
+                        let resp = loaded.map_err(|_| agent_client_protocol::Error::internal_error().data("Loading the saved conversation timed out"))??;
+                        transcript.set_session_state(&serde_json::to_value(&resp).unwrap_or_default());
                     }
+                    SessionId::new(prev)
                 }
-                None => {
-                    let had_history = !transcript.is_empty();
-                    let sid = new_session(&cx, &cwd, &mut transcript).await?;
-                    if had_history {
-                        transcript.push(Entry::Divider {
-                            text: format!("New {} session. The agent doesn't remember the conversation above.", spec_agent.name),
-                        });
-                    }
-                    sid
-                }
+                None => new_session(&cx, &cwd, &mut transcript).await?,
             };
             sink.agent_session(&key, &session_id.0);
 

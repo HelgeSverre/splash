@@ -4,9 +4,10 @@ import { dialog, notify } from "@elyra/runtime";
 import { api, type GithubItem, type AgentStatus, type Isolation, type Project, type SessionView, type Status } from "../bindings";
 import type { View } from "./route.svelte";
 import { prefs, setPref } from "./prefs.svelte";
+import { showSideTab } from "./layout.svelte";
 import { showError } from "./system";
 import { dropTranscript, newTranscript, openTranscript } from "./transcripts.svelte";
-import { dropTabs, ensureTabs } from "./tabs.svelte";
+import { dropTabs, ensureTabs, openTab } from "./tabs.svelte";
 import { dropWorkspace, ensureWorkspace } from "./workspace.svelte";
 
 export const app = $state({
@@ -16,6 +17,7 @@ export const app = $state({
   agentsLoading: false,
   view: { kind: "welcome" } as View,
   unread: {} as Record<string, boolean>,
+  focusEntry: null as number | null,
   collapsed: {} as Record<string, boolean>,
   newSession: null as null | { projectId?: string; githubItem?: GithubItem },
   /** The open Settings page, or null when Settings is closed. */
@@ -23,7 +25,7 @@ export const app = $state({
 });
 
 /** Unsent messages, per session: they survive switching away. */
-export const drafts: Record<string, string> = {};
+export const drafts: Record<string, string> = $state({});
 
 export const currentId = () => (app.view.kind === "session" ? app.view.id : null);
 export const currentSession = () => app.sessions.find((s) => s.id === currentId());
@@ -74,10 +76,12 @@ export async function refreshAllAgents() {
 
 // ── actions ──────────────────────────────────────────────────────────────────
 
-export async function openSession(id: string) {
+export async function openSession(id: string, entryIndex?: number) {
+  app.focusEntry = entryIndex ?? null;
   ensureTabs(id);
   ensureWorkspace(id);
   app.view = { kind: "session", id };
+  if (entryIndex !== undefined) openTab({ kind: "chat" });
   app.unread[id] = false;
   await openTranscript(id);
 }
@@ -160,6 +164,7 @@ export function applySession(s: SessionView | undefined) {
 
   const before = previousStatus[s.id];
   previousStatus[s.id] = s.status;
+  if (before !== "idle" && s.status === "idle" && s.attention?.kind === "review" && s.id === currentId()) showSideTab("review");
   const background = (s.id !== currentId() || document.hidden) && prefs.notify !== "off";
   if (!background || before === undefined || before === s.status) return;
   if (s.status === "awaiting_permission") {

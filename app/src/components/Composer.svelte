@@ -8,7 +8,7 @@
   import { api, type SessionView } from "../bindings";
   import { withKey } from "../lib/keybindings.svelte";
   import { registerComposer } from "../lib/focus";
-  import { projectById, agentById, isBusy, drafts } from "../lib/sessions.svelte";
+  import { app, projectById, agentById, isBusy, drafts } from "../lib/sessions.svelte";
   import { showSideTab } from "../lib/layout.svelte";
   import { showError } from "../lib/system";
 
@@ -18,6 +18,7 @@
   let input: HTMLTextAreaElement | undefined = $state();
   let menu: SlashMenu | undefined = $state();
   let lastId = "";
+  let sending = $state<Record<string, boolean>>({});
 
   $effect(() => input && registerComposer(input));
 
@@ -56,15 +57,17 @@
 
   async function send() {
     const prompt = text.trim();
-    if (!prompt || busy || archived) return;
-    text = "";
-    drafts[session.id] = "";
+    const id = session.id;
+    if (!prompt || busy || archived || sending[id] || session.status === "starting") return;
+    sending[id] = true;
     try {
-      await api.send_prompt(session.id, prompt);
+      await api.send_prompt(id, prompt);
+      if (app.view.kind === "session" && app.view.id === id) app.focusEntry = null;
+      if (drafts[id]?.trim() === prompt) drafts[id] = "";
+      if (session.id === id && text.trim() === prompt) text = "";
     } catch (e) {
-      text = prompt;
       showError(e);
-    }
+    } finally { delete sending[id]; }
   }
 
   function stop() {
@@ -92,6 +95,9 @@
 </script>
 
 <div class="composer">
+  {#if !archived && (session.status === "exited" || session.status === "error")}
+    <div class="resume-note"><span>{session.status === "error" ? "Connection failed. Your saved conversation is preserved." : "Viewing saved history. Continue to reconnect the agent."}</span><button class="btn sm" onclick={() => api.restart_session(session.id).catch(showError)}>Continue conversation</button></div>
+  {/if}
   <div class="chips">
     <button class="plain chip" onclick={showDetails} title={session.cwd}>
       {#if session.isolation === "worktree"}
@@ -123,7 +129,7 @@
     {#if busy}
       <IconButton class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" onclick={stop} />
     {:else}
-      <IconButton size="sm" icon="send" title="Send (⏎)" label="Send" disabled={!text.trim() || archived} onclick={send} />
+      <IconButton size="sm" icon="send" title="Send (⏎)" label="Send" disabled={!text.trim() || archived || sending[session.id] || session.status === "starting"} onclick={send} />
     {/if}
   </div>
 
@@ -140,6 +146,8 @@
 </div>
 
 <style>
+  .resume-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: var(--fs-xs); padding-bottom: 10px; }
+
   .composer { position: relative; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 28px 12px; }
   .chips { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; min-width: 0; }
   .chip {

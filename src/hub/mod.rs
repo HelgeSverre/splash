@@ -19,7 +19,7 @@ mod workspace;
 
 pub use agents::Agents;
 pub use customize::Customize;
-pub use sessions::{short_title, RpcLine, SessionView, Sessions, TranscriptEvent};
+pub use sessions::{short_title, RpcLine, SessionPreview, SessionView, Sessions, TranscriptEvent};
 pub use workspace::{Workspace, WorkspaceEvent};
 
 pub use crate::error::{Error, Result};

@@ -4,6 +4,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use parking_lot::Mutex;
@@ -18,6 +19,9 @@ use crate::acp::transport::Dir;
 use crate::git;
 use crate::store::{self, Isolation, Project, SessionRecord, Store};
 use crate::worktree;
+
+mod library;
+pub use library::SessionPreview;
 
 /// A session as the UI sees it: the stored record plus live state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -51,6 +55,7 @@ const RPC_KEEP: usize = 5_000;
 const NEW_SESSION: &str = "New session";
 
 struct Live {
+    active: Arc<AtomicBool>,
     tx: mpsc::UnboundedSender<SessionCmd>,
     status: Status,
     detail: Option<String>,
@@ -61,6 +66,10 @@ type OnStop = Box<dyn Fn(&str) + Send + Sync>;
 
 pub struct Sessions {
     core: Arc<Core>,
+    previews: Mutex<HashMap<String, library::CachedPreview>>,
+    import_lock: tokio::sync::Mutex<()>,
+    startup_lock: tokio::sync::Mutex<()>,
+    callbacks: Mutex<()>,
     /// Set once `records` holds what the store has.
     loaded: OnceCell<()>,
     records: Mutex<HashMap<String, SessionRecord>>,
@@ -78,6 +87,10 @@ impl Sessions {
     pub fn new(core: Arc<Core>) -> Self {
         Self {
             core,
+            previews: Mutex::default(),
+            import_lock: tokio::sync::Mutex::new(()),
+            startup_lock: tokio::sync::Mutex::new(()),
+            callbacks: Mutex::new(()),
             loaded: OnceCell::new(),
             records: Mutex::default(),
             live: Mutex::default(),
@@ -188,7 +201,7 @@ impl Sessions {
     pub async fn list(&self) -> Result<Vec<SessionView>> {
         self.store().await?;
         let mut records: Vec<SessionRecord> = self.records.lock().values().cloned().collect();
-        records.sort_by(|a, b| b.created_at.total_cmp(&a.created_at));
+        records.sort_by(|a, b| b.updated_at.total_cmp(&a.updated_at));
         Ok(records.into_iter().map(|r| self.view(r)).collect())
     }
 
@@ -298,6 +311,9 @@ impl Sessions {
             created_at: now,
             updated_at: now,
             usage: None,
+            external: false,
+            launch_args: None,
+            attention: None,
         };
         store.insert_session(&record).await?;
         if record.title == NEW_SESSION {
@@ -317,6 +333,7 @@ impl Sessions {
         // prompt) must not start two agents. Commands sent meanwhile queue on
         // the real channel and reach the actor once it runs.
         let (tx, rx) = mpsc::unbounded_channel();
+        let active = Arc::new(AtomicBool::new(true));
         {
             let mut live = self.live.lock();
             if live.contains_key(id) {
@@ -325,6 +342,7 @@ impl Sessions {
             live.insert(
                 id.to_string(),
                 Live {
+                    active: active.clone(),
                     tx,
                     status: Status::Starting,
                     detail: None,
@@ -339,7 +357,14 @@ impl Sessions {
                 return Err(e);
             }
         };
-        actor::start_with(spec, rx, self.clone() as Arc<dyn Sink>);
+        actor::start_with(
+            spec,
+            rx,
+            Arc::new(ActiveSink {
+                sessions: self.clone(),
+                active,
+            }),
+        );
         self.emit(id);
         Ok(())
     }
@@ -350,9 +375,15 @@ impl Sessions {
         warm_env().await;
         let store = self.store().await?;
         let record = self.record(id)?;
+        if record.archived {
+            return Err(Error::Other("Archived sessions are read-only.".into()));
+        }
         let agent = self.core.agent(&record.agent_id)?;
         let history = store.entries(id).await?;
-        let extra = split_args(&store.extra_args(agent.id).await.unwrap_or_default());
+        let extra = split_args(&match &record.launch_args {
+            Some(args) => args.clone(),
+            None => store.extra_args(agent.id).await?,
+        });
         self.mirrors.lock().insert(
             id.to_string(),
             TranscriptSnapshot::from_history(history.clone()),
@@ -389,6 +420,9 @@ impl Sessions {
     }
 
     pub async fn prompt(self: &Arc<Self>, id: &str, text: &str) -> Result<()> {
+        if self.record(id)?.archived {
+            return Err(Error::Other("Archived sessions are read-only.".into()));
+        }
         let text = text.trim();
         if text.is_empty() {
             return Ok(());
@@ -400,8 +434,36 @@ impl Sessions {
             .map(|l| matches!(l.status, Status::Exited | Status::Error))
             .unwrap_or(true);
         if exited {
-            self.live.lock().remove(id);
-            self.ensure_live(id).await?;
+            let _startup = self.startup_lock.lock().await;
+            let needs_start = self
+                .live
+                .lock()
+                .get(id)
+                .is_none_or(|l| matches!(l.status, Status::Exited | Status::Error));
+            if needs_start {
+                self.stop(id);
+                self.store().await?.settle().await;
+                self.ensure_live(id).await?;
+            }
+        }
+        // Do not acknowledge a prompt until initialization/resume has succeeded.
+        // A failed reconnect leaves the UI's draft intact instead of losing it.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(185);
+        loop {
+            let state = self
+                .live
+                .lock()
+                .get(id)
+                .map(|l| (l.status, l.detail.clone()));
+            match state {
+                Some((Status::Idle, _)) => break,
+                Some((Status::Starting, _)) if tokio::time::Instant::now() < deadline => {
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                }
+                Some((Status::Running | Status::AwaitingPermission, _)) => return Err(Error::Other("The agent is already working. Wait for this turn to finish.".into())),
+                Some((_, detail)) => return Err(Error::Other(detail.unwrap_or_else(|| "Could not reconnect the saved conversation. Retry or start a separate session.".into()))),
+                None => return Err(Error::Other("The session stopped before the message could be sent.".into())),
+            }
         }
         // Name the session after its first prompt. The agent's own title
         // replaces it when it sends one.
@@ -411,7 +473,26 @@ impl Sessions {
             self.store().await?.set_title(id, &title).await?;
             self.update_record(id, |r| r.title = title);
         }
-        self.send(id, SessionCmd::Prompt(text.to_string()))
+        let store = self.store().await?;
+        {
+            let _callbacks = self.callbacks.lock();
+            let mut live = self.live.lock();
+            let l = live
+                .get_mut(id)
+                .ok_or(Error::NotFound("The session stopped before sending."))?;
+            if l.status != Status::Idle {
+                return Err(Error::Other("The agent is already working.".into()));
+            }
+            l.tx.send(SessionCmd::Prompt(text.to_string()))
+                .map_err(|_| Error::Other("The session stopped before sending.".into()))?;
+            // Claim this turn before releasing the lock, so concurrent submissions
+            // cannot both pass the readiness check and silently lose a prompt.
+            l.status = Status::Running;
+            drop(live);
+            self.update_record(id, |r| r.attention = None);
+            store.queue_attention(id, None);
+        }
+        Ok(())
     }
 
     pub fn cancel(&self, id: &str) -> Result<()> {
@@ -475,7 +556,9 @@ impl Sessions {
     }
 
     fn stop(&self, id: &str) {
+        let _callbacks = self.callbacks.lock();
         if let Some(l) = self.live.lock().remove(id) {
+            l.active.store(false, Ordering::Release);
             let _ = l.tx.send(SessionCmd::Shutdown);
         }
         if let Some(f) = self.on_stop.get() {
@@ -490,7 +573,11 @@ impl Sessions {
         self.remove_worktree(&record, force).await?;
         self.stop(id);
         self.store().await?.set_archived(id, true).await?;
-        self.update_record(id, |r| r.archived = true);
+        self.update_record(id, |r| {
+            r.archived = true;
+            r.attention = None;
+        });
+        self.store().await?.queue_attention(id, None);
         Ok(())
     }
 
@@ -512,7 +599,10 @@ impl Sessions {
     /// branch stays). A dirty worktree needs `force`; without it the error is
     /// "dirty", which the UI turns into a confirmation.
     async fn remove_worktree(&self, record: &SessionRecord, force: bool) -> Result<()> {
-        if record.isolation != Isolation::Worktree || !Path::new(&record.cwd).exists() {
+        if record.external
+            || record.isolation != Isolation::Worktree
+            || !Path::new(&record.cwd).exists()
+        {
             return Ok(());
         }
         let dir = PathBuf::from(&record.cwd);
@@ -547,6 +637,9 @@ impl Sessions {
 
 impl Sink for Sessions {
     fn changes(&self, key: &str, changes: Vec<Change>) {
+        if let Some(r) = self.records.lock().get_mut(key) {
+            r.updated_at = store::now();
+        }
         {
             let mut mirrors = self.mirrors.lock();
             let m = mirrors.entry(key.to_string()).or_default();
@@ -564,14 +657,68 @@ impl Sink for Sessions {
     }
 
     fn status(&self, key: &str, status: Status, detail: Option<&str>, meta: &SessionMeta) {
-        {
+        let before = {
             let mut live = self.live.lock();
             let Some(l) = live.get_mut(key) else { return };
+            let before = l.status;
             l.status = status;
             l.detail = detail.map(String::from);
             // An exiting actor reports empty meta; keep the last known pickers.
             if status != Status::Exited || meta != &SessionMeta::default() {
                 l.meta = meta.clone();
+            }
+            before
+        };
+        if before != status {
+            use store::{Attention, AttentionKind};
+            let attention = match status {
+                Status::AwaitingPermission => Some(Attention {
+                    kind: AttentionKind::Permission,
+                    detail: "A tool needs your permission.".into(),
+                    at: store::now(),
+                }),
+                Status::Error => Some(Attention {
+                    kind: AttentionKind::Failed,
+                    detail: detail.unwrap_or("The agent stopped unexpectedly.").into(),
+                    at: store::now(),
+                }),
+                Status::Exited
+                    if matches!(
+                        before,
+                        Status::Starting | Status::Running | Status::AwaitingPermission
+                    ) =>
+                {
+                    Some(Attention {
+                        kind: AttentionKind::Failed,
+                        detail: detail
+                            .unwrap_or("The agent exited before finishing.")
+                            .into(),
+                        at: store::now(),
+                    })
+                }
+                Status::Idle if matches!(before, Status::Running | Status::AwaitingPermission) => {
+                    Some(Attention {
+                        kind: AttentionKind::Review,
+                        detail: "The agent finished. Review its response and changes.".into(),
+                        at: store::now(),
+                    })
+                }
+                _ => None,
+            };
+            // Starting a new turn resolves old attention; reconnecting preserves review.
+            let should_update = attention.is_some()
+                || status == Status::Running
+                || (status == Status::Idle
+                    && self.record(key).is_ok_and(|r| {
+                        r.attention.is_some_and(|a| a.kind != AttentionKind::Review)
+                    }));
+            if should_update {
+                if let Some(r) = self.records.lock().get_mut(key) {
+                    r.attention = attention.clone();
+                }
+                if let Some(store) = self.core.opened_store() {
+                    store.queue_attention(key, attention.as_ref());
+                }
             }
         }
         // An agent-generated name beats ours.
@@ -656,6 +803,42 @@ pub fn short_title(text: &str) -> String {
         out.push_str(word);
     }
     out.trim_end_matches(['.', ',', ':', ';']).to_string()
+}
+
+/// Ignore callbacks from a stopped actor after a replacement has claimed its ID.
+struct ActiveSink {
+    sessions: Arc<Sessions>,
+    active: Arc<AtomicBool>,
+}
+impl ActiveSink {
+    fn forward(&self, f: impl FnOnce(&Sessions)) {
+        // The same gate covers stop + invalidation. A callback cannot pass its
+        // active check, pause, then write into a replacement actor's session.
+        let _callbacks = self.sessions.callbacks.lock();
+        if self.active.load(Ordering::Acquire) {
+            f(&self.sessions);
+        }
+    }
+}
+impl Sink for ActiveSink {
+    fn changes(&self, key: &str, changes: Vec<Change>) {
+        self.forward(|s| s.changes(key, changes));
+    }
+    fn status(&self, key: &str, status: Status, detail: Option<&str>, meta: &SessionMeta) {
+        self.forward(|s| s.status(key, status, detail, meta));
+    }
+    fn persist(&self, key: &str, entries: Vec<(usize, Entry)>) {
+        self.forward(|s| s.persist(key, entries));
+    }
+    fn agent_session(&self, key: &str, id: &str) {
+        self.forward(|s| s.agent_session(key, id));
+    }
+    fn rpc(&self, key: &str, dir: Dir, line: &str) {
+        self.forward(|s| s.rpc(key, dir, line));
+    }
+    fn workspace_dirty(&self, key: &str) {
+        self.forward(|s| s.workspace_dirty(key));
+    }
 }
 
 #[cfg(test)]

@@ -813,3 +813,63 @@ mod tests {
         assert_eq!(m.versions, vec![3, 1]);
     }
 }
+
+/// History replay has its own message boundaries. Live prompt echoes must still
+/// be ignored by `Transcript::apply`, but historical user messages must survive.
+#[derive(Default)]
+pub struct Replay {
+    transcript: Transcript,
+    last_message: Option<(String, Option<String>)>,
+}
+
+impl Replay {
+    pub fn apply(&mut self, update: &Value) {
+        let kind = str_at(update, "sessionUpdate");
+        if matches!(
+            kind.as_str(),
+            "user_message_chunk" | "agent_message_chunk" | "agent_thought_chunk"
+        ) {
+            let id = update["messageId"].as_str().map(String::from);
+            let same = self
+                .last_message
+                .as_ref()
+                .is_some_and(|(k, i)| k == &kind && i == &id);
+            if !same {
+                self.transcript.close_open();
+            }
+            self.last_message = Some((kind.clone(), id));
+            self.transcript.turn_active = true;
+            if kind == "user_message_chunk" {
+                let text = match update["content"]["type"].as_str() {
+                    Some("text") | None => str_at(&update["content"], "text"),
+                    Some(kind) => format!("[{kind}]"),
+                };
+                if same {
+                    if let Some(Entry::User { text: previous }) = self.transcript.entries.last_mut()
+                    {
+                        previous.push_str(&text);
+                        return;
+                    }
+                }
+                self.transcript.begin_turn(&text);
+                return;
+            }
+        } else if matches!(kind.as_str(), "tool_call" | "tool_call_update" | "plan") {
+            self.last_message = None;
+        }
+        self.transcript.apply(update);
+    }
+
+    pub fn finish(mut self) -> Vec<Entry> {
+        self.transcript.close_open();
+        // A historical tool cannot remain a live spinner in a read-only preview.
+        for entry in &mut self.transcript.entries {
+            if let Entry::Tool { status, .. } = entry {
+                if status == "pending" || status == "in_progress" {
+                    *status = "failed".into();
+                }
+            }
+        }
+        self.transcript.entries
+    }
+}

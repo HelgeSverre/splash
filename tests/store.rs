@@ -24,6 +24,9 @@ fn record(project: &str) -> SessionRecord {
         created_at: now(),
         updated_at: now(),
         usage: None,
+        external: false,
+        launch_args: None,
+        attention: None,
     }
 }
 
@@ -122,5 +125,118 @@ async fn reopening_keeps_data_and_does_not_remigrate() {
         Some("pool")
     );
     assert_eq!(again.extra_args("glue").await.unwrap(), "-m foo");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn imported_history_is_searchable_and_attention_survives_reopen() {
+    use splash::store::{Attention, AttentionKind};
+    let (store, dir) = open().await;
+    let project = store
+        .add_project("/tmp/imported-project", "imported", false)
+        .await
+        .unwrap();
+    let mut s = record(&project.id);
+    s.external = true;
+    s.launch_args = Some("--profile work".into());
+    s.agent_session_id = Some("native-session".into());
+    s.attention = Some(Attention {
+        kind: AttentionKind::Review,
+        detail: "Ready to review".into(),
+        at: now(),
+    });
+    store
+        .save_import(
+            &s,
+            &[
+                Entry::User {
+                    text: "Investigate Unicode café recovery".into(),
+                },
+                Entry::Agent {
+                    text: "Recovery works after restart".into(),
+                    streaming: false,
+                },
+            ],
+        )
+        .await
+        .unwrap();
+    let found = store.search_sessions("café recov").await.unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].session_id, s.id);
+    assert_eq!(found[0].entry_index, 0);
+    assert!(found[0].excerpt.contains("café"));
+    assert_eq!(
+        store.search_sessions("recovery").await.unwrap().len(),
+        1,
+        "deduplicate multiple matching entries"
+    );
+    assert!(
+        store.search_sessions("\" OR *").await.unwrap().is_empty(),
+        "search syntax is literal"
+    );
+    let again = Store::open(&dir.join("t.db")).await.unwrap();
+    let saved = again.session(&s.id).await.unwrap();
+    assert!(saved.external);
+    assert_eq!(saved.launch_args, s.launch_args);
+    assert_eq!(saved.attention, s.attention);
+    store.queue_attention(&s.id, None);
+    store.queue_entries(
+        &s.id,
+        vec![(
+            0,
+            Entry::User {
+                text: "Replacement".into(),
+            },
+        )],
+    );
+    store.settle().await;
+    assert!(again.session(&s.id).await.unwrap().attention.is_none());
+    assert!(
+        again.search_sessions("cafe").await.unwrap().is_empty(),
+        "updated entries must remove old search text"
+    );
+    store.delete_session(&s.id).await.unwrap();
+    assert!(
+        again.search_sessions("recovery").await.unwrap().is_empty(),
+        "deletion cascades to search index"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn duplicate_import_identity_does_not_overwrite_history() {
+    let (store, dir) = open().await;
+    let project = store
+        .add_project("/tmp/imported", "imported", false)
+        .await
+        .unwrap();
+    let mut s = record(&project.id);
+    s.external = true;
+    s.launch_args = Some(String::new());
+    s.agent_session_id = Some("native".into());
+    store
+        .save_import(
+            &s,
+            &[Entry::User {
+                text: "original".into(),
+            }],
+        )
+        .await
+        .unwrap();
+    let mut duplicate = s.clone();
+    duplicate.id = new_id("s");
+    assert!(store
+        .save_import(
+            &duplicate,
+            &[Entry::User {
+                text: "replacement".into()
+            }]
+        )
+        .await
+        .is_err());
+    assert_eq!(store.sessions().await.unwrap().len(), 1);
+    assert!(
+        matches!(&store.entries(&s.id).await.unwrap()[0], Entry::User { text } if text == "original")
+    );
     let _ = std::fs::remove_dir_all(dir);
 }

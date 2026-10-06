@@ -11,7 +11,7 @@
   import { duration } from "../../lib/format";
   import type { Entry, SessionView } from "../../bindings";
 
-  let { entry, session }: { entry: Entry; session: SessionView } = $props();
+  let { entry, session }: { entry: Entry; session: Pick<SessionView, "id" | "cwd" | "status"> } = $props();
   let open = $state(false);
 </script>
 
@@ -49,7 +49,7 @@
 {:else if entry.kind === "plan"}
   <PlanView items={entry.items} />
 {:else if entry.kind === "permission"}
-  <PermissionCard {entry} session={session.id} cwd={session.cwd} />
+  <PermissionCard entry={!entry.resolution && session.status !== "awaiting_permission" ? { ...entry, resolution: "cancelled" } : entry} session={session.id} cwd={session.cwd} />
 {:else if entry.kind === "turn_end"}
   <div class="turn-end">
     <span>{entry.stop_reason === "end_turn" ? "done" : entry.stop_reason.replace("_", " ")}</span>

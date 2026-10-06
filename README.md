@@ -23,13 +23,53 @@ Splash is an early personal project, developed and tested on macOS only.
 
 ## Screenshots
 
-Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories.
+Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories. The session library, ACP preview, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness.
 
 <table>
   <tr>
     <td width="50%" valign="top">
+      <strong>Session library</strong><br>
+      <a href="screenshots/session-library.jpg"><img src="screenshots/session-library.jpg" alt="Saved conversations across agents, with project, agent and status filters" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Search saved and archived transcripts</strong><br>
+      <a href="screenshots/session-search.jpg"><img src="screenshots/session-search.jpg" alt="Transcript search results with excerpts from active and archived conversations" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Preview existing agent sessions</strong><br>
+      <a href="screenshots/agent-session-preview.jpg"><img src="screenshots/agent-session-preview.jpg" alt="ACP session discovery and conversation preview before adding it to Splash" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Needs attention</strong><br>
+      <a href="screenshots/attention-inbox.jpg"><img src="screenshots/attention-inbox.jpg" alt="Persistent permission, recovery and completed-work queues" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Review response, diffs, and feedback</strong><br>
+      <a href="screenshots/review.jpg"><img src="screenshots/review.jpg" alt="Review panel beside a code diff, with the final response and feedback composer" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Library empty state</strong><br>
+      <a href="screenshots/session-library-empty.jpg"><img src="screenshots/session-library-empty.jpg" alt="Empty library with options to start a session or open agent history" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Jump to a matching message</strong><br>
+      <a href="screenshots/session-search-match.jpg"><img src="screenshots/session-search-match.jpg" alt="Archived conversation opened at the highlighted transcript search match" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>History loading error</strong><br>
+      <a href="screenshots/agent-session-error.jpg"><img src="screenshots/agent-session-error.jpg" alt="Missing agent session shown as an error while keeping the folder and session ID available to correct" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
       <strong>Sessions and transcripts</strong><br>
-      <a href="screenshots/session.png"><img src="screenshots/session.png" alt="Splash: Sessions and transcripts" width="100%"></a>
+      <a href="screenshots/session.jpg"><img src="screenshots/session.jpg" alt="Saved conversation with explicit reconnect and the review panel" width="100%"></a>
     </td>
     <td width="50%" valign="top">
       <strong>GitHub triage</strong><br>
@@ -200,9 +240,65 @@ Data lives in `~/Library/Application Support/Splash`. Set `SPLASH_DATA_DIR` to u
 - **GitHub.** A triage view across personal and organization repositories, with repository/owner filters, issues, PRs, branches, recent activity and discussions. Git remotes connect items to local projects and sessions; additional projects can be linked manually. Create issues in any accessible repository with a Markdown editor and preview.
 - **Actions.** Cross-repository workflow runs, filters, workflow catalog, attempt details, job steps and searchable log previews.
 - **Workbench.** A side panel with the session's git changes, a file tree and session details; diff and file tabs; a terminal in the session folder (⌘J).
-- **Resume.** Sessions are saved in SQLite. Agents that support `session/load` continue the same conversation after a restart. Otherwise, or if loading fails, a new agent session starts and the transcript marks the break.
+- **Session library.** Search titles, folders, and saved transcript text across agents, including archived conversations. Filter by project, agent, or status. Search results open the matching message; session URLs survive reloads.
+- **Existing agent history.** Discover conversations through ACP, preview their transcript, and add a local copy to Splash. Agents without discovery can be opened by a known session ID when they support loading history.
+- **Needs attention.** Permissions, connection failures, and completed turns stay in a persistent queue. Open the conversation, reconnect or recheck the agent, and mark finished work reviewed.
+- **Review.** See the latest response, failed tools, changed files, and an associated PR when available. Open every changed file as a diff, send feedback, or ask the agent to review its work.
+- **Resume.** Cached conversations open without starting an agent. Continue or send a message to reconnect using `session/resume` or `session/load` when supported. A failed reconnect preserves the original session ID and history, with the unsent draft available to retry.
 - **Settings.** Per-agent status and version, a connection test that sends no prompt, extra launch arguments, read-only lists of each agent's skills, commands and MCP servers, and rebindable shortcuts.
 - **Log.** Each session's JSON-RPC traffic, kept in memory for the current run.
+
+## Existing sessions and review
+
+Open **Sessions → Open from agent**, choose an installed agent and the
+conversation's original working directory, then **Find sessions**. **Load more
+sessions** follows the agent's pagination. Select a conversation to preview it,
+then **Add to Splash** to save the replay locally. A known ID also works when
+the agent supports history loading but does not offer a session list.
+
+Splash negotiates ACP v1 and checks the running adapter's capabilities. In v1,
+[`session/list`](https://github.com/agentclientprotocol/agent-client-protocol/blob/main/docs/rfds/session-list.mdx)
+discovers conversations, while
+[`session/load`](https://github.com/agentclientprotocol/agent-client-protocol/blob/main/docs/protocol/v1/session-setup.mdx)
+replays history. `session/resume` reconnects without replay, so Splash uses it
+when a local transcript already exists.
+
+The repository's recorded initialization fixtures establish this baseline:
+
+| Adapter in recorded fixture | Lists sessions | Loads history | Resumes without replay |
+| --- | --- | --- | --- |
+| Claude Code 0.81.1 | Yes | Yes | Yes |
+| Codex 1.13.1 | Yes | Yes | Yes |
+| Pi 0.0.33 | Yes | Yes | No |
+| Pool 1.0.16 | Yes | Yes | No |
+| Glue 0.9.0 | No | No | No |
+
+The same capability checks apply to every configured agent. Actual history
+availability depends on the installed adapter, account, launch arguments, and
+working directory; advertised support does not guarantee that every native CLI
+conversation is exposed. Splash does not parse private vendor history formats
+or attach to another running process. ACP v2-only adapters need a separate
+protocol integration.
+
+Previewing starts a short-lived agent connection and sends no prompt. Import
+stores the returned transcript, original agent session ID, directory, and launch
+arguments. Repeated imports of the same agent session and launch profile open
+the existing local copy. Imported conversations stay in their original folders;
+archiving or deleting the Splash copy leaves the external folder and provider
+history intact. Previews expire after 15 minutes and can be loaded again.
+
+The **In Splash** search uses literal word prefixes in persisted transcript
+text and tool output, with up to 200 transcript matches per query. Narrow the
+query when the limit is reached. It includes archived history and only searches
+conversations already saved in Splash.
+
+**Needs attention** keeps pending permissions, failures, and completed turns
+across restarts. An interrupted permission must be requested again by the
+reconnected agent; an old request cannot be answered. **Review response &
+changes** opens the Review panel. Its file list describes the folder's current
+git changes, which may include work from another session sharing that folder.
+Send feedback or request a review to continue the same conversation, then use
+**Mark reviewed** when finished.
 
 ## GitHub view
 
@@ -328,11 +424,11 @@ flowchart LR
 ```
 
 1. **UI and backend.** The UI calls Rust `#[command]` functions through a typed `api.*` facade and listens on Elyra event channels. `rata codegen` generates both into `app/src/bindings.ts`.
-2. **Starting an agent.** Opening a session starts its agent. `acp/transport.rs` runs the launch command in the session folder, in its own process group, with your login shell's `PATH`. Its stdin and stdout carry ACP through the [`agent-client-protocol`](https://crates.io/crates/agent-client-protocol) crate. Splash offers no file-system or terminal capabilities to the agent: the agent edits files itself, and Splash sees the results through git and a file watcher.
-3. **The session actor.** `acp/actor.rs` is one task per running agent. It runs `initialize` and `session/new` (or `session/load`), then handles prompts, cancels, permission answers and option changes. It owns the session's transcript, which `acp/map.rs` builds from each `session/update` notification. Every 33 ms it hands the changes to the hub.
+2. **Starting an agent.** Creating a session, continuing it, or sending a prompt starts its agent. Opening cached history only reads Splash's saved transcript. `acp/transport.rs` runs the launch command in the session folder, in its own process group, with your login shell's `PATH`. Its stdin and stdout carry ACP through the [`agent-client-protocol`](https://crates.io/crates/agent-client-protocol) crate. Splash offers no file-system or terminal capabilities to the agent: the agent edits files itself, and Splash sees the results through git and a file watcher.
+3. **The session actor.** `acp/actor.rs` is one task per running agent. It runs `initialize` and `session/new` (or `session/resume` / `session/load`), then handles prompts, cancels, permission answers and option changes. It owns the session's transcript, which `acp/map.rs` builds from each `session/update` notification. Every 33 ms it hands the changes to the hub. Discovery and preview use separate short-lived connections in `acp/history.rs`.
 4. **Keeping the UI in step.** Each change is either a full entry or a text append, with a version number per entry. The UI ignores stale versions and, when an append doesn't follow the last version it has, fetches the whole transcript again from a copy kept in Rust.
 5. **The hub** wires these services:
-   - `sessions.rs`: projects, sessions, worktrees, running actors and the in-memory transcript copies. Finished entries, plus a checkpoint of streaming ones about every 2 s, are queued to a single SQLite writer in `store.rs`.
+   - `sessions.rs`: projects, sessions, worktrees, running actors and the in-memory transcript copies. `sessions/library.rs` handles discovery, preview, import, search, and recovery. Finished entries, plus a checkpoint of streaming ones about every 2 s, are queued to a single SQLite writer in `store.rs`; SQLite also maintains the transcript search index and persistent attention items.
    - `workspace.rs`: git status and diffs, file reads, the file watcher and terminals, on top of `src/workspace.rs`, `src/terminal.rs` and `src/git_info.rs`.
    - `agents.rs`: finding installed agents and the connection test.
    - `customize.rs`: app settings, and reading each agent's skills, commands and MCP config.
@@ -378,14 +474,18 @@ just codegen    # regenerate app/src/bindings.ts after changing a command or eve
 
 **Tests.**
 - `tests/map_fixtures.rs` replays the recorded traffic through the mapper.
-- `tests/actor.rs` runs the actor against `fake-acp`: streaming, permissions, cancel, options, resume and a missing binary.
-- `tests/hub.rs` runs the sessions service: in-place and worktree sessions, titles, archive, delete and concurrent opens.
-- `tests/store.rs` covers persistence, and there are unit tests in `src/`.
-- The frontend has no tests beyond type-checking.
+- `tests/actor.rs` runs the actor against `fake-acp`: streaming, permissions, cancel, options, load/resume selection, failed reconnects and a missing binary.
+- `tests/hub.rs` runs the sessions service: worktrees, titles, archive, delete, concurrent opens, history discovery/import, directory ownership, and persistent attention.
+- `tests/store.rs` covers persistence, transcript search, indexing updates, and import identity; there are also unit tests in `src/`.
+- `node --experimental-strip-types --test app/tests/*.test.ts` runs the frontend model tests; `just check` also type-checks the Svelte UI.
 
 To record a fixture: `just spike claude ./some/repo "a prompt" --record name`.
 
 **Headless UI.** `just web` serves the real backend and UI on port 4780 with its own data folder, so a headless browser can drive the app. Native dialogs and notifications are stubbed. `#/playground` shows the UI components and design tokens with sample data.
+
+For substantial UI changes, capture most major affected screens in an isolated
+demo workspace, inspect the images, show them during the work, and update the
+gallery above. See [AGENTS.md](AGENTS.md) for the screenshot policy.
 
 CI runs `just check` on pushes to main, pull requests and before every release build. Pushing a `v*` tag builds, signs and notarizes the app, then creates a draft release with a verified ZIP and checksum. The tag must match the Cargo and bundle versions. See [Releasing](docs/releasing.md) for signing configuration and local verification.
 

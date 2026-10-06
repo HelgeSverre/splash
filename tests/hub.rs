@@ -433,3 +433,142 @@ async fn usage_is_persisted_only_when_it_changes() {
     assert_eq!(stored().await, Some(usage(3.0)));
     assert_eq!(hub.sessions.record(&id).unwrap().usage, Some(usage(3.0)));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn discovery_preview_import_deduplicate_and_preserve_external_directory() {
+    let (data, repo) = (temp("data"), repo());
+    let (hub, _) = hub(&data, "history/read");
+    let path = repo.to_str().unwrap();
+    let page = hub.sessions.discover("fake", path, None).await.unwrap();
+    assert!(page.capabilities.list && page.capabilities.load);
+    assert_eq!(page.sessions[0].session_id, "native-1");
+    assert_eq!(page.next_cursor.as_deref(), Some("page-2"));
+    assert!(hub
+        .sessions
+        .discover("fake", path, page.next_cursor)
+        .await
+        .unwrap()
+        .sessions
+        .is_empty());
+    let preview = hub
+        .sessions
+        .preview("fake", path, "native-1")
+        .await
+        .unwrap();
+    assert_eq!(preview.entries.len(), 2);
+    assert!(matches!(&preview.entries[0], Entry::User { text } if text.contains("import")));
+    assert!(matches!(
+        &preview.entries[1],
+        Entry::Agent {
+            streaming: false,
+            ..
+        }
+    ));
+    assert!(
+        hub.sessions.list().await.unwrap().is_empty(),
+        "preview must not import or create sessions"
+    );
+    let imported = hub.sessions.import_preview(&preview.token).await.unwrap();
+    assert_eq!(
+        imported.status,
+        Status::Exited,
+        "import never starts a prompt-capable actor"
+    );
+    assert!(imported.record.external);
+    assert_eq!(imported.record.cwd, path);
+    assert_eq!(
+        imported.record.agent_session_id.as_deref(),
+        Some("native-1")
+    );
+    assert_eq!(
+        hub.sessions
+            .import_preview(&preview.token)
+            .await
+            .unwrap()
+            .record
+            .id,
+        imported.record.id
+    );
+    assert_eq!(hub.sessions.list().await.unwrap().len(), 1);
+    assert_eq!(
+        hub.sessions.search("import").await.unwrap()[0].session_id,
+        imported.record.id
+    );
+    assert_eq!(
+        hub.sessions
+            .transcript(&imported.record.id)
+            .await
+            .unwrap()
+            .entries
+            .len(),
+        2
+    );
+    assert_eq!(
+        status(&hub, &imported.record.id).await,
+        Some(Status::Exited)
+    );
+    hub.sessions
+        .archive(&imported.record.id, false)
+        .await
+        .unwrap();
+    assert!(repo.join("a.txt").exists());
+    assert!(hub
+        .sessions
+        .prompt(&imported.record.id, "must not send")
+        .await
+        .is_err());
+    hub.sessions
+        .delete(&imported.record.id, false)
+        .await
+        .unwrap();
+    assert!(repo.join("a.txt").exists());
+    let _ = std::fs::remove_dir_all(data);
+    let _ = std::fs::remove_dir_all(repo);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn completed_attention_persists_until_acknowledged() {
+    let (data, repo) = (temp("data"), repo());
+    let (hub, _) = hub(&data, "history/read");
+    let project = hub
+        .sessions
+        .add_project(repo.to_str().unwrap())
+        .await
+        .unwrap();
+    let s = hub
+        .sessions
+        .create(&project.id, "fake", Isolation::InPlace, None)
+        .await
+        .unwrap();
+    hub.sessions.prompt(&s.record.id, "finish").await.unwrap();
+    eventually("review attention", || async {
+        hub.sessions
+            .record(&s.record.id)
+            .unwrap()
+            .attention
+            .is_some()
+    })
+    .await;
+    let store = hub.core.store().await.unwrap();
+    store.settle().await;
+    assert_eq!(
+        store
+            .session(&s.record.id)
+            .await
+            .unwrap()
+            .attention
+            .unwrap()
+            .kind,
+        splash::store::AttentionKind::Review
+    );
+    hub.sessions.acknowledge(&s.record.id).await.unwrap();
+    assert!(store
+        .session(&s.record.id)
+        .await
+        .unwrap()
+        .attention
+        .is_none());
+    hub.sessions.delete(&s.record.id, false).await.unwrap();
+    let _ = std::fs::remove_dir_all(data);
+    let _ = std::fs::remove_dir_all(repo);
+}

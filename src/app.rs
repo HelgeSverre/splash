@@ -242,16 +242,54 @@ async fn create_session(
         .await?)
 }
 
-/// The transcript to render, starting the agent in the background.
+/// Read cached history without launching an agent. Sending a prompt reconnects explicitly.
 #[command]
 async fn open_session(ctx: Ctx, id: String) -> elyra::Result<TranscriptSnapshot> {
-    let sessions = ctx.get::<Sessions>();
-    let snapshot = sessions.transcript(&id).await?;
-    let archived = sessions.record(&id).map(|r| r.archived).unwrap_or(true);
-    if !archived {
-        sessions.ensure_live(&id).await?;
-    }
-    Ok(snapshot)
+    Ok(ctx.get::<Sessions>().transcript(&id).await?)
+}
+
+#[command]
+async fn discover_sessions(
+    ctx: Ctx,
+    agent_id: String,
+    cwd: String,
+    cursor: Option<String>,
+) -> elyra::Result<crate::acp::history::HistoryPage> {
+    Ok(ctx
+        .get::<Sessions>()
+        .discover(&agent_id, &cwd, cursor)
+        .await?)
+}
+#[command]
+async fn preview_session(
+    ctx: Ctx,
+    agent_id: String,
+    cwd: String,
+    session_id: String,
+) -> elyra::Result<crate::hub::SessionPreview> {
+    Ok(ctx
+        .get::<Sessions>()
+        .preview(&agent_id, &cwd, &session_id)
+        .await?)
+}
+#[command]
+async fn import_session(ctx: Ctx, token: String) -> elyra::Result<SessionView> {
+    Ok(ctx.get::<Sessions>().import_preview(&token).await?)
+}
+#[command]
+async fn search_sessions(
+    ctx: Ctx,
+    query: String,
+) -> elyra::Result<Vec<crate::store::SessionMatch>> {
+    Ok(ctx.get::<Sessions>().search(&query).await?)
+}
+#[command]
+async fn acknowledge_session(ctx: Ctx, id: String) -> elyra::Result<()> {
+    Ok(ctx.get::<Sessions>().acknowledge(&id).await?)
+}
+#[command]
+async fn restart_session(ctx: Ctx, id: String) -> elyra::Result<()> {
+    Ok(ctx.get::<Sessions>().restart(&id).await?)
 }
 
 /// The transcript alone, for a resync (the agent isn't started).
@@ -484,6 +522,12 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
             add_project,
             remove_project,
             list_sessions,
+            discover_sessions,
+            preview_session,
+            import_session,
+            search_sessions,
+            acknowledge_session,
+            restart_session,
             create_session,
             open_session,
             session_transcript,

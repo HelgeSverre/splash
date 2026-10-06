@@ -53,6 +53,7 @@ export const usd = (n: number, digits = 2) => `$${n.toFixed(digits)}`;
 
 /** The message of anything thrown: an Error, a command error, or a plain value. */
 export function errorMessage(e: unknown): string {
+  if (e instanceof Error && e.name === "CommandError" && "detail" in e && typeof e.detail === "string") return e.detail;
   if (e instanceof Error) return e.message;
   return String((e as { message?: unknown } | null)?.message ?? e);
 }

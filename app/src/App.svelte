@@ -1,4 +1,6 @@
 <script lang="ts">
+  import SessionLibrary from "./components/SessionLibrary.svelte";
+  import AttentionInbox from "./components/AttentionInbox.svelte";
   import ActionsView from "./components/github/ActionsView.svelte";
   import GithubView from "./components/github/GithubView.svelte";
   import IssueComposer from "./components/github/IssueComposer.svelte";
@@ -23,9 +25,8 @@
   import { installTabOrder } from "./lib/focus";
   import { showError } from "./lib/system";
 
-  installRoute();
   installLive();
-  loadAll().catch(showError);
+  loadAll().then(installRoute).catch(showError);
   installKeybindings();
   installTabOrder();
   installCommands();
@@ -55,7 +56,11 @@
   <main>
     <div class="top">
       <div class="center">
-        {#if app.view.kind === "actions"}
+        {#if app.view.kind === "library"}
+          <SessionLibrary />
+        {:else if app.view.kind === "attention"}
+          <AttentionInbox />
+        {:else if app.view.kind === "actions"}
           <ActionsView />
         {:else if app.view.kind === "github"}
           <GithubView />

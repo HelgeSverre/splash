@@ -1,0 +1,10 @@
+{"t":0,"dir":"out","line":{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}}
+{"t":1,"dir":"in","line":{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true,"sessionCapabilities":{"list":{}}}}}}
+{"t":2,"dir":"out","line":{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"/tmp","mcpServers":[]}}}
+{"t":3,"dir":"in","line":{"jsonrpc":"2.0","id":2,"result":{"sessionId":"new-session"}}}
+{"t":4,"dir":"out","line":{"jsonrpc":"2.0","id":3,"method":"session/list","params":{}}}
+{"t":5,"dir":"in","line":{"jsonrpc":"2.0","id":3,"result":{"sessions":[{"sessionId":"native-1","cwd":"/tmp","title":"Native conversation"}],"nextCursor":"page-2"}}}
+{"t":6,"dir":"out","line":{"jsonrpc":"2.0","id":4,"method":"session/load","params":{"sessionId":"native-1","cwd":"/tmp","mcpServers":[]}}}
+{"t":7,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-1","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Please fix the import"}}}}}
+{"t":8,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"The import is fixed."}}}}}
+{"t":9,"dir":"in","line":{"jsonrpc":"2.0","id":4,"result":{}}}

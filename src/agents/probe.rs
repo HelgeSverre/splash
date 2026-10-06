@@ -27,6 +27,10 @@ pub struct AgentProbe {
     pub agent_version: Option<String>,
     pub protocol_version: Option<f64>,
     pub load_session: bool,
+    #[serde(default)]
+    pub list_sessions: bool,
+    #[serde(default)]
+    pub resume_session: bool,
     pub image: bool,
     pub audio: bool,
     pub embedded_context: bool,
@@ -129,6 +133,8 @@ pub async fn probe(spec: &AgentSpec, extra_args: &[String]) -> AgentProbe {
         out.protocol_version = init["protocolVersion"].as_f64();
         let caps = &init["agentCapabilities"];
         out.load_session = caps["loadSession"].as_bool().unwrap_or(false);
+        out.list_sessions = caps["sessionCapabilities"]["list"].is_object();
+        out.resume_session = caps["sessionCapabilities"]["resume"].is_object();
         out.image = caps["promptCapabilities"]["image"]
             .as_bool()
             .unwrap_or(false);

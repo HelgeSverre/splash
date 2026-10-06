@@ -14,7 +14,7 @@ use crate::acp::model::Entry;
 
 macro_rules! session_cols {
     () => {
-        "id, project_id, agent_id, title, cwd, isolation, branch, base_sha, agent_session_id, archived, created_at, updated_at, usage_json"
+        "id, project_id, agent_id, title, cwd, isolation, branch, base_sha, agent_session_id, archived, created_at, updated_at, usage_json, external, launch_args, attention_json"
     };
 }
 
@@ -77,6 +77,60 @@ pub struct SessionRecord {
     pub updated_at: f64,
     /// The last usage the agent reported (context, cost), kept across restarts.
     pub usage: Option<crate::acp::model::Usage>,
+    /// External conversations never own their directory or provider history.
+    #[serde(default)]
+    pub external: bool,
+    /// The launch profile used when importing (None follows current settings).
+    #[serde(default)]
+    pub launch_args: Option<String>,
+    #[serde(default)]
+    pub attention: Option<Attention>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum AttentionKind {
+    Permission,
+    Failed,
+    Review,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct Attention {
+    pub kind: AttentionKind,
+    pub detail: String,
+    pub at: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, specta::Type)]
+pub struct SessionMatch {
+    pub session_id: String,
+    pub entry_index: u32,
+    pub excerpt: String,
+}
+
+struct SessionLibrary;
+impl RustMigration for SessionLibrary {
+    fn version(&self) -> &str {
+        "20261006000001"
+    }
+    fn name(&self) -> &str {
+        "session_library"
+    }
+    fn up(&self, _driver: Driver) -> Vec<String> {
+        vec![
+            "ALTER TABLE sessions ADD COLUMN external INTEGER NOT NULL DEFAULT 0".into(),
+            "ALTER TABLE sessions ADD COLUMN launch_args TEXT".into(),
+            "ALTER TABLE sessions ADD COLUMN attention_json TEXT".into(),
+            "CREATE UNIQUE INDEX imported_identity ON sessions(agent_id, agent_session_id, launch_args) WHERE external = 1".into(),
+            "CREATE VIRTUAL TABLE entry_search USING fts5(session_id UNINDEXED, idx UNINDEXED, text, tokenize='unicode61')".into(),
+            // Index human-readable text, including tool output. Existing transcripts are backfilled.
+            "INSERT INTO entry_search(rowid, session_id, idx, text) SELECT rowid, session_id, idx, COALESCE(json_extract(data, '$.text'), json_extract(data, '$.title'), '') || ' ' || COALESCE(json_extract(data, '$.output'), '') || ' ' || COALESCE(json_extract(data, '$.content'), '') FROM entries".into(),
+            "CREATE TRIGGER entries_search_insert AFTER INSERT ON entries BEGIN INSERT INTO entry_search(rowid, session_id, idx, text) VALUES (new.rowid, new.session_id, new.idx, COALESCE(json_extract(new.data, '$.text'), json_extract(new.data, '$.title'), '') || ' ' || COALESCE(json_extract(new.data, '$.output'), '') || ' ' || COALESCE(json_extract(new.data, '$.content'), '')); END".into(),
+            "CREATE TRIGGER entries_search_update AFTER UPDATE ON entries BEGIN DELETE FROM entry_search WHERE rowid = old.rowid; INSERT INTO entry_search(rowid, session_id, idx, text) VALUES (new.rowid, new.session_id, new.idx, COALESCE(json_extract(new.data, '$.text'), json_extract(new.data, '$.title'), '') || ' ' || COALESCE(json_extract(new.data, '$.output'), '') || ' ' || COALESCE(json_extract(new.data, '$.content'), '')); END".into(),
+            "CREATE TRIGGER entries_search_delete AFTER DELETE ON entries BEGIN DELETE FROM entry_search WHERE rowid = old.rowid; END".into(),
+        ]
+    }
 }
 
 struct Schema;
@@ -178,6 +232,10 @@ enum Write {
         session: String,
         json: String,
     },
+    Attention {
+        session: String,
+        json: Option<String>,
+    },
     Barrier(tokio::sync::oneshot::Sender<()>),
 }
 
@@ -206,8 +264,12 @@ impl Store {
         .execute(db.pool())
         .await
         .map_err(err)?;
-        let migrations: Vec<Box<dyn RustMigration>> =
-            vec![Box::new(Schema), Box::new(Settings), Box::new(SessionUsage)];
+        let migrations: Vec<Box<dyn RustMigration>> = vec![
+            Box::new(Schema),
+            Box::new(Settings),
+            Box::new(SessionUsage),
+            Box::new(SessionLibrary),
+        ];
         db.migrator(std::path::PathBuf::from("migrations"))
             .run_rust(&migrations, Driver::Sqlite)
             .await
@@ -231,6 +293,14 @@ impl Store {
                     }
                     Write::Usage { session, json } => {
                         sqlx::query("UPDATE sessions SET usage_json = ? WHERE id = ?")
+                            .bind(json)
+                            .bind(session)
+                            .execute(&pool)
+                            .await
+                            .map(|_| ())
+                    }
+                    Write::Attention { session, json } => {
+                        sqlx::query("UPDATE sessions SET attention_json = ? WHERE id = ?")
                             .bind(json)
                             .bind(session)
                             .execute(&pool)
@@ -350,26 +420,8 @@ impl Store {
     }
 
     pub async fn insert_session(&self, s: &SessionRecord) -> Result<()> {
-        sqlx::query(
-            "INSERT INTO sessions (id, project_id, agent_id, title, cwd, isolation, branch, base_sha,
-             agent_session_id, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&s.id)
-        .bind(&s.project_id)
-        .bind(&s.agent_id)
-        .bind(&s.title)
-        .bind(&s.cwd)
-        .bind(isolation_str(&s.isolation))
-        .bind(s.branch.clone())
-        .bind(s.base_sha.clone())
-        .bind(s.agent_session_id.clone())
-        .bind(s.archived as i64)
-        .bind(s.created_at)
-        .bind(s.updated_at)
-        .execute(self.db.pool())
-        .await
-        .map_err(err)?;
-        Ok(())
+        let mut conn = self.db.pool().acquire().await.map_err(err)?;
+        insert_record(&mut conn, s).await
     }
 
     pub async fn set_title(&self, id: &str, title: &str) -> Result<()> {
@@ -412,6 +464,52 @@ impl Store {
             .filter_map(|r| r.try_get::<String, _>("data").ok())
             .map(|d| serde_json::from_str(&d).unwrap_or(Entry::Unknown { json: d }))
             .collect())
+    }
+
+    /// Atomically save a newly imported transcript; failed inserts leave no partial history.
+    pub async fn save_import(&self, s: &SessionRecord, entries: &[Entry]) -> Result<()> {
+        let mut tx = self.db.pool().begin().await.map_err(err)?;
+        insert_record(&mut tx, s).await?;
+        write_entries_on(
+            &mut tx,
+            &s.id,
+            entries.iter().cloned().enumerate().collect(),
+        )
+        .await
+        .map_err(err)?;
+        tx.commit().await.map_err(err)?;
+        Ok(())
+    }
+
+    /// Literal word-prefix search, with a maximum of 200 matching sessions.
+    pub async fn search_sessions(&self, query: &str) -> Result<Vec<SessionMatch>> {
+        let query = query.chars().take(1000).collect::<String>();
+        let expression = query
+            .split_whitespace()
+            .map(|word| format!("\"{}\"*", word.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        if expression.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query("SELECT session_id, idx, snippet(entry_search, 2, '', '', '…', 24) AS excerpt FROM entry_search WHERE entry_search MATCH ? AND rowid IN (SELECT min(rowid) FROM entry_search WHERE entry_search MATCH ? GROUP BY session_id) ORDER BY rank LIMIT 200")
+            .bind(&expression).bind(&expression).fetch_all(self.db.pool()).await.map_err(err)?;
+        rows.iter()
+            .map(|r| {
+                Ok(SessionMatch {
+                    session_id: r.try_get("session_id").map_err(err)?,
+                    entry_index: r.try_get::<i64, _>("idx").map_err(err)? as u32,
+                    excerpt: r.try_get("excerpt").map_err(err)?,
+                })
+            })
+            .collect()
+    }
+
+    pub fn queue_attention(&self, session: &str, attention: Option<&Attention>) {
+        let _ = self.writer.send(Write::Attention {
+            session: session.into(),
+            json: attention.and_then(|a| serde_json::to_string(a).ok()),
+        });
     }
 
     // ── writes from live sessions (queued) ─────────────────────────────────
@@ -522,6 +620,15 @@ async fn write_entries(
     entries: Vec<(usize, Entry)>,
 ) -> std::result::Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
+    write_entries_on(&mut tx, session, entries).await?;
+    tx.commit().await
+}
+
+async fn write_entries_on(
+    conn: &mut sqlx::AnyConnection,
+    session: &str,
+    entries: Vec<(usize, Entry)>,
+) -> std::result::Result<(), sqlx::Error> {
     for (idx, entry) in entries {
         sqlx::query(
             "INSERT INTO entries (session_id, idx, kind, data) VALUES (?, ?, ?, ?)
@@ -531,10 +638,36 @@ async fn write_entries(
         .bind(idx as i64)
         .bind(entry.kind())
         .bind(serde_json::to_string(&entry).unwrap_or_default())
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
     }
-    tx.commit().await
+    Ok(())
+}
+
+async fn insert_record(conn: &mut sqlx::AnyConnection, s: &SessionRecord) -> Result<()> {
+    sqlx::query(
+            "INSERT INTO sessions (id, project_id, agent_id, title, cwd, isolation, branch, base_sha,
+             agent_session_id, archived, created_at, updated_at, external, launch_args, attention_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&s.id)
+        .bind(&s.project_id)
+        .bind(&s.agent_id)
+        .bind(&s.title)
+        .bind(&s.cwd)
+        .bind(isolation_str(&s.isolation))
+        .bind(s.branch.clone())
+        .bind(s.base_sha.clone())
+        .bind(s.agent_session_id.clone())
+        .bind(s.archived as i64)
+        .bind(s.created_at)
+        .bind(s.updated_at)
+        .bind(s.external as i64)
+        .bind(&s.launch_args)
+        .bind(s.attention.as_ref().and_then(|a| serde_json::to_string(a).ok()))
+        .execute(conn)
+        .await
+        .map_err(err)?;
+    Ok(())
 }
 
 fn project_from(r: &sqlx::any::AnyRow) -> Result<Project> {
@@ -566,6 +699,12 @@ fn session_from(r: &sqlx::any::AnyRow) -> Result<SessionRecord> {
         archived: r.try_get::<i64, _>("archived").map_err(err)? != 0,
         created_at: r.try_get("created_at").map_err(err)?,
         updated_at: r.try_get("updated_at").map_err(err)?,
+        external: r.try_get::<i64, _>("external").map_err(err)? != 0,
+        launch_args: r.try_get("launch_args").map_err(err)?,
+        attention: r
+            .try_get::<Option<String>, _>("attention_json")
+            .map_err(err)?
+            .and_then(|j| serde_json::from_str(&j).ok()),
         usage: r
             .try_get::<Option<String>, _>("usage_json")
             .ok()
