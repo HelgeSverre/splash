@@ -49,7 +49,7 @@ test.describe("server folder picker", () => {
     // Errors keep the listing, and nothing can be added until a folder opens.
     await input.fill(join(world.home, "missing"));
     await picker.getByRole("button", { name: "Go" }).click();
-    await expect(picker.getByRole("alert")).toContainText("No such file or directory");
+    await expect(picker.getByRole("alert")).toHaveText("No folder exists at that path on the server");
     await expect(add).toBeDisabled();
     await input.fill("code/alpha");
     await picker.getByRole("button", { name: "Go" }).click();

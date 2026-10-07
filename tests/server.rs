@@ -209,6 +209,13 @@ fn cli_validation_and_server_folder_paths() {
     assert_eq!(o.folders, ["/work/my project"]);
     assert_eq!(o.port, 5000);
     assert!(splash::server::folders::browse(Some("relative/path")).is_err());
+    let missing = splash::server::folders::browse(Some("/no/such/splash/folder"))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        missing.contains("No folder exists at that path"),
+        "{missing}"
+    );
     let dir = std::env::temp_dir().join(splash::store::new_id("server-folders"));
     std::fs::create_dir_all(dir.join("my project")).unwrap();
     std::fs::write(dir.join("not a directory"), "test").unwrap();
