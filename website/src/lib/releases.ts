@@ -9,12 +9,11 @@ import cargo from '$repo/Cargo.toml?raw';
 export const VERSION = /^version\s*=\s*"([^"]+)"/m.exec(cargo)![1];
 
 export type Os = 'macos' | 'windows' | 'linux';
-/** One downloadable file; `file` names it for a given version. An `optional`
- *  file is offered only once the latest release is known to contain it. */
-export type Download = { label: string; detail: string; file: (version: string) => string; optional?: boolean };
+/** One downloadable file; `file` names it for a given version. */
+export type Download = { label: string; detail: string; file: (version: string) => string };
 export type Platform = { os: Os; name: string; requires: string; install: string; downloads: Download[] };
 
-const download = (label: string, detail: string, name: string, optional = false): Download => ({ label, detail, file: (v) => name.replace('{v}', v), optional });
+const download = (label: string, detail: string, name: string): Download => ({ label, detail, file: (v) => name.replace('{v}', v) });
 
 export const PLATFORMS: Platform[] = [
 	{
@@ -23,7 +22,7 @@ export const PLATFORMS: Platform[] = [
 		requires: 'macOS 14 Sonoma or later',
 		install: 'Signed with a Developer ID and notarized by Apple.',
 		downloads: [
-			download('Universal installer', '.pkg', 'Splash-{v}-macos-universal.pkg', true),
+			download('Universal installer', '.pkg', 'Splash-{v}-macos-universal.pkg'),
 			download('Apple silicon', '.zip', 'Splash-{v}-macos-arm64.zip'),
 			download('Intel', '.zip', 'Splash-{v}-macos-x86_64.zip')
 		]
@@ -73,20 +72,14 @@ export const RELEASES: Release[] = Object.entries(notes)
 	.sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }))
 	.map((r) => ({ ...r, date: DATES[r.version] ?? '' }));
 
-/** The visitor's OS and, where the browser says, a Mac's architecture. */
-export async function detect(): Promise<{ os: Os | null; intel: boolean }> {
-	if (typeof navigator === 'undefined') return { os: null, intel: false };
+/** The visitor's OS, when the browser says. */
+export function detect(): Os | null {
+	if (typeof navigator === 'undefined') return null;
 	const ua = `${navigator.platform} ${navigator.userAgent}`.toLowerCase();
-	const os: Os | null = ua.includes('mac') ? 'macos' : ua.includes('win') ? 'windows' : ua.includes('linux') && !ua.includes('android') ? 'linux' : null;
-	let intel = false;
-	const data = (navigator as Navigator & { userAgentData?: { getHighEntropyValues(h: string[]): Promise<{ architecture?: string }> } }).userAgentData;
-	if (os === 'macos' && data) intel = (await data.getHighEntropyValues(['architecture']).catch(() => ({ architecture: '' }))).architecture === 'x86';
-	return { os, intel };
+	return ua.includes('mac') ? 'macos' : ua.includes('win') ? 'windows' : ua.includes('linux') && !ua.includes('android') ? 'linux' : null;
 }
 
-/** The first file to offer: the first one available, or a Mac's own architecture among the ZIPs. */
-export function primaryFor(os: Os, intel = false, available: (d: Download) => boolean = (d) => !d.optional): Download {
-	const offered = PLATFORMS.find((x) => x.os === os)!.downloads.filter(available);
-	if (os === 'macos' && !offered[0].file('').endsWith('.pkg')) return offered.find((d) => d.label === (intel ? 'Intel' : 'Apple silicon')) ?? offered[0];
-	return offered[0];
+/** The file to offer first: the universal macOS installer, the Windows installer, the Debian package. */
+export function primaryFor(os: Os): Download {
+	return PLATFORMS.find((x) => x.os === os)!.downloads[0];
 }

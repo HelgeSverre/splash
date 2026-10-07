@@ -38,11 +38,6 @@ function apply(version: string, assets: string[]) {
 	latest.assets = new Set(assets);
 }
 
-/** Whether to offer a download: optional files only once the latest release has them. */
-export function available(d: Download) {
-	return d.optional ? !!latest.assets?.has(d.file(latest.version)) : true;
-}
-
 export type Resolved = { file: string; url: string; sha256: string };
 
 /** A download's file in the latest release, via GitHub's /releases/latest/download/ URLs. */

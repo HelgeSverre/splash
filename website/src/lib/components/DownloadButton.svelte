@@ -3,25 +3,22 @@
 	// browser says otherwise), with every other platform and format in a menu.
 	import { onMount } from 'svelte';
 	import { OS_NAMES, PLATFORMS, detect, primaryFor, type Os } from '../releases.ts';
-	import { available, latest, loadLatest, resolve } from '../latest.svelte.ts';
+	import { latest, loadLatest, resolve } from '../latest.svelte.ts';
 
 	// `dark` sits on the accent-coloured bar, where the primary yellow would vanish.
 	let { tone = 'primary', menu = true }: { tone?: 'primary' | 'dark'; menu?: boolean } = $props();
 
 	let os: Os = $state('macos');
-	let intel = $state(false);
 	let open = $state(false);
 	let root: HTMLElement;
 	const id = `downloads-${Math.random().toString(36).slice(2, 8)}`;
 
-	onMount(async () => {
+	onMount(() => {
 		loadLatest();
-		const found = await detect();
-		if (found.os) os = found.os;
-		intel = found.intel;
+		os = detect() ?? os;
 	});
 
-	const file = $derived(resolve(primaryFor(os, intel, available)));
+	const file = $derived(resolve(primaryFor(os)));
 
 	function onpointerdown(e: PointerEvent) {
 		if (open && !root.contains(e.target as Node)) open = false;
@@ -60,7 +57,7 @@
 		<div class="menu" id={id} role="menu" aria-label="Downloads" hidden={!open}>
 			{#each PLATFORMS as p (p.os)}
 				<p class="group" role="presentation">{p.name}</p>
-				{#each p.downloads.filter(available) as d (d.label)}
+				{#each p.downloads as d (d.label)}
 					<a role="menuitem" href={resolve(d).url} onclick={() => (open = false)}><span>{d.label}</span><span class="ext">{d.detail}</span></a>
 				{/each}
 			{/each}

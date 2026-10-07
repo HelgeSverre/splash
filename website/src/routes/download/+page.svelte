@@ -4,28 +4,25 @@
 	import SplashMark from '$splash/components/SplashMark.svelte';
 	import Seo from '#lib/components/Seo.svelte';
 	import { OS_NAMES, PLATFORMS, RELEASES, SERVER, VERSION, detect, primaryFor, type Os } from '#lib/releases.ts';
-	import { available, latest, loadLatest, resolve } from '#lib/latest.svelte.ts';
+	import { latest, loadLatest, resolve } from '#lib/latest.svelte.ts';
 	import { REPO, RELEASES_URL } from '#lib/site.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
 	let os: Os = $state('macos');
-	let intel = $state(false);
-	onMount(async () => {
+	onMount(() => {
 		loadLatest();
-		const found = await detect();
-		if (found.os) os = found.os;
-		intel = found.intel;
+		os = detect() ?? os;
 	});
 
 	const platform = $derived(PLATFORMS.find((p) => p.os === os)!);
-	const primary = $derived(primaryFor(os, intel, available));
+	const primary = $derived(primaryFor(os));
 	const primaryFile = $derived(resolve(primary));
 	const date = (iso: string) => (iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }) : '');
 
 	const verify: Record<Os, { label: string; code: string }> = {
-		macos: { label: 'Verify on macOS', code: `shasum -a 256 -c ${primaryFor('macos', false, available).file(latest.version)}.sha256` },
+		macos: { label: 'Verify on macOS', code: `shasum -a 256 -c ${primaryFor('macos').file(latest.version)}.sha256` },
 		windows: { label: 'Verify on Windows (PowerShell)', code: `Get-FileHash -Algorithm SHA256 .\\${primaryFor('windows').file(latest.version)}` },
 		linux: { label: 'Verify on Linux', code: `sha256sum -c ${primaryFor('linux').file(latest.version)}.sha256` }
 	};
@@ -63,7 +60,7 @@
 					<h2 class="name">{p.name}</h2>
 					<p class="requires">{p.requires}</p>
 					<ul>
-						{#each p.downloads.filter(available) as d (d.label)}
+						{#each p.downloads as d (d.label)}
 							{@const f = resolve(d)}
 							<li>
 								<a class="file-link" href={f.url}><span class="label">{d.label}</span><span class="ext">{d.detail}</span></a>
