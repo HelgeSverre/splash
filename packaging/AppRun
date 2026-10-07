@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+# Resolve from this extracted/mounted image, independent of working directory.
+appdir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+exec "$appdir/usr/bin/splash" "$@"

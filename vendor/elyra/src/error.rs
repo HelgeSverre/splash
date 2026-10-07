@@ -1,0 +1,66 @@
+//! Framework error type.
+
+/// Errors raised while decoding, dispatching, or encoding a command.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("failed to decode command arguments: {0}")]
+    Decode(String),
+
+    #[error("failed to encode command result: {0}")]
+    Encode(String),
+
+    #[error("unknown command: {0}")]
+    UnknownCommand(String),
+
+    /// A command's own error, surfaced to the caller **verbatim**.
+    ///
+    /// No prefix: the message is the contract. A `"command failed: "` prefix used
+    /// to be prepended here, which silently broke structured errors — a
+    /// `ValidationErrors` bag arrived as `command failed: {"email":[…]}` and could
+    /// not be parsed as JSON by the frontend.
+    #[error("{0}")]
+    Command(String),
+
+    #[error("codegen failed: {0}")]
+    Codegen(String),
+
+    #[error("io error: {0}")]
+    Io(String),
+}
+
+impl Error {
+    /// Wrap a decode failure (msgpack -> args tuple).
+    pub fn decode(e: impl std::fmt::Display) -> Self {
+        Error::Decode(e.to_string())
+    }
+
+    /// Wrap an encode failure (result -> msgpack).
+    pub fn encode(e: impl std::fmt::Display) -> Self {
+        Error::Encode(e.to_string())
+    }
+
+    /// Wrap a command's own error (the `Err` of a `Result`-returning command).
+    pub fn command(e: impl std::fmt::Display) -> Self {
+        Error::Command(e.to_string())
+    }
+}
+
+/// `?` on a validation result inside an `elyra::Result` command. The bag stays
+/// JSON (its `Display`), so the frontend still gets a `ValidationError` with
+/// per-field messages.
+impl From<crate::validation::ValidationErrors> for Error {
+    fn from(errors: crate::validation::ValidationErrors) -> Self {
+        Error::command(errors)
+    }
+}
+
+/// `?` on a query inside an `elyra::Result` command.
+#[cfg(feature = "database")]
+impl From<elyra_db::Error> for Error {
+    fn from(e: elyra_db::Error) -> Self {
+        Error::command(e)
+    }
+}
+
+/// Convenience alias used throughout the framework and generated code.
+pub type Result<T, E = Error> = std::result::Result<T, E>;

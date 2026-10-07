@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import SessionLibrary from "./components/SessionLibrary.svelte";
   import AttentionInbox from "./components/AttentionInbox.svelte";
   import ActionsView from "./components/github/ActionsView.svelte";
@@ -44,7 +45,7 @@
     await reconnectTerminals(new Set(app.sessions.map((s) => s.id)));
   }
   if (serverMode) installServerConnection(restoreWorkspace);
-  else loadAll().then(() => { installRoute(); routeInstalled = true; }).catch(showError);
+  else loadAll().then(async () => { installRoute(); routeInstalled = true; await tick(); await api.frontend_ready(); }).catch(showError);
   installKeybindings();
   installTabOrder();
   installCommands();

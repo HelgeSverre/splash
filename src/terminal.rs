@@ -80,9 +80,9 @@ impl Terminals {
                 pixel_height: 0,
             })
             .map_err(io)?;
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+        let (shell, args) = crate::agents::env::shell();
         let mut cmd = CommandBuilder::new(shell);
-        cmd.arg("-l");
+        cmd.args(args);
         cmd.cwd(cwd);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
@@ -90,11 +90,22 @@ impl Terminals {
         if std::env::var("LANG").is_err() {
             cmd.env("LANG", "en_US.UTF-8");
         }
-        let child = pair.slave.spawn_command(cmd).map_err(io)?;
+        #[cfg(windows)]
+        cmd.set_suspended(true);
+        let mut child = pair.slave.spawn_command(cmd).map_err(io)?;
         drop(pair.slave);
         if let Some(pid) = child.process_id() {
             // The shell leads its own session, so its pid is its group id.
-            crate::procs::register(pid as i32);
+            if let Err(error) = crate::procs::register(pid as i32) {
+                let _ = child.kill();
+                return Err(error.into());
+            }
+            #[cfg(windows)]
+            if let Err(error) = crate::procs::resume(pid as i32) {
+                crate::procs::kill_group(pid as i32);
+                let _ = child.kill();
+                return Err(error.into());
+            }
         }
         let mut reader = pair.master.try_clone_reader().map_err(io)?;
         let writer = pair.master.take_writer().map_err(io)?;
@@ -183,6 +194,7 @@ impl Terminals {
                 crate::procs::kill_group(pid as i32);
             }
             let _ = t.child.kill();
+            let _ = t.child.wait();
         }
     }
 
@@ -224,7 +236,12 @@ mod tests {
                 let _ = tx.send(e);
             })
             .unwrap();
-        terms.write("t1", "echo splash-$((40+2))\n").unwrap();
+        let command = if cfg!(windows) {
+            "echo (\"splash-\" + (40+2))\r\n"
+        } else {
+            "echo splash-$((40+2))\n"
+        };
+        terms.write("t1", command).unwrap();
 
         let mut seen = String::new();
         let deadline = std::time::Instant::now() + Duration::from_secs(10);

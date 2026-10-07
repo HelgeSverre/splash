@@ -70,5 +70,5 @@ impl Customize {
 }
 
 fn home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default())
+    dirs::home_dir().unwrap_or_else(std::env::temp_dir)
 }

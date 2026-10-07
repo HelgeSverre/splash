@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/HelgeSverre/splash/actions/workflows/ci.yml"><img src="https://github.com/HelgeSverre/splash/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="Platform: macOS">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platforms: macOS, Windows and Linux">
   <img src="https://img.shields.io/badge/status-early%20development-yellow" alt="Status: early development">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
 </p>
@@ -19,13 +19,20 @@ Splash talks to agents over the [Agent Client Protocol](https://agentclientproto
 
 Each session is one agent working in one project folder. It runs in the folder itself or, in a git repository, in a separate worktree: a second checkout of the repo on its own branch.
 
-Splash is an early personal project. The desktop app targets macOS; the single-user server can run independently of a desktop window. Linux server builds and headless startup are covered by CI.
+Splash is an early personal project. Native CI covers macOS (Apple silicon and Intel), Windows x64, and Ubuntu 24.04 x64. The single-user server builds separately without GUI libraries. Provider compatibility is checked with an ACP handshake on the machine running the agents; an installed CLI alone is not proof of support.
 
 ## Screenshots
 
 Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories. The session library, ACP history, fork, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness. Server captures use the authenticated server locally with isolated data and fixture agents; they demonstrate the UI, not a live remote deployment.
 
+The platform settings captures below show a macOS browser connected to the local
+macOS demo server; they are not native Windows/Linux screenshots.
+
 <table>
+  <tr>
+    <td width="50%" valign="top"><strong>Backend host and shell diagnostics</strong><br><a href="screenshots/platform-host.jpg"><img src="screenshots/platform-host.jpg" alt="About Splash showing the backend operating system, architecture, terminal shell and isolated data location" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Client and browser shortcut conventions</strong><br><a href="screenshots/platform-shortcuts.jpg"><img src="screenshots/platform-shortcuts.jpg" alt="Keyboard settings with browser-safe default shortcuts on a macOS client" width="100%"></a></td>
+  </tr>
   <tr>
     <td width="50%" valign="top"><strong>Discover sessions through the server</strong><br><a href="screenshots/server-discovery-restored.jpg"><img src="screenshots/server-discovery-restored.jpg" alt="Successful server discovery with two fixture sessions each from Claude Code, Codex and Pi" width="100%"></a></td>
     <td width="50%" valign="top"><strong>Diagnose an adapter startup failure</strong><br><a href="screenshots/server-discovery-error.jpg"><img src="screenshots/server-discovery-error.jpg" alt="Agent initialization failure including stderr that identifies a missing adapter executable" width="100%"></a></td>
@@ -247,19 +254,54 @@ The [screenshots folder](screenshots/) also preserves the [original session capt
 
 ### Download the app
 
-On an Apple silicon Mac running macOS 14 Sonoma or later, download the ZIP from [Releases](https://github.com/HelgeSverre/splash/releases),
-extract it, and move **Splash.app** to **Applications**. Release apps are Developer
-ID signed and notarized. A SHA-256 checksum is included with each download.
+Get tagged builds from [Releases](https://github.com/HelgeSverre/splash/releases).
+Every CI run also uploads candidate packages under **Actions → CI → Artifacts**.
+CI artifacts are test builds, not signed public releases.
 
-Install and sign in to at least one [supported agent](#agents) before starting a
-session. Git is required for worktrees; Node.js and npm are needed for agents
-launched through `npx`. The app itself does not require Rust or just.
+| Platform | Artifacts | Installation / requirements |
+| --- | --- | --- |
+| macOS 14+ Apple silicon / Intel | Signed, notarized `.app` ZIP on tagged releases | Extract and move Splash to Applications. Choose `arm64` or `x86_64`. |
+| Windows 11 x64 | Per-user `-setup.exe` and portable `.zip` | Run setup or extract the ZIP. Requires [WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). Windows packages are currently unsigned. |
+| Ubuntu 24.04 x64 | `.deb`, `.AppImage`, `.tar.gz` | Prefer `sudo apt install ./Splash-*.deb` to install runtime dependencies automatically. |
+| Headless server, all four targets | `splash-server-*` ZIP or tarball | Extract and run `splash-server --help`; no windowing/WebKit runtime required. |
+
+All archives/installers have adjacent SHA-256 files. Verify with `sha256sum -c`
+on Linux, `shasum -a 256` on macOS, or `Get-FileHash -Algorithm SHA256` on Windows.
+Tagged releases assemble all platform artifacts into one **draft**, after native
+checks and package smoke tests pass. macOS signing/notarization keeps using the
+configured Apple secrets; Windows signing is not configured.
+
+#### Linux AppImage caveats
+
+The AppImage deliberately uses the host's maintained GTK/WebKit libraries. It
+is **not a universal Linux bundle**. Ubuntu 24.04 is the tested runtime baseline
+(glibc 2.39); other distributions must supply compatible libraries:
+
+```sh
+sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-0 libxdo3 libssl3t64 libfuse2t64
+chmod +x Splash-*.AppImage
+./Splash-*.AppImage
+```
+
+If FUSE is unavailable, extract with `./Splash-*.AppImage --appimage-extract`
+and run `./squashfs-root/AppRun`. Keep extracted files in a directory owned by
+your user. Never run Splash as root or disable the WebKit sandbox.
+
+Sourcefour's AppImage permission/cache lessons are encoded in the packaging
+checks: pinned, checksum-verified appimagetool; final-image launcher and binary
+permissions checked for **all users**; a glibc symbol scan; and fresh-runtime GUI
+smoke tests run as an ordinary user with a private temporary directory. These
+check the final AppImage and extracted `.deb`, not just a build-tree executable.
+The Linux webview uses GTK embedding for X11/Wayland; automated renderer smoke
+coverage currently uses Xvfb (X11), so Wayland remains a manual verification item.
 
 ### Build from source
 
 Requirements:
 
-- macOS, git, a stable Rust toolchain (rustup), Node.js 20.19+ or 22.12+, and [just](https://github.com/casey/just).
+- A supported OS, git, stable Rust (rustup), Node.js 22.12+, Python 3.11+, and [just](https://github.com/casey/just).
+- Windows: MSVC Rust target, Visual Studio C++ Build Tools, WebView2, and Git Bash for `just` recipes.
+- Ubuntu desktop builds: `sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev`. Headless builds need the compiler, pkg-config, and OpenSSL development files only.
 - At least one agent from the [table below](#agents), installed and signed in.
 - Optional: `gh`, signed in with `gh auth login --hostname github.com`, for the GitHub view and branch pull requests.
 
@@ -635,6 +677,33 @@ app/src/
 fixtures/           ACP traffic recorded from Claude Code, Codex, Glue, Pi and Pool
 tests/              mapper, actor, hub and store tests
 ```
+
+### Platform boundaries
+
+The browser chooses keyboard conventions; the backend supplies filesystem and
+shell information. A Windows browser connected to a Linux server uses Windows
+shortcut labels and Linux paths. Browser mode avoids reserved navigation keys;
+explicit saved shortcut overrides retain their meaning.
+
+Agents use native PATH/PATHEXT resolution, including Windows npm `.cmd` launchers.
+Arguments are passed separately through Rust's process API. Terminals choose
+`pwsh`, Windows PowerShell, then `COMSPEC` on Windows, and a login shell on Unix;
+`SPLASH_SHELL` overrides the executable. Windows processes and ConPTY shells
+start suspended until assigned to kill-on-close Job Objects. Unix uses process
+groups and signal cleanup on a dedicated thread. Server tokens/locks use Unix
+0600 permissions or a protected Windows owner-only DACL; reparse points/symlinks
+are rejected. Existing data-directory locations are preserved.
+
+WSL is a separate Linux host: run `splash-server` inside WSL and connect through
+the browser. Splash does not silently mix WSL and Windows paths/executables.
+Agent Settings reports whether a handshake has actually succeeded on this host.
+A successful handshake does not promise every optional provider session feature.
+
+Two small upstream patches are retained under `vendor/`: Elyra's optional
+headless/desktop boundary and GTK embedding, and portable-pty's suspended Windows
+creation option. Their `SPLASH-PATCH.md` files describe the changes and update
+procedure. They preserve the same command router and security checks in both
+build modes.
 
 ## Development
 

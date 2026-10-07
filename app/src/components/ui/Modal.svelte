@@ -55,10 +55,10 @@
 </div>
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: var(--scrim); }
+  .scrim { position: fixed; inset: 0; z-index: 60; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); place-items: center; padding: 24px; background: var(--scrim); }
   .scrim.top { place-items: start center; padding-top: 10vh; }
   .panel {
-    max-width: 100%; max-height: 100%; overflow: hidden; display: flex; flex-direction: column;
+    min-width: 0; max-width: 100%; max-height: 100%; overflow: hidden; display: flex; flex-direction: column;
     background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal);
   }
   /* The panel only takes focus when it has nothing tabbable: no ring for that. */

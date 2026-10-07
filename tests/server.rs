@@ -1,6 +1,8 @@
 use http::{Request, StatusCode};
 use splash::server::{Options, WebServer};
-use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
 
 struct TestServer {
     dir: PathBuf,
@@ -177,6 +179,7 @@ async fn serves_real_commands_and_refreshes_ipc_identity_after_restart() {
     assert_eq!(response.status(), StatusCode::OK);
     let state: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
     assert_ne!(state["token"].as_str().unwrap(), ipc);
+    #[cfg(unix)]
     assert_eq!(
         std::fs::metadata(s.dir.join("server.token"))
             .unwrap()

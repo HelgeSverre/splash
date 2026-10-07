@@ -253,7 +253,7 @@ fn is_binary(bytes: &[u8]) -> bool {
 /// Paths that change constantly and never matter to the UI.
 fn noise(rel: &Path) -> bool {
     let s = rel.to_string_lossy();
-    s.starts_with(".git/objects")
+    s.replace('\\', "/").starts_with(".git/objects")
         || s.starts_with(".git/logs")
         || rel.components().any(|c| {
             matches!(

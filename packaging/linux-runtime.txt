@@ -1,0 +1,10 @@
+Splash Linux x86_64: Ubuntu 24.04 or newer compatible distributions.
+This AppImage/tarball uses the host's maintained GTK/WebKit runtime.
+It does not bundle WebKit, glibc or graphics drivers and is not universal.
+Install prerequisites on Ubuntu 24.04:
+  sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-0 libxdo3 libssl3t64
+AppImage mounting also needs libfuse2t64. Without FUSE, use:
+  ./Splash-*.AppImage --appimage-extract
+  ./squashfs-root/AppRun
+Do not disable the WebKit sandbox or run the app as root.
+The .deb installs the runtime dependencies automatically.

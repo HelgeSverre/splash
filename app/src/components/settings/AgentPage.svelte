@@ -61,6 +61,7 @@
     </div>
 
     <SettingsGroup title="Installation">
+      <SettingsRow label="Host compatibility" value={p?.ok ? "ACP handshake verified on this host" : "Unverified on this host"} desc="Installation alone does not confirm ACP support. Refresh to test the installed adapter. WSL agents need a server running inside WSL." />
       <SettingsRow label="Installed" value={a.installed ? a.cli_path : "not found on PATH"} path={a.installed} />
       <SettingsRow label="Login" value={login} />
       <SettingsRow label="Launch" value={[a.extra_args, a.launch].filter(Boolean).join(" ")} mono />

@@ -94,12 +94,24 @@ pub fn spawn(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .process_group(0)
         .kill_on_drop(true);
+    #[cfg(unix)]
+    cmd.process_group(0);
+    #[cfg(windows)]
+    cmd.creation_flags(windows_sys::Win32::System::Threading::CREATE_SUSPENDED);
     let mut child = cmd.spawn()?;
     let pgid = child.id().map(|p| p as i32).unwrap_or(0);
     if pgid > 0 {
-        crate::procs::register(pgid);
+        if let Err(error) = crate::procs::register(pgid) {
+            let _ = child.start_kill();
+            return Err(error);
+        }
+        #[cfg(windows)]
+        if let Err(error) = crate::procs::resume(pgid) {
+            crate::procs::kill_group(pgid);
+            let _ = child.start_kill();
+            return Err(error);
+        }
     }
 
     let stdin = child.stdin.take().expect("piped stdin");

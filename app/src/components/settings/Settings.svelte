@@ -150,8 +150,12 @@
   }
   .twist:is(:hover, :focus-visible) { background: var(--raised); }
   .twist:is(:hover, :focus-visible) :global(.chev) { color: var(--text); }
-  .content { position: relative; min-height: 0; overflow: auto; user-select: text; }
+  .content { container-type: inline-size; position: relative; min-height: 0; overflow: auto; user-select: text; }
   .close { position: absolute; top: 14px; right: 14px; z-index: 2; }
   /* Room on the right for the close button. */
   .page { padding: 28px 56px 40px 36px; max-width: 800px; }
+  @media (max-width: 800px) {
+    .settings { grid-template-columns: 180px minmax(0, 1fr); }
+    .page { padding: 28px 20px 32px; }
+  }
 </style>

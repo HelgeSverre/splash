@@ -1,19 +1,20 @@
 # Standalone workspace so the project builds anywhere.
 [workspace]
+exclude = ["vendor/elyra", "vendor/portable-pty"]
 
 [package]
 name = "splash"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "A macOS workspace for coding agents, powered by the Agent Client Protocol."
+description = "A cross-platform workspace for coding agents, powered by the Agent Client Protocol."
 authors = ["Helge Sverre"]
 repository = "https://github.com/HelgeSverre/splash"
 homepage = "https://github.com/HelgeSverre/splash"
 readme = "README.md"
 # Documentation images are tracked in Git, but never shipped in the crate.
 exclude = ["/screenshots/**"]
-keywords = ["acp", "coding-agents", "desktop", "macos"]
+keywords = ["acp", "coding-agents", "desktop", "cross-platform"]
 categories = ["development-tools", "gui"]
 default-run = "splash"
 
@@ -23,9 +24,14 @@ path = "src/lib.rs"
 [[bin]]
 name = "splash"
 path = "src/main.rs"
+required-features = ["desktop"]
+
+[features]
+default = ["desktop"]
+desktop = ["elyra/desktop", "elyra/system"]
 
 [dependencies]
-elyra = { git = "https://github.com/kwhorne/elyra-framework", tag = "v0.8.0", features = ["system", "database"] }
+elyra = { path = "vendor/elyra", default-features = false, features = ["database"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
@@ -42,7 +48,7 @@ dirs = "6"
 uuid = { version = "1", features = ["v4"] }
 ignore = "0.4.33"
 notify-debouncer-full = "0.7.0"
-portable-pty = "0.9.0"
+portable-pty = { path = "vendor/portable-pty" }
 base64 = "0.23.1"
 tiny_http = "0.12.0"
 http = "1"
@@ -51,3 +57,9 @@ serde_yaml_ng = "0.10.0"
 
 [dev-dependencies]
 rmp-serde = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_Storage_FileSystem", "Win32_System_Memory"] }
+
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.3"

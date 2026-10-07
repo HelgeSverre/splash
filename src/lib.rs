@@ -11,6 +11,7 @@ pub mod github;
 pub mod github_actions;
 pub mod hub;
 pub mod json;
+pub mod platform;
 pub mod procs;
 pub mod server;
 pub mod store;

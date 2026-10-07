@@ -485,12 +485,9 @@ async fn discovery_reports_the_launcher_error_when_initialization_closes() {
     let spec = AgentSpec {
         id: "broken",
         name: "Broken adapter",
-        cli: "/bin/sh",
-        program: "/bin/sh",
-        args: &[
-            "-c",
-            "printf 'adapter executable missing: reinstall the adapter\\n' >&2; exit 127",
-        ],
+        cli: env!("CARGO_BIN_EXE_fake-acp"),
+        program: env!("CARGO_BIN_EXE_fake-acp"),
+        args: &["--fail-initialize"],
         env: &[],
         transport: Transport::Native,
         experimental: false,

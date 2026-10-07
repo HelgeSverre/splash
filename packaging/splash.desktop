@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Splash
+Comment=Workspace for ACP coding agents
+Exec=splash
+Icon=splash
+Terminal=false
+Categories=Development;
+StartupWMClass=Splash

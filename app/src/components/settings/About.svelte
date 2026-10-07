@@ -14,13 +14,15 @@
 <div class="set-page">
   <PageHeader title="Splash">
     {#snippet icon()}<img class="app-icon" src="/icon.png" alt="" width="64" height="64" />{/snippet}
-    {#snippet lede()}A macOS workspace for coding agents. Run sessions side by side, keep work in separate git worktrees, and stay in control of permissions.{/snippet}
+    {#snippet lede()}A cross-platform workspace for coding agents. Run sessions side by side, keep work in separate git worktrees, and stay in control of permissions.{/snippet}
   </PageHeader>
   <SettingsGroup>
     <SettingsRow label="Version" value={info.value?.version ?? (info.error || "Loading…")} mono />
     <SettingsRow label="Developed by" value={info.value?.author ?? "Helge Sverre"} onclick={() => openExternal("https://github.com/HelgeSverre")} />
     <SettingsRow label="License" value={info.value?.license ?? "MIT"} onclick={() => openExternal(`${repository}/blob/main/LICENSE`)} />
     <SettingsRow label="Built on" value="Elyra 0.8 · agent-client-protocol 2.2" />
+    <SettingsRow label="Host" value={info.value ? `${info.value.host_os} · ${info.value.host_arch}` : "Loading…"} />
+    <SettingsRow label="Terminal shell" value={info.value?.shell ?? "Loading…"} mono />
     <SettingsRow label="Data" value={home(prefs.data_dir ?? "")} valueTitle={prefs.data_dir} path />
   </SettingsGroup>
   <SettingsGroup title="Project">

@@ -1,7 +1,9 @@
 # splash — a small multi-agent coding harness (Elyra: Rust + Svelte)
 
+set windows-shell := ["bash", "-cu"]
+
 rata := env_var_or_default("RATA", "rata")
-dev_data := "/tmp/splash-dev"
+dev_data := env_var_or_default("SPLASH_DEV_DATA_DIR", join(env_var_or_default("TEMP", "/tmp"), "splash-dev"))
 
 # Show available recipes
 default:
@@ -84,7 +86,7 @@ release: frontend check _rata
 # Serve the real backend + UI on :4780 for headless browser testing (own data dir)
 [group('harness')]
 web *FOLDERS: frontend
-    SPLASH_DATA_DIR={{ dev_data }} cargo run --bin splash-web -- --port 4780 {{ FOLDERS }}
+    SPLASH_DATA_DIR="{{ dev_data }}" cargo run --bin splash-web -- --port 4780 {{ FOLDERS }}
 
 # Single-user server; use an SSH tunnel for remote access.
 [group('server')]
@@ -93,7 +95,7 @@ serve *ARGS: frontend
 
 [group('server')]
 server-build: frontend
-    cargo build --release --bin splash-server
+    cargo build --release --no-default-features --bin splash-server
 
 # Drive one agent headless over ACP; --record NAME writes fixtures/<agent>/NAME.jsonl
 [group('harness')]

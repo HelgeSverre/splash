@@ -4,6 +4,8 @@
 // Combos are canonical strings — modifiers in the order Ctrl, Alt, Shift, Meta,
 // then the key from `KeyboardEvent.code` ("Meta+Shift+P", "Alt+Meta+B",
 // "Ctrl+Tab"), so ⌥ doesn't turn letters into "∫".
+import { appleClient, defaultCombo } from "./platform";
+import { serverMode } from "./server.svelte";
 import { prefs, setPref } from "./prefs.svelte";
 import { modalOpen } from "./focus";
 
@@ -31,6 +33,8 @@ export const ACTIONS: Action[] = [
   { id: "app.palette", title: "Command palette", group: "App", defaults: ["Meta+Shift+P", "Meta+K"] },
   { id: "app.settings", title: "Settings", group: "App", defaults: ["Meta+,"] },
 ];
+
+for (const action of ACTIONS) action.defaults = action.defaults.map((combo) => defaultCombo(combo, appleClient, serverMode));
 
 const byId = new Map(ACTIONS.map((a) => [a.id, a]));
 
@@ -117,7 +121,7 @@ const SYMBOLS: Record<string, string> = {
 export function format(combo: string): string {
   return combo
     .split("+")
-    .map((k) => SYMBOLS[k] ?? k)
+    .map((k) => appleClient ? SYMBOLS[k] ?? k : ({ Meta: "Win", Escape: "Esc" }[k] ?? k))
     .join(" ");
 }
 
@@ -153,7 +157,7 @@ export function run(id: string): boolean {
 const OVER_MODALS = new Set(["app.settings", "app.palette"]);
 
 function dispatch(e: KeyboardEvent) {
-  if (keys.recording || e.defaultPrevented) return;
+  if (keys.recording || e.defaultPrevented || e.isComposing) return;
   const combo = comboFromEvent(e);
   if (!combo || !isUsable(combo)) return;
   const modal = modalOpen();

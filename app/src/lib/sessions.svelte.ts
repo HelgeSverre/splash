@@ -1,5 +1,6 @@
 // Projects, sessions and agents: the app's data, fed by commands and the
 // session, agents and project channels (lib/live), and which view shows.
+import { configurePaths } from "./paths";
 import { dialog } from "@elyra/runtime";
 import { api, type GithubItem, type AgentStatus, type Isolation, type Project, type SessionView, type Status } from "../bindings";
 import type { View } from "./route.svelte";
@@ -49,7 +50,8 @@ export function orderedSessions() {
 // ── loading ──────────────────────────────────────────────────────────────────
 
 export async function loadAll() {
-  const [projects, sessions, settings] = await Promise.all([api.list_projects(), api.list_sessions(), api.get_settings()]);
+  const [projects, sessions, settings, info] = await Promise.all([api.list_projects(), api.list_sessions(), api.get_settings(), api.app_info()]);
+  configurePaths(info);
   app.projects = projects;
   app.sessions = sessions;
   Object.assign(prefs, settings);

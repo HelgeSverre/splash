@@ -1,0 +1,83 @@
+name: Native packages
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: packages
+          workspaces: |
+            . -> target
+            . -> target/headless
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev pkg-config squashfs-tools
+      - name: Windows installer tool
+        if: runner.os == 'Windows'
+        run: choco install nsis --no-progress -y
+      - name: Build native binaries
+        run: |
+          npm ci --prefix app
+          npm run build --prefix app
+          cargo build --locked --release --bin splash
+          cargo build --locked --release --no-default-features --bin splash-server --target-dir target/headless
+          python scripts/test-server-http.py target/headless/release/splash-server${{ runner.os == 'Windows' && '.exe' || '' }}
+      - name: Package Windows installer / portable archive
+        if: runner.os == 'Windows'
+        run: python scripts/package-platform.py
+      - name: Package Linux deb / AppImage / tarball
+        if: runner.os == 'Linux'
+        run: |
+          scripts/fetch-appimagetool.sh
+          python scripts/package-platform.py --appimagetool target/appimage-tools/appimagetool --runtime target/appimage-tools/runtime
+          python scripts/verify-appimage.py target/distrib/*.AppImage
+          dpkg-deb --info target/distrib/*.deb
+      - name: Smoke Linux packages as an ordinary user in a fresh runtime
+        if: runner.os == 'Linux'
+        run: |
+          docker build -f packaging/linux-smoke.Dockerfile -t splash-smoke .
+          docker run --rm --security-opt apparmor=unconfined --security-opt seccomp=unconfined -v "$PWD/target/distrib:/packages:ro" splash-smoke
+      - name: Smoke Windows installed application
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem target/distrib/*-setup.exe | Select-Object -First 1
+          $destination = Join-Path $env:RUNNER_TEMP 'Splash installed'
+          $result = Start-Process $installer.FullName -ArgumentList '/S', "/D=$destination" -PassThru -Wait
+          if ($result.ExitCode -ne 0) { throw 'Installer failed' }
+          python scripts/test-desktop.py "$destination/splash.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed webview smoke failed' }
+          Start-Process "$destination/Uninstall.exe" -ArgumentList '/S' -Wait
+      - name: Package standalone macOS server
+        if: runner.os == 'macOS'
+        run: python scripts/package-platform.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splash-packages-${{ matrix.os }}
+          path: target/distrib/*
+          if-no-files-found: error

@@ -17,7 +17,11 @@ jobs:
   macos:
     name: macOS app
     needs: check
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
       contents: write
@@ -90,23 +94,35 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: splash-macos
+          name: splash-macos-${{ matrix.os }}
           path: |
             ${{ steps.package.outputs.zip }}
             ${{ steps.package.outputs.zip }}.sha256
           if-no-files-found: error
-
-      - name: Draft release
-        if: github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_ZIP: ${{ steps.package.outputs.zip }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" "$RELEASE_ZIP" "$RELEASE_ZIP.sha256" \
-            --verify-tag --draft --notes-file ".github/release-notes-${GITHUB_REF_NAME#v}.md" --title "Splash $GITHUB_REF_NAME"
 
       - name: Remove signing credentials
         if: always()
         run: |
           security delete-keychain "$RUNNER_TEMP/splash-signing.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/splash-notary.p8" "$RUNNER_TEMP/splash-signing.p12"
+
+  publish:
+    name: Assemble draft release
+    needs: [check, macos]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: splash-*
+          merge-multiple: true
+          path: release-assets
+      - name: Create draft with every platform artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --verify-tag --draft --notes-file ".github/release-notes-${GITHUB_REF_NAME#v}.md" --title "Splash $GITHUB_REF_NAME"

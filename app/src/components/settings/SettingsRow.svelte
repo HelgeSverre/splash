@@ -80,4 +80,9 @@
   }
   .link .controls { padding-right: 14px; }
   .link:has(> .main:is(:hover, :focus-visible)) { background: var(--row-hover); }
+  @container (max-width: 460px) {
+    .row, .main { flex-wrap: wrap; gap: 8px; }
+    .value, .value.path { max-width: 100%; }
+    .row > .value, .main > .value { flex-basis: 100%; }
+  }
 </style>

@@ -115,8 +115,7 @@ async fn version(spec: &AgentSpec) -> Option<String> {
 async fn auth(spec: &AgentSpec) -> (Auth, Option<String>) {
     match spec.auth {
         AuthCheck::File(rel) => {
-            let home = std::env::var("HOME").unwrap_or_default();
-            if std::path::Path::new(&home).join(rel).exists() {
+            if dirs::home_dir().is_some_and(|home| home.join(rel).exists()) {
                 (Auth::Ok, None)
             } else {
                 (

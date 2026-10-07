@@ -1,29 +1,28 @@
-// Display helpers for paths inside a session's folder.
+// Display only. Backend containment checks always use native Path components.
+type Host = { host_os: string; home_dir: string | null };
+let host: Host = { host_os: '', home_dir: null };
+export function configurePaths(info: Host) { host = info; }
 
-export const home = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
-
-/** `cwd`-relative when inside it, otherwise ~-abbreviated. */
-const canonical = (path: string) => path.replace(/^\/(tmp|var|etc)(?=\/|$)/, "/private/$1");
-
-export function rel(path: string, cwd: string | undefined): string {
-  if (cwd) {
-    path = canonical(path);
-    cwd = canonical(cwd);
-    const base = cwd.endsWith("/") ? cwd : cwd + "/";
-    if (path.startsWith(base)) return path.slice(base.length);
-    if (path === cwd) return ".";
-  }
-  return home(path);
+function normalized(path: string): string {
+  if (host.host_os === 'windows') return path.replace(/^\\\\\?\\UNC\\/i, '\\\\').replace(/^\\\\\?\\/, '').replaceAll('\\', '/');
+  return host.host_os === 'macos' ? path.replace(/^\/(tmp|var|etc)(?=\/|$)/, '/private/$1') : path;
 }
-
-/** Replace absolute session paths inside free text (commands, titles). */
+function comparable(path: string): string { return host.host_os === 'windows' ? path.toLowerCase() : path; }
+function within(path: string, root: string): string | undefined {
+  const p = normalized(path), r = normalized(root).replace(/\/+$/, '');
+  if (comparable(p) === comparable(r)) return '.';
+  return comparable(p).startsWith(comparable(r) + '/') ? p.slice(r.length + 1) : undefined;
+}
+export function home(path: string): string {
+  const tail = host.home_dir ? within(path, host.home_dir) : undefined;
+  return tail === undefined ? path : tail === '.' ? '~' : `~/${tail}`;
+}
+export function rel(path: string, cwd: string | undefined): string { return (cwd ? within(path, cwd) : undefined) ?? home(path); }
 export function relText(text: string, cwd: string | undefined): string {
   if (!cwd) return text;
-  const base = cwd.endsWith("/") ? cwd : cwd + "/";
-  // macOS tools may resolve /tmp and /var through their /private aliases.
-  const resolved = canonical(base);
-  const alias = resolved.replace(/^\/private\/(tmp|var|etc)\//, "/$1/");
-  return text.split(resolved).join("").split(alias).join("");
+  const bases = new Set([cwd.replace(/[\\/]$/, '') + (host.host_os === 'windows' ? '\\' : '/'), normalized(cwd).replace(/\/$/, '') + '/']);
+  if (host.host_os === 'macos') for (const base of [...bases]) bases.add(base.replace(/^\/private\/(tmp|var|etc)\//, '/$1/'));
+  for (const base of bases) text = text.split(base).join('');
+  return text;
 }
-
-export const basename = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
+export const basename = (path: string) => normalized(path).split('/').filter(Boolean).pop() ?? path;

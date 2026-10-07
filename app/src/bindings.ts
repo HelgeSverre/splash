@@ -129,6 +129,10 @@ export type AppInfo = {
 	author: string,
 	repository: string,
 	license: string,
+	host_os: string,
+	host_arch: string,
+	home_dir: string | null,
+	shell: string,
 };
 
 export type Attention = {
@@ -607,6 +611,9 @@ export const api = {
   },
   fork_session(id: string): Promise<SessionView> {
     return invoke("fork_session", id);
+  },
+  frontend_ready(): Promise<null> {
+    return invoke("frontend_ready");
   },
   get_settings(): Promise<{ [key in string]: string }> {
     return invoke("get_settings");

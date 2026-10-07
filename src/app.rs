@@ -33,6 +33,19 @@ pub struct AppInfo {
     author: String,
     repository: String,
     license: String,
+    host_os: String,
+    host_arch: String,
+    home_dir: Option<String>,
+    shell: String,
+}
+
+/// CI readiness signal, enabled only by a host-selected isolated marker path.
+#[command]
+fn frontend_ready(_ctx: Ctx) -> elyra::Result<()> {
+    if let Some(path) = std::env::var_os("SPLASH_SMOKE_READY") {
+        std::fs::write(path, "frontend-ready").map_err(|e| elyra::Error::Io(e.to_string()))?;
+    }
+    Ok(())
 }
 
 #[command]
@@ -43,6 +56,10 @@ fn app_info(_ctx: Ctx) -> AppInfo {
         author: env!("CARGO_PKG_AUTHORS").into(),
         repository: env!("CARGO_PKG_REPOSITORY").into(),
         license: env!("CARGO_PKG_LICENSE").into(),
+        host_os: std::env::consts::OS.into(),
+        host_arch: std::env::consts::ARCH.into(),
+        home_dir: dirs::home_dir().map(|p| p.to_string_lossy().into_owned()),
+        shell: crate::agents::env::shell().0.to_string_lossy().into_owned(),
     }
 }
 
@@ -545,6 +562,7 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
         .event::<TermEvent>("term")
         .commands(commands![
             app_info,
+            frontend_ready,
             browse_folders,
             github_catalog,
             github_actions_runs,

@@ -3,3 +3,5 @@
 app/dist/*
 !app/dist/.gitkeep
 .DS_Store
+
+__pycache__/

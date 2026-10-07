@@ -5,4 +5,4 @@
   let { path, size = "md" }: { path: string | null | undefined; size?: IconButtonSize } = $props();
 </script>
 
-<IconButton title="Reveal in Finder" icon="folder" {size} disabled={!path} onclick={(e) => { e.stopPropagation(); if (path) openExternal(path); }} />
+<IconButton title="Open in file manager" icon="folder" {size} disabled={!path} onclick={(e) => { e.stopPropagation(); if (path) openExternal(path); }} />

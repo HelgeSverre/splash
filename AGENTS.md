@@ -43,3 +43,18 @@ For long-lived demo previews, copy required server and fixture-agent executables
 into the isolated demo directory. Do not leave launchers pointing into `target/`,
 which build cleanup may remove. Before handing off a preview, exercise its main
 actions (including **Find sessions**) with the same environment it will retain.
+
+## Cross-platform changes
+
+Keep browser/client conventions separate from backend-host filesystem semantics.
+Exercise native CI on macOS arm64/x64, Windows MSVC, and Ubuntu x64. Check both
+default desktop and `--no-default-features` headless builds. Do not claim provider
+support from CLI detection alone. Document any unverified platform/runtime.
+
+For packaging changes, test finished installers/archives, including a native
+webview readiness round trip. AppImage checks must inspect final internal 0755
+launcher/binary permissions and run as a different ordinary user with a fresh
+TMPDIR; owner-only `test -x` is insufficient. Never disable WebKit's sandbox to
+make smoke tests pass. Keep external packaging tools pinned and checksum verified.
+The screenshot policy above also applies to platform-dependent UI; label captures
+by actual client/host and never present browser emulation as native OS evidence.

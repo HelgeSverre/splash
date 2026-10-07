@@ -29,6 +29,29 @@ async fn main() {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
+    if args.iter().any(|arg| arg == "--fail-initialize") {
+        eprintln!("adapter executable missing: reinstall the adapter");
+        std::process::exit(127);
+    }
+    if let Some(path) = option("--heartbeat-child") {
+        loop {
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .unwrap();
+            file.write_all(b".").unwrap();
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+    if let Some(path) = option("--spawn-heartbeat-child") {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--heartbeat-child", &path])
+            .spawn()
+            .unwrap();
+        let _ = child.wait();
+        return;
+    }
     let audit = option("--audit");
     let required_root = option("--require-root");
     let state = option("--state");

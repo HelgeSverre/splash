@@ -903,15 +903,38 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             let hub = crate::hub::Hub::new(dir.clone(), elyra::EventBus::new());
             let mut github = Github::new(hub.core.clone());
-            github.executable = Some(dir.join("gh"));
+            github.executable = Some(dir.join(if cfg!(windows) { "gh.cmd" } else { "gh" }));
             Self { dir, github }
         }
         fn response(&self, json: &str, success: bool) {
-            use std::os::unix::fs::PermissionsExt;
-            let script = format!("#!/bin/sh\ncd '{}'\nprintf '%s\\n' \"$@\" > args\ncat > input\ncat <<'RESPONSE'{}\n{json}\nRESPONSE\nexit {}\n", self.dir.display(), if success { "" } else { " >&2" }, if success { 0 } else { 1 });
-            let path = self.dir.join("gh");
-            std::fs::write(&path, script).unwrap();
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+            std::fs::write(self.dir.join("response.json"), json).unwrap();
+            std::fs::write(self.dir.join("status"), if success { "0" } else { "1" }).unwrap();
+            std::fs::write(self.dir.join("fixture.py"), r#"import pathlib, sys
+root = pathlib.Path(__file__).parent
+(root / 'args').write_text('\n'.join(sys.argv[1:]), encoding='utf-8')
+if '--input' in sys.argv:
+    (root / 'input').write_text(sys.stdin.read(), encoding='utf-8')
+status = int((root / 'status').read_text())
+print((root / 'response.json').read_text(encoding='utf-8'), file=sys.stderr if status else sys.stdout)
+sys.exit(status)
+"#).unwrap();
+            #[cfg(windows)]
+            std::fs::write(
+                self.dir.join("gh.cmd"),
+                "@echo off\r\npython \"%~dp0fixture.py\" %*\r\n",
+            )
+            .unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let path = self.dir.join("gh");
+                std::fs::write(
+                    &path,
+                    "#!/bin/sh\nexec python3 \"$(dirname \"$0\")/fixture.py\" \"$@\"\n",
+                )
+                .unwrap();
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+            }
         }
     }
     impl Drop for Fixture {

@@ -83,15 +83,10 @@ fn invalid(message: impl Into<String>) -> io::Error {
 
 /// Stable across service restarts, never included in application HTML or URLs.
 fn load_token(dir: &std::path::Path) -> io::Result<String> {
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use std::io::Read;
     std::fs::create_dir_all(dir)?;
     let path = dir.join("server.token");
-    match std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&path)
-    {
+    match crate::platform::private_file::open(&path, true) {
         Ok(mut file) => {
             let token = format!(
                 "{}{}",
@@ -103,13 +98,9 @@ fn load_token(dir: &std::path::Path) -> io::Result<String> {
             Ok(token)
         }
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-            let meta = std::fs::symlink_metadata(&path)?;
-            if !meta.is_file() || meta.permissions().mode() & 0o077 != 0 {
-                return Err(invalid(
-                    "server.token must be a regular owner-only file; use chmod 600",
-                ));
-            }
-            let token = std::fs::read_to_string(path)?.trim().to_string();
+            let mut contents = String::new();
+            crate::platform::private_file::open(&path, false)?.read_to_string(&mut contents)?;
+            let token = contents.trim().to_string();
             if token.len() != 64 || !token.bytes().all(|c| c.is_ascii_hexdigit()) {
                 return Err(invalid(
                     "Invalid server.token; expected 64 hexadecimal characters",
@@ -372,15 +363,8 @@ fn secure_headers(mut response: Response<Vec<u8>>) -> Response<Vec<u8>> {
 
 /// Serve independently of browser connections. The service owns agent lifetimes.
 pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use std::os::unix::fs::OpenOptionsExt;
     std::fs::create_dir_all(&options.data_dir)?;
-    let lock = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
-        .open(options.data_dir.join("server.lock"))?;
+    let lock = crate::platform::private_file::open(&options.data_dir.join("server.lock"), false)?;
     lock.try_lock()
         .map_err(|_| invalid("Another Splash server is using this data directory"))?;
     let rt = tokio::runtime::Builder::new_multi_thread()

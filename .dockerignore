@@ -1,0 +1,6 @@
+*
+!scripts/
+!scripts/test-desktop.py
+!scripts/test-server-http.py
+!packaging/
+!packaging/smoke-linux.sh

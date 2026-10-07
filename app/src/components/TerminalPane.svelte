@@ -88,7 +88,7 @@
       allowProposedApi: false,
       scrollback: 5000,
       theme: themeFromCss(),
-      macOptionIsMeta: true,
+      macOptionIsMeta: appleClient,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -115,6 +115,7 @@
 </script>
 
 <script lang="ts">
+  import { appleClient } from "../lib/platform";
   import { onDestroy } from "svelte";
 
   let { session }: { session: string } = $props();
