@@ -111,6 +111,27 @@ async fn main() {
     };
     let init = result_of("initialize");
     let new_session = result_of("session/new");
+    // Updates the agent sent while creating the session, before and after its
+    // result and before the first prompt (notices, command lists).
+    let (notices_before, notices_after) = {
+        let start = rows
+            .iter()
+            .position(|r| r["dir"] == "out" && r["line"]["method"] == "session/new");
+        let mut before = Vec::new();
+        let mut after = Vec::new();
+        let mut answered = false;
+        for r in start.map_or(&rows[..0], |i| &rows[i + 1..]) {
+            if r["dir"] == "out" {
+                break;
+            }
+            if r["line"]["method"] == "session/update" {
+                if answered { &mut after } else { &mut before }.push(r["line"].clone());
+            } else if r["line"].get("result").is_some() {
+                answered = true;
+            }
+        }
+        (before, after)
+    };
     let listed = result_of("session/list");
     let replay: Vec<Value> = rows
         .iter()
@@ -175,7 +196,11 @@ async fn main() {
         }
         match method {
             "initialize" => send(json!({"jsonrpc": "2.0", "id": id, "result": init})),
-            "session/new" => send(json!({"jsonrpc": "2.0", "id": id, "result": new_session})),
+            "session/new" => {
+                notices_before.iter().cloned().for_each(send);
+                send(json!({"jsonrpc": "2.0", "id": id, "result": new_session}));
+                notices_after.iter().cloned().for_each(send);
+            }
             "session/list" => {
                 let mut result = if msg["params"]["cursor"] == "page-2" {
                     json!({"sessions":[]})

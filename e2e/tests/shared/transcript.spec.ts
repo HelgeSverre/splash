@@ -181,3 +181,17 @@ test("an agent that exits mid-turn leaves an error and a recovery item", async (
   await app.expectStatus("idle");
   await expect(page.getByRole("region", { name: "Needs recovery" })).toHaveCount(0);
 });
+
+test("an agent's notice before the first turn is shown folded", async ({ splash }) => {
+  const { app } = splash;
+  // Pool reports a broken MCP server while creating the session.
+  splash.world.agents.fixture("claude", "pool/read.jsonl");
+  await app.newSession({ where: "in_place" });
+  const notice = app.entries("notice");
+  await expect(notice).toContainText("Agent notice");
+  await expect(notice).toContainText("MCP server failed to initialize:");
+  await expect(notice.locator(".notice-text")).toHaveCount(0);
+  await notice.getByRole("button").click();
+  await expect(notice.locator(".notice-text")).toContainText("docs (configured in ~/.config/poolside/settings.yaml)");
+  await expect(app.transcript.getByText("What should we work on?")).toBeVisible();
+});
