@@ -52,6 +52,24 @@ test.describe("agents", () => {
     await expect(overview("Codex")).toHaveText("not probed");
   });
 
+  test.describe("Amp", () => {
+    test.use({ agents: ["amp"] });
+
+    test("its adapter's handshake reports Amp's modes", async ({ splash }) => {
+      const { app } = splash;
+      const settings = new Settings(app);
+      await settings.open("Amp");
+      await expect(settings.value("Launch")).toHaveText("npx -y amp-acp@0.9.0");
+      await expect(settings.value("Login")).toHaveText("unknown");
+      await settings.dialog.getByRole("button", { name: "Refresh Amp" }).click();
+      await expect(settings.value("Host compatibility")).toHaveText("ACP handshake verified on this host");
+      await expect(settings.value("Reports as")).toHaveText(/^Amp ACP Agent 0\.9\.0 · protocol v1 · /);
+      await expect(settings.value("Amp Mode")).toHaveText("Medium");
+      await expect(settings.row("Amp Mode")).toContainText("4 choices");
+      await expect(settings.value("Permissions")).toHaveText("Default");
+    });
+  });
+
   test("a failed handshake shows the agent's error", async ({ splash }) => {
     const { app, page, world } = splash;
     world.agents.flags("claude", "--fail-initialize");

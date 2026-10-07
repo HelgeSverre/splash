@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { FIXTURES } from "./paths.ts";
 
-export type AgentId = "claude" | "codex" | "glue" | "pool" | "pi";
+export type AgentId = "claude" | "codex" | "glue" | "pool" | "pi" | "amp";
 
 export type Launch = { agent: AgentId; argv: string[]; cwd: string; pid: number };
 export type Request = { id?: number; method?: string; params?: any; result?: any };

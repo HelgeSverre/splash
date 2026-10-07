@@ -11,6 +11,7 @@ const AGENT_NAMES: Record<AgentId, string> = {
   glue: "Glue",
   pool: "Pool",
   pi: "Pi",
+  amp: "Amp",
 };
 
 export type Status = "starting" | "idle" | "running" | "awaiting_permission" | "error" | "exited";

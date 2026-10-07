@@ -1,6 +1,6 @@
 #!/bin/sh
 # One fake for every agent CLI the end-to-end tests install. Link it as
-# `claude`, `codex`, `glue`, `pool`, `pi` or `npx` in a folder on SPLASH_PATH.
+# `claude`, `codex`, `glue`, `pool`, `pi`, `amp` or `npx` in a folder on SPLASH_PATH.
 #
 # Version and login checks answer like the real CLIs. An ACP launch
 # (`npx … <adapter>`, `glue acp`, `pool acp`) is logged to
@@ -48,6 +48,7 @@ npx)
 	*claude-agent-acp*) launch claude "$@" ;;
 	*codex-acp*) launch codex "$@" ;;
 	*pi-acp*) launch pi "$@" ;;
+	*amp-acp*) launch amp "$@" ;;
 	*)
 		echo "npx (e2e fake): no fake for $*" >&2
 		exit 1
@@ -77,6 +78,12 @@ codex)
 		fi
 		echo "Logged in using an API key"
 		;;
+	*) exit 2 ;;
+	esac
+	;;
+amp)
+	case "$*" in
+	--version) echo "0.0.1791403257-g05ffa9 (released 2026-10-07T20:00:57.000Z, 2h ago)" ;;
 	*) exit 2 ;;
 	esac
 	;;

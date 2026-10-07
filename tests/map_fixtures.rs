@@ -136,7 +136,7 @@ fn claude_edit_runs_tools_in_order() {
 
 #[test]
 fn every_agent_fixture_maps_to_a_finished_turn() {
-    for agent in ["claude", "codex", "pool", "pi", "glue"] {
+    for agent in ["claude", "codex", "pool", "pi", "glue", "amp"] {
         let t = replay(agent, "read");
         assert!(
             matches!(t.entries().last(), Some(Entry::TurnEnd { .. })),
@@ -380,4 +380,29 @@ fn replay_preserves_user_chunks_turn_boundaries_and_message_ids() {
     assert!(matches!(&entries[4], Entry::User { text } if text == "Next question"));
     assert!(matches!(&entries[5], Entry::Tool { id, .. } if id == "t1"));
     assert!(matches!(&entries[6], Entry::Agent { text, streaming: false } if text == "Answer"));
+}
+
+/// Amp's adapter offers its modes as the model picker and its permission
+/// override as the mode picker; tools run without asking by default.
+#[test]
+fn amp_offers_modes_and_permissions_as_pickers() {
+    let t = replay("amp", "read");
+    let picker = |category: &str| {
+        t.meta
+            .options
+            .iter()
+            .find(|o| o.category == category)
+            .map(|o| (o.id.as_str(), o.current.as_str(), o.choices.len()))
+    };
+    assert_eq!(picker("model"), Some(("amp-mode", "medium", 4)));
+    assert_eq!(picker("mode"), Some(("permission", "default", 2)));
+    assert_eq!(
+        tools(&t),
+        [(
+            "other".into(),
+            "completed".into(),
+            Some("cat -n calc.py".into())
+        )]
+    );
+    assert_eq!(kinds(&t), ["user", "tool", "agent", "turn_end"]);
 }

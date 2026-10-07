@@ -192,3 +192,28 @@ test("an agent's notice before the first turn is shown folded", async ({ splash 
   await expect(notice.locator(".notice-text")).toContainText("docs (configured in ~/.config/poolside/settings.yaml)");
   await expect(app.transcript.getByText("What should we work on?")).toBeVisible();
 });
+
+test.describe("Amp", () => {
+  test.use({ agents: ["amp"] });
+
+  test("runs through its adapter, with its modes and permissions as pickers", async ({ splash }) => {
+    const { app, page, world } = splash;
+    await app.newSession({ agent: "amp", where: "in_place" });
+    expect(world.agents.launches("amp").map((l) => l.argv)).toEqual([["-y", "amp-acp@0.9.0"]]);
+    await expect(app.picker("Amp Mode")).toHaveText("Medium");
+    await expect(app.picker("Permissions")).toHaveText("Default");
+
+    // Amp runs tools without asking unless permissions are configured.
+    await app.prompt("What bug does calc.py have?");
+    await expect(app.entries("tool")).toContainText("cat -n calc.py");
+    await expect(app.entries("permission")).toHaveCount(0);
+    await expect(app.entries("agent").last()).toContainText("subtracts 1 from the true mean");
+
+    await app.picker("Amp Mode").click();
+    await page.getByRole("listbox", { name: "Amp Mode" }).getByRole("option", { name: /^Low/ }).click();
+    await expect(app.picker("Amp Mode")).toHaveText("Low");
+    await expect.poll(() => world.agents.requests("amp", "session/set_config_option").map((r) => r.params)).toEqual([
+      expect.objectContaining({ configId: "amp-mode", value: "low" }),
+    ]);
+  });
+});

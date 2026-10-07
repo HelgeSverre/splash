@@ -8,6 +8,7 @@
   import junie from "../assets/agents/junie.svg?raw";
   import opencode from "../assets/agents/opencode.svg?raw";
   import letta from "../assets/agents/letta.svg?raw";
+  import amp from "../assets/agents/amp.svg?raw";
   import autohand from "../assets/agents/autohand.svg?raw";
   import devin from "../assets/agents/devin.svg?raw";
   import dirac from "../assets/agents/dirac.svg?raw";
@@ -20,7 +21,7 @@
   import vibe from "../assets/agents/vibe.svg?raw";
 
   const icons: Record<string, string> = { claude, codex, glue, pi, pool, copilot, junie, opencode, letta,
-    autohand, devin, dirac, droid, gemini, goose, hermes, kimi, openhands, vibe,
+    amp, autohand, devin, dirac, droid, gemini, goose, hermes, kimi, openhands, vibe,
   };
   let { id, size = 14 }: { id: string; size?: number } = $props();
 </script>

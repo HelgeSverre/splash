@@ -8,7 +8,7 @@ import { initRepo, write } from "./git.ts";
 import { BINARIES, E2E, FIXTURES } from "./paths.ts";
 
 export type WorldOptions = {
-  /** Agent CLIs on the PATH. Adapter agents (claude, codex, pi) also get `npx`. */
+  /** Agent CLIs on the PATH. Adapter agents (claude, codex, pi, amp) also get `npx`. */
   agents: AgentId[];
   /** Put the fake `gh` on the PATH. */
   gh: boolean;
@@ -33,7 +33,7 @@ export class World {
     );
     const fake = join(E2E, "fakes", "agent");
     const names = new Set<string>(options.agents);
-    if (options.agents.some((a) => a === "claude" || a === "codex" || a === "pi")) names.add("npx");
+    if (options.agents.some((a) => a === "claude" || a === "codex" || a === "pi" || a === "amp")) names.add("npx");
     for (const name of names) symlinkSync(fake, join(this.bin, name));
     if (options.gh) symlinkSync(join(E2E, "fakes", "gh"), join(this.bin, "gh"));
     this.agents = new Agents(this.control);

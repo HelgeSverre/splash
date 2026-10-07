@@ -74,6 +74,19 @@ pub const AGENTS: &[AgentSpec] = &[
         auth: AuthCheck::Command(&["glue", "doctor"]),
     },
     AgentSpec {
+        id: "amp",
+        name: "Amp",
+        cli: "amp",
+        program: "npx",
+        args: &["-y", "amp-acp@0.9.0"],
+        env: &[],
+        transport: Transport::Adapter,
+        experimental: false,
+        // `amp account list` exits 0 with no accounts, and `AMP_API_KEY`
+        // logins have none; the probe tells.
+        auth: AuthCheck::None,
+    },
+    AgentSpec {
         id: "autohand",
         name: "Autohand",
         cli: "autohand",
