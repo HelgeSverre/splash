@@ -712,9 +712,10 @@ the browser. Splash does not silently mix WSL and Windows paths/executables.
 Agent Settings reports whether a handshake has actually succeeded on this host.
 A successful handshake does not promise every optional provider session feature.
 
-Two small upstream patches are retained under `vendor/`: Elyra's optional
-headless/desktop boundary and GTK embedding, and portable-pty's suspended Windows
-creation option. Their `SPLASH-PATCH.md` files describe the changes and update
+Three small upstream patches are retained under `vendor/`: Elyra's optional
+headless/desktop boundary and GTK embedding, portable-pty's suspended Windows
+creation option, and a tiny_http worker-pool fix that stopped bursts of browser
+connections from stalling requests. Their `SPLASH-PATCH.md` files describe the changes and update
 procedure. They preserve the same command router and security checks in both
 build modes.
 

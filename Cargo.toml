@@ -1,6 +1,6 @@
 # Standalone workspace so the project builds anywhere.
 [workspace]
-exclude = ["vendor/elyra", "vendor/portable-pty"]
+exclude = ["vendor/elyra", "vendor/portable-pty", "vendor/tiny_http"]
 
 [package]
 name = "splash"
@@ -51,7 +51,7 @@ ignore = "0.4.33"
 notify-debouncer-full = "0.7.0"
 portable-pty = { path = "vendor/portable-pty" }
 base64 = "0.23.1"
-tiny_http = "0.12.0"
+tiny_http = { path = "vendor/tiny_http" }
 http = "1"
 toml = "1.1.6"
 serde_yaml_ng = "0.10.0"
