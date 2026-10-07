@@ -3,7 +3,7 @@
 	import CodeBlock from '#lib/components/CodeBlock.svelte';
 	import SplashMark from '$splash/components/SplashMark.svelte';
 	import { OS_NAMES, PLATFORMS, RELEASES, SERVER, VERSION, detect, primaryFor, type Os } from '#lib/releases.ts';
-	import { latest, loadLatest, resolve } from '#lib/latest.svelte.ts';
+	import { available, latest, loadLatest, resolve } from '#lib/latest.svelte.ts';
 	import { REPO, RELEASES_URL } from '#lib/site.ts';
 	import type { PageProps } from './$types';
 
@@ -19,12 +19,12 @@
 	});
 
 	const platform = $derived(PLATFORMS.find((p) => p.os === os)!);
-	const primary = $derived(primaryFor(os, intel));
+	const primary = $derived(primaryFor(os, intel, available));
 	const primaryFile = $derived(resolve(primary));
 	const date = (iso: string) => (iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }) : '');
 
 	const verify: Record<Os, { label: string; code: string }> = {
-		macos: { label: 'Verify on macOS', code: `shasum -a 256 -c ${primaryFor('macos').file(latest.version)}.sha256` },
+		macos: { label: 'Verify on macOS', code: `shasum -a 256 -c ${primaryFor('macos', false, available).file(latest.version)}.sha256` },
 		windows: { label: 'Verify on Windows (PowerShell)', code: `Get-FileHash -Algorithm SHA256 .\\${primaryFor('windows').file(latest.version)}` },
 		linux: { label: 'Verify on Linux', code: `sha256sum -c ${primaryFor('linux').file(latest.version)}.sha256` }
 	};
@@ -65,7 +65,7 @@
 					<h2 class="name">{p.name}</h2>
 					<p class="requires">{p.requires}</p>
 					<ul>
-						{#each p.downloads as d (d.label)}
+						{#each p.downloads.filter(available) as d (d.label)}
 							{@const f = resolve(d)}
 							<li>
 								<a class="file-link" href={f.url}><span class="label">{d.label}</span><span class="ext">{d.detail}</span></a>

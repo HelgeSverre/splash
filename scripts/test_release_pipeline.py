@@ -47,7 +47,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_complete_assets_and_checksums_required(self):
         self.assets()
-        self.assertEqual(len(pipeline.verify_assets(self.root, '1.2.3')), 22)
+        self.assertEqual(len(pipeline.verify_assets(self.root, '1.2.3')), 24)
         first = self.root / sorted(pipeline.expected_assets('1.2.3'))[0]
         first.write_bytes(b'corrupt')
         with self.assertRaisesRegex(ValueError, 'Invalid checksum'):

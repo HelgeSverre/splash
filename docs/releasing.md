@@ -20,6 +20,7 @@ Run from the Splash repository root using the local, ignored signing assets:
 python3 scripts/release.py setup \
   --application-p12 signing/developer-id-application.p12 \
   --password-file signing/password.txt \
+  --installer-p12 signing/developer-id-installer-release.p12 \
   --notary-key signing/AuthKey_M6BZU43Q98.p8 \
   --issuer-file signing/issuer-id.txt \
   --repo HelgeSverre/splash \
@@ -31,9 +32,12 @@ password only decrypts the `.p12` export. Signing assets live in the local
 `signing/` directory, including `issuer-id.txt`. This directory is ignored by Git,
 excluded from Cargo packages and Docker build contexts, and is not an application
 bundle resource. Keep its permissions at `0700` and its files at `0600`. A fresh
-clone needs these files provisioned separately; they are never committed. The
-installer certificate assets are retained locally but are not needed for the
-macOS app ZIP. Local non-secret configuration is written to
+clone needs these files provisioned separately; they are never committed.
+`developer-id-installer-release.p12` is built from `developer-id-installer.key`
+and `developerID_installer.cer` with the same password file
+(`openssl pkcs12 -export -legacy … -passout file:signing/password.txt`); the
+original installer export has a different password. `--installer-password-file`
+accepts a separate password when needed. Local non-secret configuration is written to
 `~/.config/splash/release.json` (override with `SPLASH_RELEASE_CONFIG`), and the
 default Keychain profile is `splash-notary`. The default GitHub repository comes
 from the current checkout; `--repo` makes the destination explicit.
@@ -59,6 +63,8 @@ other desktop projects:
 | --- | --- |
 | `APPLE_APPLICATION_CERTIFICATE_BASE64` | Base64-encoded Developer ID Application certificate and private key exported as `.p12` |
 | `APPLE_APPLICATION_CERTIFICATE_PASSWORD` | The `.p12` password, as plain text (not base64) |
+| `APPLE_INSTALLER_CERTIFICATE_BASE64` | Base64-encoded Developer ID Installer certificate and private key as `.p12`, for the `.pkg` |
+| `APPLE_INSTALLER_CERTIFICATE_PASSWORD` | That `.p12`'s password, as plain text |
 | `APPLE_NOTARY_KEY_BASE64` | Base64-encoded App Store Connect `.p8` API key |
 
 Configure these repository variables:
@@ -66,12 +72,24 @@ Configure these repository variables:
 | Variable | Value |
 | --- | --- |
 | `APPLE_APPLICATION_SIGNING_IDENTITY` | Full certificate identity, such as `Developer ID Application: Liseth Solutions AS (9Z2L5FBZS3)` |
+| `APPLE_INSTALLER_SIGNING_IDENTITY` | Full installer identity, such as `Developer ID Installer: Liseth Solutions AS (9Z2L5FBZS3)` |
 | `APPLE_NOTARY_KEY_ID` | App Store Connect API key ID |
 | `APPLE_NOTARY_ISSUER_ID` | App Store Connect issuer UUID |
 
 The workflow imports credentials into a temporary runner keychain and removes
 them even if the build fails. Missing credentials fail the release; there is no
-unsigned fallback. No Installer certificate is needed for the app ZIP.
+unsigned fallback.
+
+### Universal macOS installer
+
+After both macOS jobs finish, **macOS universal installer** runs
+`scripts/package-pkg.sh` on their notarized ZIPs. It merges the two executables
+with `lipo` (Splash has one executable and no frameworks), re-signs and notarizes
+the universal app, staples it, and wraps it in `Splash-VERSION-macos-universal.pkg`:
+a non-relocatable package that installs into `/Applications`, requires macOS 14,
+and is signed with the Developer ID Installer identity, notarized and stapled.
+The script verifies the expanded payload before publishing. The per-architecture
+ZIPs stay in the release for people who prefer to drag the app into place.
 
 ## Automated release lifecycle
 

@@ -100,9 +100,71 @@ jobs:
           security delete-keychain "$RUNNER_TEMP/splash-signing.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/splash-notary.p8" "$RUNNER_TEMP/splash-signing.p12"
 
+  # One universal installer from the two notarized ZIPs above: lipo merges the
+  # executables, then the app and the .pkg are each signed and notarized.
+  macos-pkg:
+    name: macOS universal installer
+    needs: macos
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      APPLE_APPLICATION_SIGNING_IDENTITY: ${{ vars.APPLE_APPLICATION_SIGNING_IDENTITY }}
+      APPLE_INSTALLER_SIGNING_IDENTITY: ${{ vars.APPLE_INSTALLER_SIGNING_IDENTITY }}
+      APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: splash-macos-macos-*
+          merge-multiple: true
+          path: macos-zips
+
+      - name: Set temporary signing paths
+        run: |
+          echo "APPLE_SIGNING_KEYCHAIN=$RUNNER_TEMP/splash-signing.keychain-db" >> "$GITHUB_ENV"
+          echo "APPLE_NOTARY_KEY_PATH=$RUNNER_TEMP/splash-notary.p8" >> "$GITHUB_ENV"
+
+      - name: Import signing credentials
+        env:
+          APPLE_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.APPLE_APPLICATION_CERTIFICATE_BASE64 }}
+          APPLE_APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_APPLICATION_CERTIFICATE_PASSWORD }}
+          APPLE_INSTALLER_CERTIFICATE_BASE64: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_BASE64 }}
+          APPLE_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
+        run: |
+          [[ -n "$APPLE_INSTALLER_CERTIFICATE_BASE64" ]] || { echo "Missing release setting: APPLE_INSTALLER_CERTIFICATE_BASE64 (see docs/releasing.md)" >&2; exit 1; }
+          scripts/import-signing-assets.sh
+
+      - name: Build, sign, notarize, and verify the installer
+        id: package
+        run: |
+          arm=$(ls macos-zips/Splash-*-macos-arm64.zip)
+          x86=$(ls macos-zips/Splash-*-macos-x86_64.zip)
+          version=${arm#macos-zips/Splash-}
+          version=${version%-macos-arm64.zip}
+          pkg="target/distrib/Splash-${version}-macos-universal.pkg"
+          scripts/package-pkg.sh "$arm" "$x86" "$pkg"
+          echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splash-macos-pkg
+          path: |
+            ${{ steps.package.outputs.pkg }}
+            ${{ steps.package.outputs.pkg }}.sha256
+          if-no-files-found: error
+
+      - name: Remove signing credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/splash-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/splash-notary.p8" "$RUNNER_TEMP/splash-signing.p12" "$RUNNER_TEMP/splash-installer.p12"
+
   publish:
     name: Publish complete release
-    needs: [check, macos]
+    needs: [check, macos, macos-pkg]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     permissions:

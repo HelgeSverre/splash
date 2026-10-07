@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Import release credentials into a temporary GitHub-hosted runner keychain.
+# The Developer ID Installer certificate (for the .pkg) is imported too when
+# APPLE_INSTALLER_CERTIFICATE_BASE64 is set.
 set -euo pipefail
 umask 077
 
@@ -19,7 +21,8 @@ if [[ -e "$APPLE_SIGNING_KEYCHAIN" || -e "$APPLE_NOTARY_KEY_PATH" ]]; then
 fi
 
 certificate="$RUNNER_TEMP/splash-signing.p12"
-trap 'rm -f "$certificate"' EXIT
+installer="$RUNNER_TEMP/splash-installer.p12"
+trap 'rm -f "$certificate" "$installer"' EXIT
 printf '%s' "$APPLE_APPLICATION_CERTIFICATE_BASE64" | base64 -D > "$certificate"
 printf '%s' "$APPLE_NOTARY_KEY_BASE64" | base64 -D > "$APPLE_NOTARY_KEY_PATH"
 
@@ -29,6 +32,13 @@ security set-keychain-settings -lut 7200 "$APPLE_SIGNING_KEYCHAIN"
 security unlock-keychain -p "$keychain_password" "$APPLE_SIGNING_KEYCHAIN"
 security import "$certificate" -f pkcs12 -k "$APPLE_SIGNING_KEYCHAIN" \
   -P "$APPLE_APPLICATION_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+if [[ -n "${APPLE_INSTALLER_CERTIFICATE_BASE64:-}" ]]; then
+  : "${APPLE_INSTALLER_CERTIFICATE_PASSWORD:?Missing release setting: APPLE_INSTALLER_CERTIFICATE_PASSWORD (see docs/releasing.md)}"
+  printf '%s' "$APPLE_INSTALLER_CERTIFICATE_BASE64" | base64 -D > "$installer"
+  security import "$installer" -f pkcs12 -k "$APPLE_SIGNING_KEYCHAIN" \
+    -P "$APPLE_INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/productbuild -T /usr/bin/pkgbuild -T /usr/bin/security
+fi
+# After every import, so the signing tools can use each key without a prompt.
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
   -k "$keychain_password" "$APPLE_SIGNING_KEYCHAIN" >/dev/null
 

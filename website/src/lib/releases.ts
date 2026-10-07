@@ -9,11 +9,12 @@ import cargo from '$repo/Cargo.toml?raw';
 export const VERSION = /^version\s*=\s*"([^"]+)"/m.exec(cargo)![1];
 
 export type Os = 'macos' | 'windows' | 'linux';
-/** One downloadable file; `file` names it for a given version. */
-export type Download = { label: string; detail: string; file: (version: string) => string };
+/** One downloadable file; `file` names it for a given version. An `optional`
+ *  file is offered only once the latest release is known to contain it. */
+export type Download = { label: string; detail: string; file: (version: string) => string; optional?: boolean };
 export type Platform = { os: Os; name: string; requires: string; install: string; downloads: Download[] };
 
-const download = (label: string, detail: string, name: string): Download => ({ label, detail, file: (v) => name.replace('{v}', v) });
+const download = (label: string, detail: string, name: string, optional = false): Download => ({ label, detail, file: (v) => name.replace('{v}', v), optional });
 
 export const PLATFORMS: Platform[] = [
 	{
@@ -22,6 +23,7 @@ export const PLATFORMS: Platform[] = [
 		requires: 'macOS 14 Sonoma or later',
 		install: 'Signed with a Developer ID and notarized by Apple.',
 		downloads: [
+			download('Universal installer', '.pkg', 'Splash-{v}-macos-universal.pkg', true),
 			download('Apple silicon', '.zip', 'Splash-{v}-macos-arm64.zip'),
 			download('Intel', '.zip', 'Splash-{v}-macos-x86_64.zip')
 		]
@@ -82,8 +84,9 @@ export async function detect(): Promise<{ os: Os | null; intel: boolean }> {
 	return { os, intel };
 }
 
-/** The one file to offer first. */
-export function primaryFor(os: Os, intel = false): Download {
-	const p = PLATFORMS.find((x) => x.os === os)!;
-	return os === 'macos' && intel ? p.downloads[1] : p.downloads[0];
+/** The first file to offer: the first one available, or a Mac's own architecture among the ZIPs. */
+export function primaryFor(os: Os, intel = false, available: (d: Download) => boolean = (d) => !d.optional): Download {
+	const offered = PLATFORMS.find((x) => x.os === os)!.downloads.filter(available);
+	if (os === 'macos' && !offered[0].file('').endsWith('.pkg')) return offered.find((d) => d.label === (intel ? 'Intel' : 'Apple silicon')) ?? offered[0];
+	return offered[0];
 }

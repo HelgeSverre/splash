@@ -14,6 +14,7 @@ import release
 
 
 IDENTITY = "Developer ID Application: Test Company (TESTTEAM01)"
+INSTALLER_IDENTITY = "Developer ID Installer: Test Company (TESTTEAM01)"
 
 
 class SetupTests(unittest.TestCase):
@@ -25,24 +26,29 @@ class SetupTests(unittest.TestCase):
         self.password.write_text("test-only-password\n")
         self.certificate = root / "application.p12"
         self.certificate.write_bytes(b"test certificate")
+        self.installer = root / "installer.p12"
+        self.installer.write_bytes(b"test installer certificate")
         self.key = root / "AuthKey_TESTKEY123.p8"
         self.key.write_bytes(b"test notary key")
         self.args = argparse.Namespace(
             password_file=self.password, application_p12=self.certificate,
+            installer_p12=self.installer, installer_password_file=None,
             notary_key=self.key, key_id=None,
             issuer_id="00000000-0000-0000-0000-000000000000", issuer_file=None,
             repo="test/splash", profile="test-splash", apply=False,
         )
 
-    def response(self, command, **_kwargs):
+    def response(self, command, **kwargs):
         if command[:2] == ["openssl", "version"]:
             return b"OpenSSL 3.0.0"
         if command[:2] == ["openssl", "pkcs12"]:
-            return b"private fixture" if "-nocerts" in command else b"certificate fixture"
+            kind = b"installer " if any(arg.endswith("installer.p12") for arg in command) else b""
+            return b"private fixture" if "-nocerts" in command else kind + b"certificate fixture"
         if "-pubkey" in command or "-pubout" in command:
             return b"matching public key"
         if "-subject" in command:
-            return f"    commonName = {IDENTITY}\n".encode()
+            identity = INSTALLER_IDENTITY if kwargs.get("data", b"").startswith(b"installer") else IDENTITY
+            return f"    commonName = {identity}\n".encode()
         if command[:2] == ["security", "find-identity"]:
             return f'1) TEST "{IDENTITY}"'.encode()
         return b"{}"
@@ -84,6 +90,7 @@ class SetupTests(unittest.TestCase):
         config = json.dumps(write.call_args.args[0])
         self.assertNotIn("test-only-password", config)
         self.assertNotIn("test notary key", config)
+        self.assertEqual(write.call_args.args[0]["variables"]["APPLE_INSTALLER_SIGNING_IDENTITY"], INSTALLER_IDENTITY)
 
     def test_failed_command_redacts_arguments_and_output(self):
         failure = subprocess.CompletedProcess([], 1, b"secret stdout", b"secret stderr")

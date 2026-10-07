@@ -269,7 +269,7 @@ CI artifacts are test builds, not signed public releases.
 
 | Platform | Artifacts | Installation / requirements |
 | --- | --- | --- |
-| macOS 14+ Apple silicon / Intel | Signed, notarized `.app` ZIP on tagged releases | Extract and move Splash to Applications. Choose `arm64` or `x86_64`. |
+| macOS 14+ Apple silicon / Intel | Universal `.pkg` installer, plus `.app` ZIPs per architecture; all signed and notarized | Open the `.pkg`, or extract a ZIP (`arm64` or `x86_64`) and move Splash to Applications. |
 | Windows 11 x64 | Per-user `-setup.exe` and portable `.zip` | Run setup or extract the ZIP. Requires [WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The Visual C++ runtime is statically linked; packages are currently unsigned. |
 | Ubuntu 24.04 x64 | `.deb`, `.AppImage`, `.tar.gz` | Prefer `sudo apt install ./Splash-*.deb` to install runtime dependencies automatically. |
 | Headless server, all four targets | `splash-server-*` ZIP or tarball | Extract and run `splash-server --help`; no windowing/WebKit runtime required. |
