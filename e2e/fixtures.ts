@@ -17,6 +17,10 @@ import { Backend, type Harness } from "./support/backend.ts";
 import { Db } from "./support/db.ts";
 import { World } from "./support/world.ts";
 
+declare global {
+  var __SPLASH_SERVER__: { instance: string } | undefined;
+}
+
 export type Splash = {
   harness: Harness;
   world: World;
@@ -105,10 +109,14 @@ export const test = base.extend<Options & { world: World; splash: Splash }>({
       async restart({ reload = harness === "desktop" } = {}) {
         await backend.restart();
         // The desktop page's IPC token dies with its backend; the web version
-        // reconnects by itself.
+        // reconnects by itself, within its 5 s connection check.
         if (reload) {
           await page.reload();
           await app.waitReady();
+        } else if (harness === "web") {
+          const { instance } = await (await page.request.get(backend.url + "/__server/state")).json();
+          await page.waitForFunction((i) => globalThis.__SPLASH_SERVER__?.instance === i, instance, { timeout: 15_000 });
+          await expect(page.getByRole("status").filter({ hasText: "Connected · files and agents run on this server" })).toBeVisible();
         }
       },
     };

@@ -50,6 +50,7 @@ export class World {
       PATH: path,
       SPLASH_PATH: path,
       SHELL: "/bin/bash",
+      BASH_SILENCE_DEPRECATION_WARNING: "1",
       SPLASH_SHELL: "/bin/bash",
       SPLASH_DATA_DIR: this.data,
       SPLASH_E2E_DIR: this.control,
