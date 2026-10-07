@@ -1,16 +1,19 @@
 // Agent history: the Sessions page's "Open from agent" browser, and a
 // session's history bar (Refresh from agent, Fork conversation, Manage history).
+// Found by test id, like everything in support/.
 //
 // The fake agents replay synthesized recordings (fixtures/e2e/history_*.jsonl):
 // Claude lists two pages of saved sessions and can load, resume, fork and
 // delete them; Codex lists one and can only load it. Saved sessions live in
 // the folder the agent was launched in ($CWD).
-import { expect, type Locator } from "@playwright/test";
+import { expect } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentId } from "./agents.ts";
 import type { App } from "./app.ts";
 import { FIXTURES } from "./paths.ts";
+import { testId } from "./testid.ts";
+import { Library } from "./views.ts";
 import type { World } from "./world.ts";
 
 /** Point Claude and Codex at the history recordings. */
@@ -35,6 +38,10 @@ export function rewriteHistory(world: World, agent: "claude" | "codex", edits: [
   world.agents.fixture(agent, file);
 }
 
+/** An agent's discovery: still finding, failed (an error and Retry), listed
+ * ("n loaded"), or unlisted (the agent can't list its sessions). */
+export type SourceState = "loading" | "failed" | "listed" | "unlisted";
+
 export class History {
   readonly app: App;
   constructor(app: App) {
@@ -46,64 +53,150 @@ export class History {
 
   // ── Sessions → Open from agent ──────────────────────────────────────────
 
-  get panel() {
-    return this.page.locator("#library-panel-external");
+  /** The agent filter; option values are agent ids, "" for all installed agents. */
+  get agentFilter() {
+    return testId(this.page, "external-agent");
   }
-  private get filters() {
-    return this.panel.locator("form").first();
+  /** The filter's installed agents, without "All installed agents". */
+  get agentOptions() {
+    const filter = this.agentFilter;
+    return testId(filter, "external-agent-option");
   }
-  /** One agent's discovery state: name, status, Retry/Load more, error. */
-  source(agent: string): Locator {
-    return this.panel.locator(".sources .source").filter({ has: this.page.locator("strong", { hasText: agent }) });
+  agentOption(agent: AgentId) {
+    const filter = this.agentFilter;
+    return testId(filter, "external-agent-option", { agent });
   }
-  status(agent: string): Locator {
-    return this.source(agent).getByRole("status");
+  /** The folder filter; option values are project paths, "" for all folders. */
+  get folderFilter() {
+    return testId(this.page, "external-folder");
   }
-  get rows(): Locator {
-    return this.panel.locator(".results").getByRole("button");
+  get findButton() {
+    return testId(this.page, "external-find");
   }
-  /** A listed session, by title. */
-  row(title: string): Locator {
-    return this.rows.filter({ has: this.page.locator("strong").getByText(title, { exact: true }) });
+  get refreshListsButton() {
+    return testId(this.page, "external-refresh");
   }
-  get preview(): Locator {
-    return this.panel.locator("article.preview");
+  /** One agent's discovery; `data-state` is a SourceState, `data-count` the sessions loaded. */
+  source(agent: AgentId) {
+    return testId(this.page, "external-source", { agent });
   }
-  /** Expand "Open a known session ID"; returns its form. */
-  async openKnown(): Promise<Locator> {
-    await this.panel.getByText("Open a known session ID", { exact: true }).click();
-    const form = this.panel.locator("details.known form");
-    await expect(form).toBeVisible();
-    return form;
+  /** Wait until the agent has listed `count` sessions ("n loaded"). */
+  async expectListed(agent: AgentId, count: number) {
+    await expect(testId(this.page, "external-source", { agent, state: "listed", count: String(count) })).toBeVisible();
+  }
+  sourceError(agent: AgentId) {
+    const source = this.source(agent);
+    return testId(source, "external-source-error");
+  }
+  retry(agent: AgentId) {
+    const source = this.source(agent);
+    return testId(source, "external-source-retry");
+  }
+  /** Load more from the agent: its next page. */
+  loadMore(agent: AgentId) {
+    const source = this.source(agent);
+    return testId(source, "external-source-more");
+  }
+  /** Shown when the agent lists sessions but can't replay them. */
+  noPreview(agent: AgentId) {
+    const source = this.source(agent);
+    return testId(source, "external-source-no-preview");
+  }
+  /** "n loaded sessions match"; `data-count` is n. */
+  get matchCount() {
+    return testId(this.page, "external-match-count");
+  }
+  /** Listed sessions, each with `data-agent`, `data-session-id` (the agent's),
+   * `data-cwd`, `data-extra-folders` (how many) and `data-local`: `none`,
+   * `current` (In Splash) or `outdated` (the agent has newer activity). */
+  get rows() {
+    return testId(this.page, "external-session");
+  }
+  /** The listed sessions' titles, in order. */
+  get rowTitles() {
+    const rows = this.rows;
+    return testId(rows, "external-session-title");
+  }
+  /** A listed session, by its title in the recording. */
+  row(title: string) {
+    const titles = testId(this.page, "external-session-title");
+    return this.rows.filter({ has: titles.getByText(title, { exact: true }) });
+  }
+  /** The previewed conversation: `data-agent`, `data-session-id`, `data-entries` (how many). */
+  get preview() {
+    return testId(this.page, "external-preview");
+  }
+  get previewTitle() {
+    const preview = this.preview;
+    return testId(preview, "external-preview-title");
+  }
+  /** One of the preview's workspace folders, by path. */
+  previewFolder(path: string) {
+    const preview = this.preview;
+    return testId(preview, "external-preview-folder", { path });
+  }
+  /** Any text box in the preview, which is read-only. */
+  get previewInputs() {
+    return this.preview.getByRole("textbox");
+  }
+  /** Add to Splash (`add`), or Update local copy (`update`) for a conversation already there. */
+  importButton(mode: "add" | "update") {
+    const preview = this.preview;
+    return testId(preview, "external-import", { mode });
+  }
+  /** Why loading or adding a conversation failed. */
+  get error() {
+    return testId(this.page, "external-error");
+  }
+
+  // "Open a known session ID", once openKnown() has expanded it.
+  get knownAgent() {
+    return testId(this.page, "external-known-agent");
+  }
+  get knownId() {
+    return testId(this.page, "external-known-id");
+  }
+  /** The original working directory. */
+  get knownCwd() {
+    return testId(this.page, "external-known-cwd");
+  }
+  get knownPreview() {
+    return testId(this.page, "external-known-preview");
+  }
+  async openKnown() {
+    await testId(this.page, "external-known-toggle").click();
+    await expect(testId(this.page, "external-known")).toHaveAttribute("open");
+    await expect(this.knownId).toBeVisible();
   }
 
   async open() {
-    await this.app.openNav("Sessions");
-    await this.page.getByRole("tablist", { name: "Session sources" }).getByRole("tab", { name: "Open from agent" }).click();
-    await expect(this.filters.getByRole("button", { name: "Find sessions" })).toBeVisible();
+    await this.app.openNav("library");
+    await new Library(this.page).tab("external").click();
+    await expect(this.findButton).toBeVisible();
   }
 
-  /** Choose the agent and folder (by project name), then Find sessions or Refresh lists. */
-  async find({ agent, folder, refresh = false }: { agent?: string; folder?: string; refresh?: boolean } = {}) {
-    await this.filters.getByLabel("Agent").selectOption({ label: agent ?? "All installed agents" });
-    await this.filters.getByLabel("Folders").selectOption({ label: folder ?? "All folders" });
-    await this.filters.getByRole("button", { name: refresh ? "Refresh lists" : "Find sessions" }).click();
+  /** Choose the agent and folder (a project's path), then Find sessions or Refresh lists. */
+  async find({ agent, folder, refresh = false }: { agent?: AgentId; folder?: string; refresh?: boolean } = {}) {
+    await this.agentFilter.selectOption({ value: agent ?? "" });
+    await this.folderFilter.selectOption({ value: folder ?? "" });
+    await (refresh ? this.refreshListsButton : this.findButton).click();
   }
 
   /** Preview a listed session. */
   async show(title: string) {
     await this.row(title).click();
     await expect(this.row(title)).toHaveAttribute("aria-pressed", "true");
-    await expect(this.preview.getByRole("heading", { level: 2 })).toBeVisible();
+    await expect(this.previewTitle).toBeVisible();
   }
 
-  /** Find Claude's saved sessions in the repo, preview one and add it; returns the new session's id. */
-  async importSession(title: string): Promise<string> {
+  /** Find Claude's saved sessions in a project folder, preview one and add it;
+   * returns the new session's id. */
+  async importSession(title: string, folder: string): Promise<string> {
     await this.open();
-    await this.find({ agent: "Claude Code", folder: "repo" });
-    await expect(this.status("Claude Code")).toHaveText(/\d+ loaded/);
+    await this.find({ agent: "claude", folder });
+    await expect(this.source("claude")).toHaveAttribute("data-state", "listed");
     await this.show(title);
-    await this.preview.getByRole("button", { name: "Add to Splash" }).click();
+    await this.importButton("add").click();
     await expect(this.app.title).toBeVisible();
     await this.app.expectStatus("exited");
     return this.app.sessionId();
@@ -111,35 +204,133 @@ export class History {
 
   // ── A session's history bar ─────────────────────────────────────────────
 
-  get bar(): Locator {
-    return this.page.locator(".history-bar");
+  /** `data-sync`: `synced`, `unsynced`, `outdated` (new activity at the agent)
+   * or `deleted` (local history only). */
+  get bar() {
+    return testId(this.page, "history-bar");
   }
-  button(name: string): Locator {
-    return this.bar.getByRole("button", { name, exact: true });
+  /** "Fork of …", which opens the parent; `data-session-id` is the parent's id. */
+  get parentLink() {
+    const bar = this.bar;
+    return testId(bar, "history-parent");
   }
-  get notice(): Locator {
-    return this.bar.getByRole("status");
+  get disconnectButton() {
+    const bar = this.bar;
+    return testId(bar, "history-disconnect");
+  }
+  /** Refresh from agent. */
+  get refreshButton() {
+    const bar = this.bar;
+    return testId(bar, "history-refresh");
+  }
+  /** Fork conversation. */
+  get forkButton() {
+    const bar = this.bar;
+    return testId(bar, "history-fork");
+  }
+  get manageButton() {
+    const bar = this.bar;
+    return testId(bar, "history-manage");
+  }
+  /** What the last action did. */
+  get notice() {
+    const bar = this.bar;
+    return testId(bar, "history-notice");
+  }
+  /** Why the last action failed. */
+  get barError() {
+    const bar = this.bar;
+    return testId(bar, "history-error");
   }
 
   async disconnect() {
-    await this.button("Disconnect agent").click();
+    await this.disconnectButton.click();
     await expect(this.notice).toHaveText("Agent disconnected. Your local history is saved.");
     await this.app.expectStatus("exited");
   }
 
-  /** Open Manage history; returns the dialog. */
-  async manage(): Promise<Locator> {
-    await this.button("Manage history").click();
-    const dialog = this.page.getByRole("dialog", { name: "Manage session history" });
-    await expect(dialog).toBeVisible();
-    return dialog;
+  // ── Manage history and Fork conversation dialogs ────────────────────────
+
+  /** The open dialog: Manage history (`manage`) or Fork conversation (`fork`). */
+  dialog(panel?: "manage" | "fork") {
+    return testId(this.page, "history-dialog", panel ? { panel } : {});
+  }
+  /** The session's title, at the top of the dialog. */
+  get dialogTitle() {
+    const dialog = this.dialog();
+    return testId(dialog, "history-dialog-title");
+  }
+  /** One of the session's workspace folders, by path. */
+  dialogFolder(path: string) {
+    const dialog = this.dialog();
+    return testId(dialog, "history-dialog-folder", { path });
+  }
+  get dialogError() {
+    const dialog = this.dialog();
+    return testId(dialog, "history-dialog-error");
+  }
+  get closeDialog() {
+    const dialog = this.dialog();
+    return testId(dialog, "modal-close");
+  }
+  /** The agent's own id for the conversation. */
+  get agentSessionId() {
+    const dialog = this.dialog();
+    return testId(dialog, "history-agent-session");
+  }
+  /** "Disconnect the agent before …", while it's connected. */
+  get disconnectFirst() {
+    const dialog = this.dialog();
+    return testId(dialog, "history-disconnect-first");
+  }
+  /** Delete agent history… */
+  get deleteAgentHistoryButton() {
+    const dialog = this.dialog();
+    return testId(dialog, "history-delete-agent");
+  }
+  /** Delete local session… (`data-worktree`: the worktree goes too) or Remove local copy… */
+  get removeLocalButton() {
+    const dialog = this.dialog();
+    return testId(dialog, "history-remove-local");
+  }
+  /** The confirmation; `data-confirm` is `native` (agent history), `local`, or `dirty` (uncommitted changes). */
+  get confirmation() {
+    const dialog = this.dialog();
+    return testId(dialog, "history-confirm");
+  }
+  get confirmTitle() {
+    const confirmation = this.confirmation;
+    return testId(confirmation, "history-confirm-title");
+  }
+  get confirmMessage() {
+    const confirmation = this.confirmation;
+    return testId(confirmation, "history-confirm-message");
+  }
+  /** The confirmation's delete, remove or discard button. */
+  get confirmButton() {
+    const confirmation = this.confirmation;
+    return testId(confirmation, "history-confirm-delete");
+  }
+  get cancelConfirmButton() {
+    const confirmation = this.confirmation;
+    return testId(confirmation, "history-confirm-cancel");
+  }
+  /** Fork conversation's Try another approach (`separate`) or Fork for review (`review`). */
+  forkAction(kind: "separate" | "review") {
+    const dialog = this.dialog("fork");
+    return kind === "separate" ? testId(dialog, "history-fork-separate") : testId(dialog, "history-fork-review");
   }
 
-  /** Fork the open session ("Try another approach" or "Fork for review"). */
-  async fork(action: "Try another approach" | "Fork for review") {
-    await this.button("Fork conversation").click();
-    const dialog = this.page.getByRole("dialog", { name: "Fork conversation" });
-    await dialog.getByRole("button", { name: action }).click();
-    await expect(dialog).toBeHidden();
+  /** Open Manage history. */
+  async manage() {
+    await this.manageButton.click();
+    await expect(this.dialog("manage")).toBeVisible();
+  }
+
+  /** Fork the open session into a separate conversation, or one prepared for review. */
+  async fork(kind: "separate" | "review") {
+    await this.forkButton.click();
+    await this.forkAction(kind).click();
+    await expect(this.dialog("fork")).toBeHidden();
   }
 }

@@ -77,11 +77,11 @@
 
 <form onsubmit={(e) => { e.preventDefault(); discover(); }}>
   <div class="filters">
-    <label>Agent<select class="field" bind:value={agent} onchange={clearPreview}><option value="">All installed agents</option>{#each available as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
-    <label>Folders<select class="field" bind:value={folder} onchange={clearPreview}><option value="">All folders</option>{#each app.projects as p}<option value={p.path}>{p.name}</option>{/each}<option value="custom">Choose another folder</option></select></label>
+    <label>Agent<select class="field" data-testid="external-agent" bind:value={agent} onchange={clearPreview}><option value="">All installed agents</option>{#each available as a}<option data-testid="external-agent-option" data-agent={a.id} value={a.id}>{a.name}</option>{/each}</select></label>
+    <label>Folders<select class="field" data-testid="external-folder" bind:value={folder} onchange={clearPreview}><option value="">All folders</option>{#each app.projects as p}<option value={p.path}>{p.name}</option>{/each}<option value="custom">Choose another folder</option></select></label>
     {#if folder === "custom"}<label class="grow">Working directory<input class="field" required bind:value={cwd} oninput={clearPreview} placeholder="/absolute/path/to/project" /></label>{/if}
-    <button class="btn primary" disabled={loading || !available.length || (folder === "custom" && !cwd.trim())}>Find sessions</button>
-    {#if loaded}<button class="btn" type="button" disabled={loading} onclick={() => discover(true)}>Refresh lists</button>{/if}
+    <button class="btn primary" data-testid="external-find" disabled={loading || !available.length || (folder === "custom" && !cwd.trim())}>Find sessions</button>
+    {#if loaded}<button class="btn" type="button" data-testid="external-refresh" disabled={loading} onclick={() => discover(true)}>Refresh lists</button>{/if}
   </div>
 </form>
 <p class="summary">Browse saved conversations across your agents. Preview a conversation before adding its history and workspace folders.</p>
@@ -90,14 +90,14 @@
   {#each sources as s (s.key)}
     {@const state = historySources[s.key]}
     {#if state}
-      <div class="source">
+      <div class="source" data-testid="external-source" data-agent={s.agent.id} data-state={state.loading ? "loading" : state.error ? "failed" : state.page?.capabilities.list ? "listed" : "unlisted"} data-count={state.sessions.length}>
         <AgentIcon id={s.agent.id} size={16} /><strong>{s.agent.name}</strong>
         <span class="meta" role="status">{state.loading ? "Finding sessions…" : state.error ? "Could not finish" : state.page?.capabilities.list ? `${state.sessions.length} loaded` : "Listing unavailable"}</span>
         {#if state.fetchedAt}<span class="meta">Checked {new Date(state.fetchedAt).toLocaleTimeString()}</span>{/if}
-        {#if state.page && !state.page.capabilities.load}<Tag tone="muted">Preview unavailable</Tag>{/if}
-        {#if state.error}<button class="btn sm" disabled={state.loading} onclick={() => retrySource(s.key)}>Retry</button>{/if}
-        {#if state.page?.next_cursor}<button class="btn sm" disabled={state.loading} onclick={() => loadSource(s.key, s.agent.id, directory, true)}>Load more from {s.agent.name}</button>{/if}
-        {#if state.error}<p class="error" role="alert">{state.error}</p>{/if}
+        {#if state.page && !state.page.capabilities.load}<Tag data-testid="external-source-no-preview" tone="muted">Preview unavailable</Tag>{/if}
+        {#if state.error}<button class="btn sm" data-testid="external-source-retry" disabled={state.loading} onclick={() => retrySource(s.key)}>Retry</button>{/if}
+        {#if state.page?.next_cursor}<button class="btn sm" data-testid="external-source-more" disabled={state.loading} onclick={() => loadSource(s.key, s.agent.id, directory, true)}>Load more from {s.agent.name}</button>{/if}
+        {#if state.error}<p class="error" role="alert" data-testid="external-source-error">{state.error}</p>{/if}
       </div>
     {/if}
   {/each}
@@ -108,18 +108,18 @@
     <label>Activity<select class="field" bind:value={since}><option value="all">Any time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select></label>
     <label>Sort<select class="field" bind:value={sort}><option value="recent">Most recent</option><option value="title">Title</option><option value="agent">Agent</option></select></label>
   </div>
-  <p class="summary" role="status">{rows.length} loaded sessions match. Search and sorting apply to the pages loaded so far.</p>
+  <p class="summary" role="status" data-testid="external-match-count" data-count={rows.length}>{rows.length} loaded sessions match. Search and sorting apply to the pages loaded so far.</p>
 {/if}
 {#if busy}<p class="summary" role="status"><span class="spinner"></span>{busy}</p>{/if}
-{#if error}<p class="error" role="alert">{error}</p>{/if}
+{#if error}<p class="error" role="alert" data-testid="external-error">{error}</p>{/if}
 <div class="external-grid" class:has-preview={!!preview}>
   <div class="results">
     {#each rows as row (`${row.agent.id}:${row.info.session_id}`)}
       {@const s = row.info}
       {@const local = app.sessions.find((x) => x.agent_id === row.agent.id && x.agent_session_id === s.session_id)}
-      <button class="plain session-row" disabled={!!busy || !historySources[row.key]?.page?.capabilities.load} aria-pressed={preview?.agent_id === row.agent.id && preview?.session_id === s.session_id} onclick={() => load(row.agent.id, s)}>
+      <button class="plain session-row" data-testid="external-session" data-agent={row.agent.id} data-session-id={s.session_id} data-cwd={s.cwd} data-extra-folders={(s.additional_directories ?? []).length} data-local={local ? (sourceIsNewer(local.source) ? "outdated" : "current") : "none"} disabled={!!busy || !historySources[row.key]?.page?.capabilities.load} aria-pressed={preview?.agent_id === row.agent.id && preview?.session_id === s.session_id} onclick={() => load(row.agent.id, s)}>
         <AgentIcon id={row.agent.id} size={20} />
-        <span class="row-body"><strong>{s.title || s.session_id}</strong><span class="meta">{row.agent.name} · {home(s.cwd)}</span>
+        <span class="row-body"><strong data-testid="external-session-title">{s.title || s.session_id}</strong><span class="meta">{row.agent.name} · {home(s.cwd)}</span>
           {#if (s.additional_directories ?? []).length}<span class="meta">+{(s.additional_directories ?? []).length} workspace {(s.additional_directories ?? []).length === 1 ? "folder" : "folders"}</span>{/if}
           {#if s.updated_at}<span class="meta">{when(s.updated_at)}</span>{/if}
         </span>
@@ -128,25 +128,25 @@
     {:else}{#if loaded}<EmptyState inline title="No matching sessions" detail="Try another agent or folder, load another page, or open a known session ID." />{/if}{/each}
   </div>
   {#if preview}
-    <article class="preview">
-      <div class="preview-head"><div><h2>{preview.title}</h2><p class="meta">{agentById(preview.agent_id)?.name} · {preview.entries.length} entries</p></div><button class="btn primary" disabled={!!busy || (!!existing && !["exited", "error"].includes(existing.status))} onclick={add}>{existing ? "Update local copy" : "Add to Splash"}</button></div>
-      <div class="workspace"><strong>Workspace folders</strong><p>{home(preview.cwd)}</p>{#each preview.additional_directories as path}<p>{home(path)}</p>{/each}</div>
+    <article class="preview" data-testid="external-preview" data-agent={preview.agent_id} data-session-id={preview.session_id} data-entries={preview.entries.length}>
+      <div class="preview-head"><div><h2 data-testid="external-preview-title">{preview.title}</h2><p class="meta">{agentById(preview.agent_id)?.name} · {preview.entries.length} entries</p></div><button class="btn primary" data-testid="external-import" data-mode={existing ? "update" : "add"} disabled={!!busy || (!!existing && !["exited", "error"].includes(existing.status))} onclick={add}>{existing ? "Update local copy" : "Add to Splash"}</button></div>
+      <div class="workspace"><strong>Workspace folders</strong><p data-testid="external-preview-folder" data-path={preview.cwd}>{home(preview.cwd)}</p>{#each preview.additional_directories as path}<p data-testid="external-preview-folder" data-path={path}>{home(path)}</p>{/each}</div>
       {#if preview.source.updated_at}<p class="summary">Agent activity: {when(preview.source.updated_at)}</p>{/if}
       <p class="summary">{existing ? "Updating replaces the local transcript with this replay. Disconnect the conversation first." : "Adding keeps a local copy. The conversation and its folders remain with the agent."}</p>
       {#each preview.entries as entry, i (i)}<EntryView {entry} session={{ id: preview.token, cwd: preview.cwd, status: "exited" }} />{:else}<p class="summary">The agent returned no transcript entries.</p>{/each}
     </article>
   {/if}
 </div>
-<details class="known">
-  <summary>Open a known session ID</summary>
+<details class="known" data-testid="external-known">
+  <summary data-testid="external-known-toggle">Open a known session ID</summary>
   <form onsubmit={(e) => { e.preventDefault(); load(knownAgent, { session_id: knownId.trim(), cwd: knownCwd.trim(), additional_directories: foldersFromText(knownRoots), title: null, updated_at: null, metadata_json: null }); }}>
     <div class="filters">
-      <label>Agent<select class="field" required bind:value={knownAgent}>{#each available as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
-      <label class="grow">Session ID<input class="field" required bind:value={knownId} placeholder="Native conversation ID" /></label>
-      <label class="grow">Original working directory<input class="field" required bind:value={knownCwd} placeholder="/absolute/path/to/project" /></label>
+      <label>Agent<select class="field" data-testid="external-known-agent" required bind:value={knownAgent}>{#each available as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
+      <label class="grow">Session ID<input class="field" data-testid="external-known-id" required bind:value={knownId} placeholder="Native conversation ID" /></label>
+      <label class="grow">Original working directory<input class="field" data-testid="external-known-cwd" required bind:value={knownCwd} placeholder="/absolute/path/to/project" /></label>
     </div>
-    <label>Additional workspace folders (one per line)<textarea class="field" rows="2" bind:value={knownRoots} placeholder="/absolute/path/to/shared-library"></textarea></label>
-    <button class="btn" disabled={!!busy || !knownAgent}>Preview by ID</button>
+    <label>Additional workspace folders (one per line)<textarea class="field" data-testid="external-known-folders" rows="2" bind:value={knownRoots} placeholder="/absolute/path/to/shared-library"></textarea></label>
+    <button class="btn" data-testid="external-known-preview" disabled={!!busy || !knownAgent}>Preview by ID</button>
   </form>
 </details>
 

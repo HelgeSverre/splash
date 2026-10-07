@@ -5,7 +5,7 @@
   let { onclose }: { onclose: () => void } = $props();
 </script>
 
-<span class="close" data-modal-close><IconButton title="Close (Esc)" label="Close" icon="close" onclick={onclose} /></span>
+<span class="close" data-modal-close><IconButton data-testid="modal-close" title="Close (Esc)" label="Close" icon="close" onclick={onclose} /></span>
 
 <style>
   .close { display: contents; }
