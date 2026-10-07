@@ -49,7 +49,7 @@
     {#if error}<p class="error" role="alert">{error}</p><button class="btn sm" onclick={()=>loadJobs(next ?? 1)}>Retry jobs</button>{/if}
     {#each jobs as job (job.id)}
       <details open={actionTone(job.status,job.conclusion)==="failed"}>
-        <summary><span class="status {actionTone(job.status,job.conclusion)}">{actionStatus(job.status,job.conclusion)}</span> · {job.name}<span class="t-meta"> · {duration(job.started_at,job.completed_at,now)}</span></summary>
+        <summary><span class="status {actionTone(job.status,job.conclusion)}">{actionStatus(job.status,job.conclusion)}</span> · {job.name}<span class="t-meta">{` · ${duration(job.started_at,job.completed_at,now)}`}</span></summary>
         {#if job.runner}<p class="t-meta">Runner: {job.runner}</p>{/if}
         <ol>{#each job.steps as step}<li><span>{step.name}</span><span class="status {actionTone(step.status,step.conclusion)}">{actionStatus(step.status,step.conclusion)}</span><span class="t-mono-meta">{duration(step.started_at,step.completed_at,now)}</span></li>{/each}</ol>
         <div class="buttons"><button class="btn sm" disabled={job.status!=="completed" || logLoading} onclick={()=>loadLog(job)}>View log</button><button class="btn ghost sm" onclick={()=>openExternal(job.url)}>Full job and logs ↗</button></div>
