@@ -4,10 +4,23 @@
   import "@xterm/xterm/css/xterm.css";
   import { api, type TermEvent } from "../bindings";
 
-  type Instance = { term: Terminal; fit: FitAddon; el: HTMLDivElement; lastSeq: number; exited: boolean; ready: boolean };
+  // `input` holds keys typed while a write is in flight: writes go one at a
+  // time so the shell gets them in order (each is its own request).
+  type Instance = { term: Terminal; fit: FitAddon; el: HTMLDivElement; lastSeq: number; exited: boolean; ready: boolean; input: string; writing: boolean };
   // One xterm per session, kept alive while you switch around.
   const instances = new Map<string, Instance>();
   const pending = new Map<string, TermEvent[]>();
+
+  async function sendInput(id: string, inst: Instance) {
+    if (inst.writing) return;
+    inst.writing = true;
+    while (inst.input) {
+      const data = inst.input;
+      inst.input = "";
+      await api.term_write(id, data).catch(() => {});
+    }
+    inst.writing = false;
+  }
 
   const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
@@ -92,7 +105,7 @@
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    const inst: Instance = { term, fit, el, lastSeq: 0, exited: false, ready: false };
+    const inst: Instance = { term, fit, el, lastSeq: 0, exited: false, ready: false, input: "", writing: false };
     term.onData((data) => {
       if (inst.exited) {
         inst.ready = false;
@@ -100,7 +113,8 @@
         attach(id, inst);
         return;
       }
-      api.term_write(id, data).catch(() => {});
+      inst.input += data;
+      void sendInput(id, inst);
     });
     term.onResize(({ cols, rows }) => {
       if (inst.ready) api.term_resize(id, cols, rows).catch(() => {});
