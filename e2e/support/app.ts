@@ -15,6 +15,30 @@ const AGENT_NAMES: Record<AgentId, string> = {
 
 export type Status = "starting" | "idle" | "running" | "awaiting_permission" | "error" | "exited";
 
+/** The browser runs on this machine: macOS gets ⌘ shortcuts and keycap symbols. */
+export const APPLE = process.platform === "darwin";
+
+/** What the web version binds instead of the shortcuts browsers keep for themselves. */
+const BROWSER_SAFE: Record<string, string> = {
+  "Meta+N": "Alt+Shift+N",
+  "Meta+W": "Alt+Shift+W",
+  "Meta+L": "Alt+Shift+L",
+  "Meta+K": "Alt+Shift+K",
+  "Meta+Shift+P": "Alt+Shift+P",
+  "Ctrl+Tab": "Alt+Shift+ArrowRight",
+  "Ctrl+Shift+Tab": "Alt+Shift+ArrowLeft",
+  ...(APPLE ? {} : { "Meta+J": "Alt+Shift+J", "Meta+B": "Alt+Shift+B" }),
+};
+
+function defaultShortcut(combo: string, harness: Harness): string {
+  if (!/(^|\+)(Meta|Ctrl)\+/.test(combo)) combo = `Meta+${combo}`;
+  if (harness === "web") combo = BROWSER_SAFE[combo] ?? combo.replace(/^Meta\+([1-9])$/, "Alt+Shift+$1");
+  if (!APPLE) combo = combo.replace("Meta", "Ctrl");
+  const parts = combo.split("+");
+  const key = parts.pop()!;
+  return [...["Ctrl", "Alt", "Shift", "Meta"].filter((m) => parts.includes(m)), key].join("+");
+}
+
 export class App {
   readonly page: Page;
   readonly harness: Harness;
@@ -52,9 +76,16 @@ export class App {
   get status() {
     return this.page.locator("[data-status]");
   }
-  /** The modifier the app's default shortcuts use: browser-safe Alt+Shift on the web. */
+  /** One of the app's default shortcuts, written as in lib/keybindings ("Meta+N",
+   * "Meta+Shift+P", "Alt+Meta+B", "Ctrl+Tab"; a bare key means Meta+key), as the
+   * app binds it here: ⌘ on macOS, Ctrl elsewhere, and on the web the browser's
+   * own shortcuts moved to Alt+Shift. Canonical ("Ctrl+Alt+B"), as Settings shows it. */
+  combo(combo: string) {
+    return defaultShortcut(combo, this.harness);
+  }
+  /** The same shortcut as keys for `page.keyboard.press`. */
   key(combo: string) {
-    return this.harness === "web" ? `Alt+Shift+${combo}` : `ControlOrMeta+${combo}`;
+    return this.combo(combo).replace(/\bCtrl\b/, "Control");
   }
 
   /** The sidebar's New session item (the Welcome page has a button of its own). */
