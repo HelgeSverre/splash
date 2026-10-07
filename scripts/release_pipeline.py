@@ -59,6 +59,7 @@ def expected_assets(v):
     names = {f'Splash-{v}-linux-x86_64{ext}' for ext in ('.deb', '.AppImage', '.tar.gz')}
     names |= {f'Splash-{v}-windows-x86_64{ext}' for ext in ('.zip', '-setup.exe')}
     names |= {f'Splash-{v}-macos-{arch}.zip' for arch in ('arm64', 'x86_64')}
+    names.add(f'Splash-{v}-macos-universal.pkg')
     names |= {f'splash-server-{v}-{target}{ext}' for target, ext in (
         ('linux-x86_64', '.tar.gz'), ('windows-x86_64', '.zip'),
         ('macos-arm64', '.tar.gz'), ('macos-x86_64', '.tar.gz'))}

@@ -18,10 +18,13 @@ CONFIG = Path(os.environ.get("SPLASH_RELEASE_CONFIG", Path.home() / ".config/spl
 SECRET_NAMES = {
     "APPLE_APPLICATION_CERTIFICATE_BASE64",
     "APPLE_APPLICATION_CERTIFICATE_PASSWORD",
+    "APPLE_INSTALLER_CERTIFICATE_BASE64",
+    "APPLE_INSTALLER_CERTIFICATE_PASSWORD",
     "APPLE_NOTARY_KEY_BASE64",
 }
 VARIABLE_NAMES = {
     "APPLE_APPLICATION_SIGNING_IDENTITY",
+    "APPLE_INSTALLER_SIGNING_IDENTITY",
     "APPLE_NOTARY_KEY_ID",
     "APPLE_NOTARY_ISSUER_ID",
 }
@@ -54,12 +57,39 @@ def write_config(config):
         temporary.unlink(missing_ok=True)
 
 
-def setup(args):
-    # Read secrets directly into memory; never put their values in argv or logs.
-    password = args.password_file.read_bytes().rstrip(b"\r\n")
+def read_password(path):
+    password = path.read_bytes().rstrip(b"\r\n")
     if not password or b"\n" in password or b"\r" in password:
         raise RuntimeError("Certificate password file must contain one nonempty line")
+    return password
+
+
+def p12_identity(path, password, kind):
+    """Check a .p12 holds an unexpired Developer ID `kind` certificate with its own key; return the identity."""
+    # Old Keychain exports use legacy encryption. OpenSSL 3 needs -legacy;
+    # Apple's LibreSSL does not recognize that flag.
+    legacy = ["-legacy"] if run(["openssl", "version"]).startswith(b"OpenSSL 3.") else []
+    p12 = ["openssl", "pkcs12", *legacy, "-in", str(path), "-passin", "stdin"]
+    certificate = run([*p12, "-clcerts", "-nokeys"], data=password + b"\n")
+    private_key = run([*p12, "-nocerts", "-nodes"], data=password + b"\n")
+    public_from_cert = run(["openssl", "x509", "-pubkey", "-noout"], data=certificate)
+    public_from_key = run(["openssl", "pkey", "-pubout"], data=private_key)
+    if public_from_cert != public_from_key:
+        raise RuntimeError(f"{kind} certificate and private key do not match")
+    run(["openssl", "x509", "-checkend", "0", "-noout"], data=certificate)
+    subject = run(["openssl", "x509", "-subject", "-noout", "-nameopt", "multiline"], data=certificate).decode()
+    match = re.search(rf"commonName\s*=\s*(Developer ID {kind}: .+)", subject)
+    if not match:
+        raise RuntimeError(f"Expected a Developer ID {kind} certificate")
+    return match[1].strip()
+
+
+def setup(args):
+    # Read secrets directly into memory; never put their values in argv or logs.
+    password = read_password(args.password_file)
+    installer_password = read_password(args.installer_password_file or args.password_file)
     certificate_path = args.application_p12.resolve()
+    installer_path = args.installer_p12.resolve()
     key_path = args.notary_key.resolve()
     key_id = args.key_id
     if not key_id:
@@ -69,22 +99,8 @@ def setup(args):
         key_id = match[1]
     issuer = str(uuid.UUID(args.issuer_id or args.issuer_file.read_text().strip()))
 
-    # Old Keychain exports use legacy encryption. OpenSSL 3 needs -legacy;
-    # Apple's LibreSSL does not recognize that flag.
-    legacy = ["-legacy"] if run(["openssl", "version"]).startswith(b"OpenSSL 3.") else []
-    p12 = ["openssl", "pkcs12", *legacy, "-in", str(certificate_path), "-passin", "stdin"]
-    certificate = run([*p12, "-clcerts", "-nokeys"], data=password + b"\n")
-    private_key = run([*p12, "-nocerts", "-nodes"], data=password + b"\n")
-    public_from_cert = run(["openssl", "x509", "-pubkey", "-noout"], data=certificate)
-    public_from_key = run(["openssl", "pkey", "-pubout"], data=private_key)
-    if public_from_cert != public_from_key:
-        raise RuntimeError("Certificate and private key do not match")
-    run(["openssl", "x509", "-checkend", "0", "-noout"], data=certificate)
-    subject = run(["openssl", "x509", "-subject", "-noout", "-nameopt", "multiline"], data=certificate).decode()
-    match = re.search(r"commonName\s*=\s*(Developer ID Application: .+)", subject)
-    if not match:
-        raise RuntimeError("Expected a Developer ID Application certificate")
-    identity = match[1].strip()
+    identity = p12_identity(certificate_path, password, "Application")
+    installer_identity = p12_identity(installer_path, installer_password, "Installer")
     installed = run(["security", "find-identity", "-v", "-p", "codesigning"]).decode()
     if f'"{identity}"' not in installed:
         raise RuntimeError("Import this Developer ID identity into Keychain before setup")
@@ -93,7 +109,7 @@ def setup(args):
     run(["xcrun", "notarytool", "history", *auth, "--output-format", "json"])
     repo = args.repo or json.loads(run(["gh", "repo", "view", "--json", "nameWithOwner"]))["nameWithOwner"]
     run(["gh", "repo", "view", repo, "--json", "nameWithOwner"])
-    print(f"Validated certificate, matching private key, and Apple authentication.\nRepository: {repo}\nIdentity: {identity}", flush=True)
+    print(f"Validated certificates, matching private keys, and Apple authentication.\nRepository: {repo}\nIdentity: {identity}\nInstaller identity: {installer_identity}", flush=True)
     if not args.apply:
         print("Validation only. Add --apply to configure GitHub and the local Keychain profile.")
         return
@@ -103,6 +119,8 @@ def setup(args):
     secrets = {
         "APPLE_APPLICATION_CERTIFICATE_BASE64": base64.b64encode(certificate_path.read_bytes()),
         "APPLE_APPLICATION_CERTIFICATE_PASSWORD": password,
+        "APPLE_INSTALLER_CERTIFICATE_BASE64": base64.b64encode(installer_path.read_bytes()),
+        "APPLE_INSTALLER_CERTIFICATE_PASSWORD": installer_password,
         "APPLE_NOTARY_KEY_BASE64": base64.b64encode(key_path.read_bytes()),
     }
     for name, value in secrets.items():
@@ -110,6 +128,7 @@ def setup(args):
         print(f"Configured secret: {name}", flush=True)
     variables = {
         "APPLE_APPLICATION_SIGNING_IDENTITY": identity,
+        "APPLE_INSTALLER_SIGNING_IDENTITY": installer_identity,
         "APPLE_NOTARY_KEY_ID": key_id,
         "APPLE_NOTARY_ISSUER_ID": issuer,
     }
@@ -156,6 +175,8 @@ def main():
     setup_parser = commands.add_parser("setup", help="Validate shared assets; optionally configure GitHub and Keychain")
     setup_parser.add_argument("--application-p12", type=Path, required=True)
     setup_parser.add_argument("--password-file", type=Path, required=True)
+    setup_parser.add_argument("--installer-p12", type=Path, required=True, help="Developer ID Installer export, for the .pkg")
+    setup_parser.add_argument("--installer-password-file", type=Path, help="Defaults to --password-file")
     setup_parser.add_argument("--notary-key", type=Path, required=True)
     issuer = setup_parser.add_mutually_exclusive_group(required=True)
     issuer.add_argument("--issuer-file", type=Path)
