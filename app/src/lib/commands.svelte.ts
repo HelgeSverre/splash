@@ -2,7 +2,7 @@
 // lib/keybindings (rebindable in Settings → Keyboard shortcuts); a handler
 // returning false lets the key through.
 import { tick } from "svelte";
-import { registerCommands, openCommandPalette } from "@elyra/runtime";
+import { openCommandPalette, type Command } from "@elyra/runtime";
 import { api } from "../bindings";
 import { actionTitle, onAction, shortcut } from "./keybindings.svelte";
 import { focusComposer } from "./focus";
@@ -20,6 +20,11 @@ function cycleSession(step: number) {
   const i = list.findIndex((s) => s.id === currentId());
   openSession(list[(i + step + list.length) % list.length].id);
 }
+
+// The palette's entries. Not registered with the runtime: it would open them on
+// ⌘K / Ctrl+K by itself, whatever is bound in Settings (and on the web that
+// key is the browser's own).
+let palette: Command[] = [];
 
 /** The shortcut handlers, and the palette (kept current). Call while App initialises. */
 export function installCommands() {
@@ -54,14 +59,14 @@ export function installCommands() {
       document.getElementById(`stab-${id}-tab-${t.active}`)?.focus();
     });
   });
-  onAction("app.palette", () => openCommandPalette());
+  onAction("app.palette", () => openCommandPalette(palette));
   onAction("app.settings", () => void (app.settings ? (app.settings = null) : openSettings()));
 
   // A palette entry named after a shortcut action, its key as the subtitle.
   const fromAction = (actionId: string, id: string, action: () => void) => ({ id, title: actionTitle(actionId), subtitle: shortcut(actionId), action });
 
   $effect(() => {
-    registerCommands([
+    palette = [
       fromAction("session.new", "new", () => void (app.newSession = {})),
       fromAction("app.settings", "settings", () => openSettings()),
       { id: "agents", title: "Agents", subtitle: "Settings", action: () => openSettings("agents") },
@@ -83,6 +88,6 @@ export function installCommands() {
           subtitle: `${projectById(s.project_id)?.name ?? ""} · ${s.agent_id}`,
           action: () => openSession(s.id),
         })),
-    ]);
+    ];
   });
 }
