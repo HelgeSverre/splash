@@ -160,6 +160,14 @@ export class App {
   get dialogCancel() {
     return testId(this.newSessionDialog, "new-session-cancel");
   }
+  /** "owner/name #n: title" when working on a GitHub item. */
+  get dialogContext() {
+    return testId(this.newSessionDialog, "new-session-context");
+  }
+  /** Start a new worktree from the pull request's head (a pull request's only). */
+  get dialogPrHead() {
+    return testId(this.newSessionDialog, "new-session-pr-head");
+  }
 
   /** Start a session through the New session dialog and wait until the agent is ready. */
   async newSession(options: { agent?: AgentId; where?: "worktree" | "in_place"; folders?: string[] } = {}) {
@@ -207,6 +215,11 @@ export class App {
   get panelToggle() {
     return testId(this.page, "session-panel-toggle");
   }
+  /** The GitHub repository of the session's origin, which opens it. */
+  get repoLink() {
+    return testId(this.page, "session-repo");
+  }
+  /** The branch's pull request; `data-number` and `data-state` (open, merged…). */
   get pullRequest() {
     return testId(this.page, "session-pr");
   }

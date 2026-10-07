@@ -6,7 +6,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "../../fixtures.ts";
 import { bareRemote, CALC, git, remotePath, status } from "../../support/git.ts";
-import { ActionsView, FakeGithub, GithubView, pinClock, publishPullRequest } from "../../support/github.ts";
+import { ActionsView, FakeGithub, GithubView, IssueComposer, pinClock, publishPullRequest, RepoPicker } from "../../support/github.ts";
+import { Review } from "../../support/views.ts";
 
 test.use({ gh: true });
 
@@ -26,14 +27,14 @@ test("GitHub lists every repository's activity, filtered by owner, link and type
   const { app, page, world, db } = splash;
   const gh = new FakeGithub(world);
   const view = new GithubView(page);
-  await app.openNav("GitHub");
+  await app.openNav("github");
 
-  await expect(page.getByText("@octocat")).toBeVisible();
+  await expect(view.account).toHaveText("@octocat");
   await view.loaded(15);
-  await expect(view.repositoriesButton).toHaveText("Repositories 4");
-  await expect(view.list).toContainText("18 loaded items");
-  await expect(view.rows("Subtract returns the wrong sign")).toBeVisible();
-  await expect(view.rows("Pushed to main")).toBeVisible();
+  await expect(view.repositories).toHaveAttribute("data-count", "4");
+  await expect(view.count).toHaveAttribute("data-count", "18");
+  await expect(view.title(view.item("e2e/demo", 12))).toHaveText("Subtract returns the wrong sign");
+  await expect(view.title(view.items({ repo: "e2e/demo", kind: "activity" }).first())).toHaveText("Pushed to main");
 
   // Repositories come from one paginated, slurped request; each repository's
   // feeds are one REST or GraphQL page each, issues only where enabled.
@@ -60,49 +61,50 @@ test("GitHub lists every repository's activity, filtered by owner, link and type
   );
 
   // Older items load on request, from the cursor the first page returned.
-  await view.list.getByRole("button", { name: "Load more (1 feeds)" }).click();
-  await expect(view.rows("Support division")).toBeVisible();
+  await expect(view.loadMore).toHaveAttribute("data-count", "1");
+  await view.loadMore.click();
+  await expect(view.item("e2e/demo", 3)).toBeVisible();
   expect(gh.graphql(/issues\(first:30/).filter((b) => b.variables.name === "demo").map((b) => b.variables.cursor)).toEqual([null, "Y3Vyc29yOjM="]);
 
-  const titles = view.rows().locator(".item-title");
-  await view.tab("Needs me").click();
+  const titles = view.titles;
+  await view.tab("needs_me").click();
   await expect(titles).toHaveText(["Fix subtract sign", "Bump widget styles", "Subtract returns the wrong sign"]);
-  await view.tab("Issues").click();
+  await view.tab("issue").click();
   await expect(titles).toHaveText(ALL_ISSUES);
-  await view.select("Item status").selectOption("Open");
+  await view.itemStatus.selectOption("open");
   await expect(titles).toHaveText(["Subtract returns the wrong sign", "Document the add helper", "Widget renders twice", "Support division"]);
-  await view.tab("PRs").click();
-  await view.select("Item status").selectOption("Closed / merged");
+  await view.tab("pull_request").click();
+  await view.itemStatus.selectOption("closed");
   await expect(titles).toHaveText(["Add multiply", "Old cleanup"]);
-  await view.select("Item status").selectOption("All states");
+  await view.itemStatus.selectOption("all");
 
-  await view.tab("Branches").click();
-  await view.select("GitHub owner").selectOption("e2e-labs");
-  await expect(view.repositoriesButton).toHaveText("Repositories 2");
+  await view.tab("branch").click();
+  await view.owner.selectOption("e2e-labs");
+  await expect(view.repositories).toHaveAttribute("data-count", "2");
   await expect(titles).toHaveText(["bump-styles", "main", "main"]);
-  const linked = page.getByRole("button", { name: "Linked to Splash" });
-  await linked.click();
-  await expect(linked).toHaveAttribute("aria-pressed", "true");
-  await expect(view.repositoriesButton).toHaveText("Repositories 0");
-  await expect(view.list).toContainText("Choose repositories or clear your scope filters.");
-  await view.select("GitHub owner").selectOption("All owners");
+  await view.linked.click();
+  await expect(view.linked).toHaveAttribute("aria-pressed", "true");
+  await expect(view.repositories).toHaveAttribute("data-count", "0");
+  await expect(view.empty).toContainText("Choose repositories or clear your scope filters.");
+  await view.owner.selectOption({ value: "" });
   // Only e2e/demo is the origin of a Splash project.
-  await expect(view.repositoriesButton).toHaveText("Repositories 1");
+  await expect(view.repositories).toHaveAttribute("data-count", "1");
   await expect(titles).toHaveText(["main", "fix/subtract-sign", "feat/a"]);
-  await expect(view.rows("feat/a").getByTitle("Linked to a Splash project")).toBeVisible();
+  await expect(view.linkedMark(view.branch("e2e/demo", "feat/a"))).toBeVisible();
 
   // The scope is a setting: it survives a reload.
   await expect.poll(() => [db.setting("github.owner"), db.setting("github.linked"), db.setting("github.feed")]).toEqual(["", "true", "branch"]);
   await page.reload();
   await app.waitReady();
-  await expect(view.tab("Branches")).toHaveAttribute("aria-selected", "true");
-  await expect(linked).toHaveAttribute("aria-pressed", "true");
-  await expect(view.repositoriesButton).toHaveText("Repositories 1");
+  await expect(view.tab("branch")).toHaveAttribute("aria-selected", "true");
+  await expect(view.linked).toHaveAttribute("aria-pressed", "true");
+  await expect(view.repositories).toHaveAttribute("data-count", "1");
   await expect(titles).toHaveText(["main", "fix/subtract-sign", "feat/a"]);
 });
 
 test("GitHub opened while Splash is still starting stays open", async ({ splash }) => {
   const { app, page } = splash;
+  const view = new GithubView(page);
   // Hold agent detection, the last thing Splash loads at startup.
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
@@ -112,65 +114,64 @@ test("GitHub opened while Splash is still starting stays open", async ({ splash 
   });
   await page.reload();
   await app.waitReady();
-  await app.openNav("GitHub");
-  await expect(page.getByRole("heading", { name: "GitHub", exact: true })).toBeVisible();
+  await app.openNav("github");
+  await expect(view.root).toBeVisible();
 
   release();
   // Once loaded, the URL follows the open view instead of resetting it.
   await expect(page).toHaveURL(/#\/github$/);
-  await expect(page.getByRole("heading", { name: "GitHub", exact: true })).toBeVisible();
-  await new GithubView(page).loaded(15);
+  await expect(view.root).toBeVisible();
+  await view.loaded(15);
 });
 
 test("the repository picker narrows the scope, and a saved view brings it back", async ({ splash }) => {
   const { app, page, db } = splash;
   const view = new GithubView(page);
-  const titles = view.rows().locator(".item-title");
-  await app.openNav("GitHub");
+  const picker = new RepoPicker(page);
+  await app.openNav("github");
   await view.loaded(15);
 
-  await view.repositoriesButton.click();
-  const picker = page.getByRole("dialog", { name: "Choose GitHub repositories" });
-  await expect(picker.getByRole("checkbox", { checked: true })).toHaveCount(4);
-  await picker.getByRole("button", { name: "Clear all" }).click();
-  await expect(picker).toContainText("0 selected");
-  await picker.getByRole("textbox", { name: "Find a repository across all owners…" }).fill("e2e/");
-  await picker.getByRole("button", { name: "Select matches (2)" }).click();
-  await expect(picker).toContainText("2 selected");
-  await picker.getByRole("checkbox", { name: /^e2e\/docs/ }).uncheck();
-  await expect(picker).toContainText("1 selected");
-  await picker.getByRole("button", { name: "Apply scope" }).click();
-  await expect(picker).toBeHidden();
-  await expect(view.repositoriesButton).toHaveText("Repositories 1");
+  await view.repositories.click();
+  await expect(picker.checked).toHaveCount(4);
+  await picker.clear.click();
+  await expect(picker.selected).toHaveAttribute("data-count", "0");
+  await picker.filter.fill("e2e/");
+  await expect(picker.selectMatches).toHaveAttribute("data-count", "2");
+  await picker.selectMatches.click();
+  await expect(picker.selected).toHaveAttribute("data-count", "2");
+  await picker.repo("e2e/docs").uncheck();
+  await expect(picker.selected).toHaveAttribute("data-count", "1");
+  await picker.apply.click();
+  await expect(picker.dialog).toBeHidden();
+  await expect(view.repositories).toHaveAttribute("data-count", "1");
   await view.loaded(4);
   await expect.poll(() => db.setting("github.repositories")).toBe(JSON.stringify(["e2e/demo"]));
 
-  await view.tab("Issues").click();
-  await page.getByRole("button", { name: "Save view…" }).click();
-  const save = page.getByRole("dialog", { name: "Save GitHub view" });
-  await save.getByLabel("View name").fill("Demo issues");
-  await save.getByRole("button", { name: "Save" }).click();
-  await expect(save).toBeHidden();
-  await expect(view.select("Saved view").locator("option:checked")).toHaveText("Demo issues");
+  await view.tab("issue").click();
+  await view.saveView.click();
+  await view.saveName.fill("Demo issues");
+  await view.saveSubmit.click();
+  await expect(view.saveDialog).toBeHidden();
+  await expect(view.currentView).toHaveText("Demo issues");
   // Views belong to the GitHub login.
   const views = () => JSON.parse(db.setting("github.octocat.views") ?? "[]").map((v: any) => [v.name, v.repositories, v.feed]);
   await expect.poll(views).toEqual([["Demo issues", ["e2e/demo"], "issue"]]);
 
   // Widen the scope again, then restore the view.
-  await view.repositoriesButton.click();
-  await picker.getByRole("button", { name: "All repositories" }).click();
-  await expect(picker).toContainText("4 selected");
-  await picker.getByRole("button", { name: "Apply scope" }).click();
-  await view.tab("All activity").click();
-  await expect(view.repositoriesButton).toHaveText("Repositories 4");
-  await view.select("Saved view").selectOption("Custom view");
-  await view.select("Saved view").selectOption("Demo issues");
-  await expect(view.repositoriesButton).toHaveText("Repositories 1");
-  await expect(view.tab("Issues")).toHaveAttribute("aria-selected", "true");
-  await expect(titles).toHaveText(["Subtract returns the wrong sign", "Document the add helper", "Crash on empty input"]);
+  await view.repositories.click();
+  await picker.all.click();
+  await expect(picker.selected).toHaveAttribute("data-count", "4");
+  await picker.apply.click();
+  await view.tab("all").click();
+  await expect(view.repositories).toHaveAttribute("data-count", "4");
+  await view.savedView.selectOption({ value: "" });
+  await view.savedView.selectOption({ label: "Demo issues" });
+  await expect(view.repositories).toHaveAttribute("data-count", "1");
+  await expect(view.tab("issue")).toHaveAttribute("aria-selected", "true");
+  await expect(view.titles).toHaveText(["Subtract returns the wrong sign", "Document the add helper", "Crash on empty input"]);
 
-  await page.getByRole("button", { name: "Delete view" }).click();
-  await expect(view.select("Saved view").locator("option")).toHaveText(["Custom view"]);
+  await view.deleteView.click();
+  await expect(view.savedViews).toHaveCount(0);
   await expect.poll(views).toEqual([]);
 });
 
@@ -179,21 +180,22 @@ test("a feed that fails is reported, and retrying it fills the gap", async ({ sp
   const gh = new FakeGithub(world);
   gh.fail(/^graphql pullRequests e2e-labs\/widgets$/, "gh: Not Found (HTTP 404)");
   const view = new GithubView(page);
-  await app.openNav("GitHub");
+  await app.openNav("github");
 
-  await expect(view.sync).toHaveText(/^14 \/ 15 feeds loaded/);
-  const failures = page.locator("details", { hasText: "1 GitHub feed failed. Results may be incomplete." });
-  await failures.getByText("1 GitHub feed failed").click();
-  await expect(failures).toContainText("e2e-labs/widgets · pull request");
-  await expect(failures).toContainText("HTTP 404");
-  await expect(view.rows("Widget renders twice")).toBeVisible();
-  await expect(view.rows("Bump widget styles")).toHaveCount(0);
+  await expect(view.synced(14, 15)).toBeVisible();
+  await expect(view.failures).toHaveAttribute("data-count", "1");
+  await view.failuresSummary.click();
+  const failure = view.failure("e2e-labs/widgets", "pull_request");
+  await expect(failure).toBeVisible();
+  await expect(failure).toContainText("HTTP 404");
+  await expect(view.item("e2e-labs/widgets", 4)).toBeVisible();
+  await expect(view.item("e2e-labs/widgets", 8)).toHaveCount(0);
 
   gh.heal();
-  await failures.getByRole("button", { name: "Retry failed requests" }).click();
+  await view.retryFailures.click();
   await view.loaded(15);
-  await expect(failures).toHaveCount(0);
-  await expect(view.rows("Bump widget styles")).toBeVisible();
+  await expect(view.failures).toHaveCount(0);
+  await expect(view.item("e2e-labs/widgets", 8)).toBeVisible();
   expect(feeds(gh).filter((f) => f === "e2e-labs/widgets pullRequests")).toHaveLength(2);
 });
 
@@ -201,39 +203,41 @@ test("items are marked read or unread, and snoozed until tomorrow or new activit
   const { app, page, world, db } = splash;
   const gh = new FakeGithub(world);
   const view = new GithubView(page);
-  await app.openNav("GitHub");
+  await app.openNav("github");
   await view.loaded(15);
-  const unread = view.list.getByRole("img", { name: "Unread" });
+  const unread = view.unread();
   // What was already on GitHub when Splash first looked counts as read.
   await expect(unread).toHaveCount(0);
 
-  const issue = view.rows("Subtract returns the wrong sign");
+  const issue = view.item("e2e/demo", 12);
   await issue.click();
   await expect(issue).toHaveAttribute("aria-pressed", "true");
-  await expect(view.detail.getByRole("heading", { name: "Subtract returns the wrong sign" })).toBeVisible();
-  await expect(view.detail).toContainText("I'll take this one.");
-  await view.detail.getByRole("button", { name: "Mark unread" }).click();
-  await expect(issue.getByRole("img", { name: "Unread" })).toBeVisible();
+  await expect(view.detailTitle).toHaveText("Subtract returns the wrong sign");
+  await expect(view.comments).toContainText(["I'll take this one."]);
+  await expect(view.readToggle).toHaveAttribute("data-unread", "false");
+  await view.readToggle.click();
+  await expect(view.unread(issue)).toBeVisible();
   await expect(unread).toHaveCount(1);
-  await view.detail.getByRole("button", { name: "Mark read" }).click();
+  await expect(view.readToggle).toHaveAttribute("data-unread", "true");
+  await view.readToggle.click();
   await expect(unread).toHaveCount(0);
 
   // Until tomorrow at 9: out of the inbox, under Snoozed.
-  await view.detail.getByRole("combobox", { name: "Snooze item" }).selectOption("Until tomorrow at 9");
+  await view.snooze.selectOption("tomorrow");
   await expect(issue).toHaveCount(0);
-  await view.select("Inbox filter").selectOption("Snoozed");
-  await expect(view.rows().locator(".item-title")).toHaveText(["Subtract returns the wrong sign"]);
-  await view.select("Inbox filter").selectOption("Include snoozed");
+  await view.inboxFilter.selectOption("snoozed");
+  await expect(view.titles).toHaveText(["Subtract returns the wrong sign"]);
+  await view.inboxFilter.selectOption("all");
   await expect(issue).toBeVisible();
-  await view.select("Inbox filter").selectOption("Inbox");
+  await view.inboxFilter.selectOption("inbox");
   await expect(issue).toHaveCount(0);
   const marks = () => JSON.parse(db.setting("github.octocat.inbox") ?? "{}").marks ?? {};
   await expect.poll(() => marks()["e2e/demo:I_e2e/demo_12"]?.snooze?.until).toBe(Date.parse("2026-10-08T09:00:00Z"));
 
   // Until new activity.
-  const pull = view.rows("Fix subtract sign");
+  const pull = view.item("e2e/demo", 7);
   await pull.click();
-  await view.detail.getByRole("combobox", { name: "Snooze item" }).selectOption("Until new activity");
+  await view.snooze.selectOption("activity");
   await expect(pull).toHaveCount(0);
 
   // The next morning the issue is back; the pull request still sleeps.
@@ -245,10 +249,10 @@ test("items are marked read or unread, and snoozed until tomorrow or new activit
   gh.update((s) => {
     FakeGithub.repo(s, "e2e/demo").pulls!.find((p) => p.number === 7)!.updated = "2026-10-08T09:30:00Z";
   });
-  await page.getByRole("button", { name: "Refresh GitHub" }).click();
-  await expect(pull.getByRole("img", { name: "Unread" })).toBeVisible();
+  await view.refresh.click();
+  await expect(view.unread(pull)).toBeVisible();
   await expect(unread).toHaveCount(1);
-  await page.getByRole("button", { name: "Mark loaded read" }).click();
+  await view.markAllRead.click();
   await expect(unread).toHaveCount(0);
 });
 
@@ -256,20 +260,20 @@ test("Search GitHub sends the text literally, with the scope and qualifiers as f
   const { app, page, world } = splash;
   const gh = new FakeGithub(world);
   const view = new GithubView(page);
-  const titles = view.rows().locator(".item-title");
+  const titles = view.titles;
   const searches = () => gh.graphql(/search\(type:ISSUE/).map((b) => b.variables);
-  await app.openNav("GitHub");
+  await app.openNav("github");
   await view.loaded(15);
 
-  await view.select("GitHub owner").selectOption("e2e");
-  await view.select("Search source").selectOption("Search GitHub");
-  await view.tab("Issues").click();
-  await page.getByRole("textbox", { name: "Search GitHub items" }).fill("wrong sign");
-  await page.getByRole("textbox", { name: "Author", exact: true }).fill("hubot");
-  await page.getByRole("textbox", { name: "Assignee", exact: true }).fill("@me");
-  await page.getByRole("textbox", { name: "Label", exact: true }).fill("bug");
-  await view.select("Item status").selectOption("Open");
-  await page.getByRole("button", { name: "Search GitHub" }).click();
+  await view.owner.selectOption("e2e");
+  await view.searchSource.selectOption("github");
+  await view.tab("issue").click();
+  await view.search.fill("wrong sign");
+  await view.author.fill("hubot");
+  await view.assignee.fill("@me");
+  await view.label.fill("bug");
+  await view.itemStatus.selectOption("open");
+  await view.searchGithub.click();
   // The router also returns an issue from outside the scope; Splash drops it.
   await expect(titles).toHaveText(["Subtract returns the wrong sign"]);
   expect(searches()).toEqual([
@@ -277,12 +281,12 @@ test("Search GitHub sends the text literally, with the scope and qualifiers as f
   ]);
 
   // A review filter searches pull requests.
-  for (const field of ["Search GitHub items", "Author", "Assignee", "Label"]) await page.getByRole("textbox", { name: field, exact: true }).fill("");
-  await view.select("Item status").selectOption("All states");
-  await view.select("GitHub owner").selectOption("All owners");
-  await view.select("Review status").selectOption("Review requested from me");
-  await expect(view.tab("PRs")).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "Search GitHub" }).click();
+  for (const field of [view.search, view.author, view.assignee, view.label]) await field.fill("");
+  await view.itemStatus.selectOption("all");
+  await view.owner.selectOption({ value: "" });
+  await view.review.selectOption("requested");
+  await expect(view.tab("pull_request")).toHaveAttribute("aria-selected", "true");
+  await view.searchGithub.click();
   await expect(titles).toHaveText(["Bump widget styles"]);
   expect(searches().at(-1)).toEqual({
     q: "repo:e2e-labs/legacy repo:e2e-labs/widgets repo:e2e/demo repo:e2e/docs is:pr sort:updated-desc review-requested:@me",
@@ -291,13 +295,14 @@ test("Search GitHub sends the text literally, with the scope and qualifiers as f
 
   // Pages continue from GitHub's cursor; a slow search can be paused.
   gh.delay(/^graphql search/, 3);
-  await view.tab("Issues").click();
-  await page.getByRole("button", { name: "Search GitHub" }).click();
-  await page.getByRole("button", { name: "Pause" }).click();
+  await view.tab("issue").click();
+  await view.searchGithub.click();
+  await view.pause.click();
   gh.update((s) => (s.delays = []));
-  await page.getByRole("button", { name: "Resume search" }).click();
+  await view.resumeSearch.click();
   await expect(titles).toHaveText(["Subtract returns the wrong sign", "Document the add helper", "Widget renders twice"]);
-  await page.getByRole("button", { name: "Load more (1 feeds)" }).click();
+  await expect(view.loadMore).toHaveAttribute("data-count", "1");
+  await view.loadMore.click();
   await expect(titles).toHaveText(ALL_ISSUES);
   expect(searches().at(-1)).toEqual({ q: "repo:e2e-labs/legacy repo:e2e-labs/widgets repo:e2e/demo is:issue sort:updated-desc", cursor: "Y3Vyc29yOjM=" });
 });
@@ -306,45 +311,44 @@ test("a new issue is previewed, kept as a draft, and sent to GitHub as literal J
   const { app, page, world } = splash;
   const gh = new FakeGithub(world);
   const view = new GithubView(page);
-  await app.openNav("GitHub");
+  const issue = new IssueComposer(page);
+  await app.openNav("github");
   await view.loaded(15);
 
   // Starts in the selected item's repository.
-  await view.rows("Widget renders twice").click();
-  await page.getByRole("button", { name: "New issue" }).click();
-  const dialog = page.getByRole("dialog", { name: "New GitHub issue" });
-  const repo = dialog.getByRole("combobox", { name: "Repository", exact: true });
-  await expect(repo).toHaveValue("e2e-labs/widgets");
+  await view.item("e2e-labs/widgets", 4).click();
+  await view.newIssue.click();
+  await expect(issue.repo).toHaveValue("e2e-labs/widgets");
   // Not e2e/docs (issues are off) nor the archived e2e-labs/legacy.
-  await expect(repo.locator("option:not([disabled])")).toHaveText(["e2e/demo", "e2e-labs/widgets"]);
-  await repo.selectOption("e2e/demo");
+  await expect(issue.repoChoices).toHaveText(["e2e/demo", "e2e-labs/widgets"]);
+  await issue.repo.selectOption("e2e/demo");
   const title = 'Negative results: $(touch pwned) `uname` "quoted"';
   const body = "## Steps\n\n- [ ] call `subtract(2, 3)`\n\n**Expected** -1 & <b>not</b> 1";
-  await dialog.getByRole("textbox", { name: "Title" }).fill(title);
-  await dialog.getByRole("textbox", { name: "Description" }).fill(body);
-  await dialog.getByRole("button", { name: "Preview" }).click();
-  await expect(dialog.getByRole("button", { name: "Preview" })).toHaveAttribute("aria-pressed", "true");
-  await expect(dialog.getByRole("heading", { name: "Steps" })).toBeVisible();
-  await expect(dialog.locator("strong", { hasText: "Expected" })).toBeVisible();
+  await issue.title.fill(title);
+  await issue.body.fill(body);
+  await issue.preview.click();
+  await expect(issue.preview).toHaveAttribute("aria-pressed", "true");
+  await expect(issue.previewHeadings).toHaveText(["Steps"]);
+  await expect(issue.previewBold).toHaveText(["Expected"]);
 
   // Closing keeps the draft.
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toBeHidden();
-  await page.getByRole("button", { name: "New issue" }).click();
-  await expect(repo).toHaveValue("e2e/demo");
-  await expect(dialog.getByRole("textbox", { name: "Title" })).toHaveValue(title);
-  await expect(dialog.getByRole("textbox", { name: "Description" })).toHaveValue(body);
+  await issue.cancel.click();
+  await expect(issue.dialog).toBeHidden();
+  await view.newIssue.click();
+  await expect(issue.repo).toHaveValue("e2e/demo");
+  await expect(issue.title).toHaveValue(title);
+  await expect(issue.body).toHaveValue(body);
 
   // GitHub refuses: the draft stays, with a way to check GitHub.
   gh.fail(/^repos\/e2e\/demo\/issues$/, "gh: Resource not accessible by integration (HTTP 403)");
-  await dialog.getByRole("button", { name: "Create issue" }).click();
-  await expect(dialog.getByRole("alert")).toContainText("HTTP 403");
-  await expect(dialog.getByRole("alert").getByRole("button", { name: "Check issues on GitHub" })).toBeVisible();
-  await expect(dialog.getByRole("textbox", { name: "Title" })).toHaveValue(title);
+  await issue.create.click();
+  await expect(issue.error).toContainText("HTTP 403");
+  await expect(issue.checkGithub).toBeVisible();
+  await expect(issue.title).toHaveValue(title);
 
   gh.heal();
-  await dialog.getByRole("button", { name: "Create issue" }).click();
-  await expect(dialog).toBeHidden();
+  await issue.create.click();
+  await expect(issue.dialog).toBeHidden();
   await expect(app.ui.toasts.filter({ hasText: "Created e2e/demo #42" })).toBeVisible();
   // The issue went to gh as JSON on stdin, never as arguments.
   const created = gh.rest(/^repos\/e2e\/demo\/issues$/);
@@ -352,31 +356,30 @@ test("a new issue is previewed, kept as a draft, and sent to GitHub as literal J
   expect(JSON.parse(created[1].stdin)).toEqual({ title, body });
   expect(existsSync(join(world.root, "pwned"))).toBe(false);
   // It tops the list, selected.
-  await expect(view.rows().first().locator(".item-title")).toHaveText(title);
-  await expect(view.rows(title)).toHaveAttribute("aria-pressed", "true");
-  await expect(view.detail.getByRole("heading", { name: title })).toBeVisible();
+  await expect(view.title(view.items().first())).toHaveText(title);
+  await expect(view.item("e2e/demo", 42)).toHaveAttribute("aria-pressed", "true");
+  await expect(view.detailTitle).toHaveText(title);
 
-  await page.getByRole("button", { name: "New issue" }).click();
-  await expect(dialog.getByRole("textbox", { name: "Title" })).toHaveValue("");
+  await view.newIssue.click();
+  await expect(issue.title).toHaveValue("");
 });
 
 test("working on an issue drafts it into a new session", async ({ splash }) => {
   const { app, page, world, db } = splash;
   const view = new GithubView(page);
-  await app.openNav("GitHub");
+  await app.openNav("github");
   await view.loaded(15);
 
-  await view.rows("Subtract returns the wrong sign").click();
+  await view.item("e2e/demo", 12).click();
   // e2e/demo is the project's origin.
-  await expect(view.detail).toContainText(world.repo);
-  await view.detail.getByRole("button", { name: "Work on this" }).click();
-  const dialog = page.getByRole("dialog", { name: "New session" });
-  await expect(dialog).toContainText("e2e/demo #12: Subtract returns the wrong sign");
-  await expect(dialog.getByRole("radiogroup", { name: "Project" }).getByRole("radio", { name: /^repo/ })).toBeChecked();
-  await expect(dialog.getByRole("checkbox")).toHaveCount(0);
-  await dialog.getByRole("radiogroup", { name: "Where it works" }).getByRole("radio", { name: /In place/ }).click();
-  await dialog.getByRole("button", { name: /^Start session/ }).click();
-  await expect(dialog).toBeHidden();
+  await expect(view.detailProject(world.repo)).toBeVisible();
+  await view.workOnThis.click();
+  await expect(app.dialogContext).toHaveText("e2e/demo #12: Subtract returns the wrong sign");
+  await expect(app.dialogChoice("project", db.projects()[0].id)).toBeChecked();
+  await expect(app.dialogPrHead).toHaveCount(0);
+  await app.dialogChoice("where", "in_place").click();
+  await app.dialogStart.click();
+  await expect(app.newSessionDialog).toBeHidden();
 
   const id = await app.sessionId();
   await app.expectStatus("idle");
@@ -391,9 +394,9 @@ test("working on an issue drafts it into a new session", async ({ splash }) => {
   await expect.poll(() => db.setting(`session.github.${id}`)).toBe("https://github.com/e2e/demo/issues/12");
 
   // The item lists its session.
-  await app.openNav("GitHub");
-  await view.rows("Subtract returns the wrong sign").click();
-  await expect(view.detail.getByRole("button", { name: /^Subtract returns the wrong sign/ })).toContainText("this item");
+  await app.openNav("github");
+  await view.item("e2e/demo", 12).click();
+  await expect(view.detailSession(id)).toHaveAttribute("data-match", "item");
 });
 
 test.describe("a pull request", () => {
@@ -414,17 +417,17 @@ test.describe("a pull request", () => {
     const view = new GithubView(page);
     const before = git(world.repo, env, "rev-parse", "HEAD");
     expect(() => git(world.repo, env, "cat-file", "-e", head)).toThrow();
-    await app.openNav("GitHub");
+    await app.openNav("github");
     await view.loaded(15);
 
-    await view.tab("PRs").click();
-    await view.rows("Fix subtract sign").click();
-    await view.detail.getByRole("button", { name: "Work on this" }).click();
-    const dialog = page.getByRole("dialog", { name: "New session" });
-    await expect(dialog.getByRole("checkbox", { name: "Start a new worktree from PR #7 (fix/subtract-sign)" })).toBeChecked();
-    await expect(dialog.getByRole("radiogroup", { name: "Where it works" })).toHaveCount(0);
-    await dialog.getByRole("button", { name: /^Start session/ }).click();
-    await expect(dialog).toBeHidden();
+    await view.tab("pull_request").click();
+    await view.item("e2e/demo", 7).click();
+    await view.workOnThis.click();
+    await expect(app.dialogPrHead).toBeChecked();
+    await expect(app.dialogPrHead).toHaveAccessibleName("Start a new worktree from PR #7 (fix/subtract-sign)");
+    await expect(app.dialogChoices("where")).toHaveCount(0);
+    await app.dialogStart.click();
+    await expect(app.newSessionDialog).toBeHidden();
 
     const id = await app.sessionId();
     await app.expectStatus("idle");
@@ -447,28 +450,26 @@ test.describe("a pull request", () => {
 test("a pull request from a repository without its checkout cannot start a worktree", async ({ splash }) => {
   const { app, page, world, db } = splash;
   const view = new GithubView(page);
-  await app.openNav("GitHub");
+  await app.openNav("github");
   await view.loaded(15);
 
-  await view.rows("Bump widget styles").click();
-  await expect(view.detail).toContainText("No matching local project.");
-  await view.detail.getByRole("button", { name: "Link to Splash…" }).click();
-  const link = page.getByRole("dialog", { name: "Link repository to Splash" });
-  await link.getByRole("button", { name: "repo", exact: true }).click();
-  await expect(link).toBeHidden();
-  await expect(view.detail).toContainText(world.repo);
-  await expect(view.detail.getByRole("button", { name: "Link another project…" })).toBeVisible();
+  await view.item("e2e-labs/widgets", 8).click();
+  await expect(view.noProject).toBeVisible();
+  await view.linkProject.click();
+  await view.linkChoice(world.repo).click();
+  await expect(view.linkDialog).toBeHidden();
+  await expect(view.detailProject(world.repo)).toBeVisible();
+  await expect(view.linkProject).toHaveText("Link another project…");
   await expect.poll(() => db.setting("github.link.e2e-labs/widgets")).toBe(JSON.stringify([db.projects()[0].id]));
 
   // Linked by hand, but the project's origin is e2e/demo: the PR head cannot be fetched.
-  await view.detail.getByRole("button", { name: "Work on this" }).click();
-  const dialog = page.getByRole("dialog", { name: "New session" });
-  await expect(dialog.getByRole("radiogroup", { name: "Project" }).getByRole("radio", { name: /^repo/ })).toBeChecked();
-  await dialog.getByRole("button", { name: /^Start session/ }).click();
+  await view.workOnThis.click();
+  await expect(app.dialogChoice("project", db.projects()[0].id)).toBeChecked();
+  await app.dialogStart.click();
   await expect(
     app.ui.toasts.filter({ hasText: "This project has no GitHub remote matching the pull request. Link the matching local checkout first." }),
   ).toBeVisible();
-  await expect(dialog).toBeVisible();
+  await expect(app.newSessionDialog).toBeVisible();
   expect(db.sessions()).toEqual([]);
 });
 
@@ -479,8 +480,9 @@ test("a session's pull request shows in its header and review panel", async ({ s
   world.agents.speed("claude", 10);
   const id = await app.newSession({ where: "worktree" });
   const { branch, cwd } = db.session(id)!;
-  await expect(page.getByRole("button", { name: "github.com/e2e/demo" })).toHaveAttribute("title", "https://github.com/e2e/demo");
-  await expect(page.getByRole("button", { name: /^PR #/ })).toHaveCount(0);
+  await expect(app.repoLink).toHaveText("github.com/e2e/demo");
+  await expect(app.repoLink).toHaveAttribute("title", "https://github.com/e2e/demo");
+  await expect(app.pullRequest).toHaveCount(0);
 
   // The agent's branch gets a pull request; Splash looks again when it sees a turn end.
   gh.update((s) =>
@@ -496,11 +498,11 @@ test("a session's pull request shows in its header and review panel", async ({ s
   await app.send("What does subtract do?");
   await app.expectStatus("running");
   await expect(app.entries("turn_end")).toBeVisible();
-  const chip = page.getByRole("button", { name: /^PR #15/ });
-  await expect(chip).toContainText("open");
-  await expect(chip).toHaveAttribute("title", "Teach subtract about signs");
-  await app.sideTab("Review").click();
-  await expect(page.getByRole("button", { name: "Open PR #15" })).toBeVisible();
+  await expect(app.pullRequest).toHaveAttribute("data-number", "15");
+  await expect(app.pullRequest).toHaveAttribute("data-state", "open");
+  await expect(app.pullRequest).toHaveAttribute("title", "Teach subtract about signs");
+  await app.sideTab("review").click();
+  await expect(new Review(page).openPullRequest).toHaveAttribute("data-number", "15");
   expect(gh.calls().filter((c) => c.argv[0] === "pr").at(-1)).toEqual({
     argv: ["pr", "view", branch, "--json", "number,url,state,title"],
     stdin: "",
@@ -515,55 +517,55 @@ test("Actions lists runs across the scope and filters them on GitHub", async ({ 
   const { app, page, world } = splash;
   const gh = new FakeGithub(world);
   const actions = new ActionsView(page);
-  const titles = actions.run().locator("strong");
+  const titles = actions.titles;
   /** The latest runs request for e2e/demo. */
   const demoRuns = () => gh.rest(/^repos\/e2e\/demo\/actions\/(workflows\/\d+\/)?runs\?/).at(-1)?.argv[3];
 
   // A slow repository can be paused and resumed.
   gh.delay(/^repos\/e2e-labs\/widgets\/actions\/runs\?/, 4);
-  await app.openNav("Actions");
-  await expect(page.getByText("@octocat")).toBeVisible();
-  await expect(actions.sync).toHaveText(/^Loading 3 \/ 4 repositories/);
-  await page.getByRole("button", { name: "Pause" }).click();
-  await expect(actions.sync).toHaveText(/^3 \/ 4 repositories loaded/);
+  await app.openNav("actions");
+  await expect(actions.account).toHaveText("@octocat");
+  await expect(actions.loading(3, 4)).toBeVisible();
+  await actions.pause.click();
+  await expect(actions.synced(3, 4)).toBeVisible();
   gh.update((s) => (s.delays = []));
-  await page.getByRole("button", { name: "Resume" }).click();
+  await actions.resume.click();
   await actions.loaded(4);
 
-  for (const text of ["4 runs loaded", "1 active / waiting", "1 need attention", "2 successful"]) await expect(actions.summary).toContainText(text);
+  for (const [count, n] of Object.entries({ runs: 4, active: 1, failed: 1, passed: 2 }))
+    await expect(actions.summary).toHaveAttribute(`data-${count}`, String(n));
   await expect(titles).toHaveText(["Try feature a", "Fix subtract sign", "Bump widget styles", "Initial commit"]);
   expect(demoRuns()).toMatch(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&${LAST_30_DAYS}$`));
 
   // Status, branch and event filters go to GitHub, encoded.
-  await actions.select("Run status").selectOption("Failed");
+  await actions.status.selectOption("failure");
   await expect(titles).toHaveText(["Fix subtract sign"]);
-  await page.getByRole("textbox", { name: "Branch filter" }).fill("fix/subtract-sign");
-  await page.getByRole("textbox", { name: "Event filter" }).fill("pull_request");
-  await page.getByRole("button", { name: "Apply" }).click();
+  await actions.branch.fill("fix/subtract-sign");
+  await actions.event.fill("pull_request");
+  await actions.apply.click();
   await expect
     .poll(demoRuns)
     .toMatch(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&status=failure&branch=fix%2Fsubtract-sign&event=pull_request&${LAST_30_DAYS}$`));
   await expect(titles).toHaveText(["Fix subtract sign"]);
 
-  await actions.select("Run status").selectOption("Successful");
-  await page.getByRole("textbox", { name: "Branch filter" }).fill("");
-  await page.getByRole("textbox", { name: "Event filter" }).fill("");
-  await page.getByRole("button", { name: "Apply" }).click();
-  await actions.select("Run time range").selectOption("All available history");
+  await actions.status.selectOption("success");
+  await actions.branch.fill("");
+  await actions.event.fill("");
+  await actions.apply.click();
+  await actions.range.selectOption({ value: "" });
   await expect(titles).toHaveText(["Bump widget styles", "Initial commit", "Release v0.1.0"]);
   await expect.poll(demoRuns).toBe("repos/e2e/demo/actions/runs?per_page=30&page=1&status=success");
 
   // A workflow's own runs.
-  await page.getByRole("tablist", { name: "Actions overview" }).getByRole("tab", { name: "Workflows" }).click();
-  const workflows = page.getByRole("region", { name: "Workflows" }).locator(".workflow");
-  await expect(workflows.locator("strong")).toHaveText(["Widgets CI", "CI", "Release"]);
-  await expect(workflows.nth(2)).toContainText("disabled manually");
-  await workflows.nth(1).getByRole("button", { name: "View runs" }).click();
-  await expect(page.getByRole("tab", { name: "Runs" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("e2e/demo · CI")).toBeVisible();
+  await actions.tab("workflows").click();
+  await expect(actions.workflowNames).toHaveText(["Widgets CI", "CI", "Release"]);
+  await expect(actions.workflow("102")).toHaveAttribute("data-state", "disabled_manually");
+  await actions.viewRuns(actions.workflow("101")).click();
+  await expect(actions.tab("runs")).toHaveAttribute("aria-selected", "true");
+  await expect(actions.workflowFilter).toHaveText("e2e/demo · CI");
   await expect(titles).toHaveText(["Try feature a", "Fix subtract sign", "Initial commit"]);
   await expect.poll(demoRuns).toBe("repos/e2e/demo/actions/workflows/101/runs?per_page=30&page=1");
-  await page.getByRole("button", { name: "All workflows" }).click();
+  await actions.allWorkflows.click();
   await expect(titles).toHaveText(["Try feature a", "Fix subtract sign", "Bump widget styles", "Initial commit", "Release v0.1.0"]);
 });
 
@@ -573,37 +575,38 @@ test("a run shows its jobs per attempt, plain-text logs, and the sessions on its
   const actions = new ActionsView(page);
   // A session in place on feat/a, where a run is in progress.
   git(world.repo, world.env(), "checkout", "-q", "-b", "feat/a");
-  await app.newSession({ where: "in_place" });
+  const session = await app.newSession({ where: "in_place" });
   await app.prompt("What does subtract do?");
-  await app.openNav("Actions");
+  await app.openNav("actions");
   await actions.loaded(4);
 
   // The newest run is selected: still running, so its log is not ready.
-  const detail = actions.detail;
-  await expect(actions.run("Try feature a")).toHaveAttribute("aria-pressed", "true");
-  await expect(detail.getByRole("heading", { name: "Try feature a" })).toBeVisible();
-  await expect(detail).toContainText("in progress · latest attempt 1");
-  const job = (name: string) => detail.locator("details").filter({ has: page.locator("summary", { hasText: ` · ${name} · ` }) });
-  await job("test").locator("summary").click();
-  await expect(job("test").getByRole("button", { name: "View log" })).toBeDisabled();
-  await expect(job("test")).toContainText("Live logs are available on GitHub.");
-  await detail.getByRole("button", { name: "What does subtract do?" }).click();
+  await expect(actions.run("9003")).toHaveAttribute("aria-pressed", "true");
+  await expect(actions.detailTitle).toHaveText("Try feature a");
+  await expect(actions.detailStatus).toHaveAttribute("data-status", "in_progress");
+  await expect(actions.detailStatus).toHaveAttribute("data-attempt", "1");
+  const job = (name: string) => actions.job(name);
+  await actions.jobToggle(job("test")).click();
+  await expect(actions.viewLog(job("test"))).toBeDisabled();
+  await expect(actions.liveLog(job("test"))).toContainText("Live logs are available on GitHub.");
+  await actions.session(session).click();
   await expect(app.title).toHaveText("What does subtract do?");
-  await app.openNav("Actions");
+  await app.openNav("actions");
 
-  await actions.run("Fix subtract sign").click();
-  await expect(detail).toContainText("failure · latest attempt 2");
-  await expect(actions.select("Run attempt")).toHaveValue("2");
-  await expect(detail.getByRole("button", { name: "What does subtract do?" })).toHaveCount(0);
+  await actions.run("9002").click();
+  await expect(actions.detailStatus).toHaveAttribute("data-conclusion", "failure");
+  await expect(actions.detailStatus).toHaveAttribute("data-attempt", "2");
+  await expect(actions.attempt).toHaveValue("2");
+  await expect(actions.session(session)).toHaveCount(0);
   // The failed job is open, the rest folded.
   await expect(job("test")).toHaveAttribute("open", "");
   await expect(job("lint")).not.toHaveAttribute("open");
-  await expect(job("test").locator("li")).toHaveText([/^Set up job\s*success/, /^Run tests\s*failure/]);
+  await expect(actions.steps(job("test"))).toHaveText([/^Set up job\s*success/, /^Run tests\s*failure/]);
   expect(gh.rest(/\/jobs\?/).map((c) => c.argv[3])).toContain("repos/e2e/demo/actions/runs/9002/attempts/2/jobs?per_page=100&page=1");
 
   // Logs are plain text: escape sequences stripped, markup shown literally.
-  await job("test").getByRole("button", { name: "View log" }).click();
-  const log = detail.getByRole("region", { name: "Job log" });
+  await actions.viewLog(job("test")).click();
+  const log = actions.log;
   await expect(log).toContainText("FAILED test_calc.py::test_subtract - assert 1 == -1");
   await expect(log).toContainText('<script>document.title = "e2e-injected"</script>');
   await expect(log).toContainText("python -m pytest\n");
@@ -615,23 +618,22 @@ test("a run shows its jobs per attempt, plain-text logs, and the sessions on its
     ["api", "--help"],
     ["api", "--allow-escape-sequences", "--hostname", "github.com", "repos/e2e/demo/actions/jobs/7002/logs"],
   ]);
-  const find = detail.getByRole("textbox", { name: "Find lines in this log…" });
-  await find.fill("failed");
+  await actions.logFilter.fill("failed");
   await expect(log).toHaveText("2026-10-06T16:14:18.0000000Z FAILED test_calc.py::test_subtract - assert 1 == -1");
-  await find.fill("no such line");
+  await actions.logFilter.fill("no such line");
   await expect(log).toHaveText("No matching lines.");
 
   // A log over 512 KiB is cut short.
-  await job("build").locator("summary").click();
-  await job("build").getByRole("button", { name: "View log" }).click();
-  await expect(detail).toContainText("Showing the first 512 KiB. Open the full job on GitHub for the rest.");
+  await actions.jobToggle(job("build")).click();
+  await actions.viewLog(job("build")).click();
+  await expect(actions.logTruncated).toHaveText("Showing the first 512 KiB. Open the full job on GitHub for the rest.");
   await expect(log).toContainText("building wheel for calc");
 
   // The first attempt failed earlier, and its log has expired.
-  await actions.select("Run attempt").selectOption("1");
-  await expect(job("test").locator("li")).toHaveText([/^Set up job/, /^Install dependencies\s*failure/]);
+  await actions.attempt.selectOption("1");
+  await expect(actions.steps(job("test"))).toHaveText([/^Set up job/, /^Install dependencies\s*failure/]);
   expect(gh.rest(/\/jobs\?/).map((c) => c.argv[3])).toContain("repos/e2e/demo/actions/runs/9002/attempts/1/jobs?per_page=100&page=1");
-  await job("test").getByRole("button", { name: "View log" }).click();
-  await expect(detail.getByRole("alert")).toContainText("HTTP 410");
-  await expect(detail.getByRole("button", { name: "Retry log" })).toBeVisible();
+  await actions.viewLog(job("test")).click();
+  await expect(actions.logError).toContainText("HTTP 410");
+  await expect(actions.retryLog).toBeVisible();
 });

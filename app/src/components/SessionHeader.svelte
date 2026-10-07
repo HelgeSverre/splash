@@ -58,7 +58,7 @@
     <span class="link">{home(session.cwd)}</span>
   {/if}
   {#if git?.pr}
-    <button class="plain link pr" data-testid="session-pr" data-state={git.pr.state.toLowerCase()} title={git.pr.title} onclick={() => open(git?.pr?.url)}>
+    <button class="plain link pr" data-testid="session-pr" data-number={git.pr.number} data-state={git.pr.state.toLowerCase()} title={git.pr.title} onclick={() => open(git?.pr?.url)}>
       PR #{git.pr.number}<Tag tone={PR_TONE[git.pr.state.toLowerCase()] ?? "default"}>{git.pr.state.toLowerCase()}</Tag>
     </button>
   {/if}

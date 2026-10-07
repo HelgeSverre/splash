@@ -45,15 +45,15 @@
   async function addFolder() { const project = await pickFolder(); if (project) await link(project.id); }
 </script>
 
-<aside class="detail" aria-label="GitHub item details">
+<aside class="detail" data-testid="github-detail" data-repo={item.repository} data-kind={item.kind} data-number={item.number} aria-label="GitHub item details">
   <div class="detail-head"><span class="t-mono-meta">{item.repository}{item.number ? ` #${item.number}` : ""}</span><Tag>{itemStatus(item)}</Tag></div>
-  <h2 class="t-page-title selectable">{item.title}</h2>
+  <h2 class="t-page-title selectable" data-testid="github-detail-title">{item.title}</h2>
   <p class="t-meta">{item.author || "GitHub"} · {ago(item.updated_at)}{item.kind === "branch" ? " · last commit" : ""}</p>
   <div class="actions"><button class="btn sm" onclick={() => openExternal(item.url)}><Icon name="external" size={12} />Open on GitHub</button><button class="btn ghost sm" onclick={() => newIssue(item.repository)}><Icon name="plus" size={12} />Issue here</button></div>
   <div class="actions">
-    {#if item.kind === "issue" || item.kind === "pull_request"}<button class="btn primary sm" onclick={() => app.newSession = { projectId: projects[0]?.id, githubItem: item }}>Work on this</button>{/if}
-    <button class="btn ghost sm" onclick={() => markRead([item], !!unread(item))}>{unread(item) ? "Mark read" : "Mark unread"}</button>
-    <select class="field" aria-label="Snooze item" value="" onchange={e => { snooze(item, e.currentTarget.value as "tomorrow" | "activity" | "wake"); e.currentTarget.value = ""; }}><option value="" disabled>Snooze…</option><option value="tomorrow">Until tomorrow at 9</option><option value="activity">Until new activity</option><option value="wake">Unsnooze</option></select>
+    {#if item.kind === "issue" || item.kind === "pull_request"}<button class="btn primary sm" data-testid="github-detail-work" onclick={() => app.newSession = { projectId: projects[0]?.id, githubItem: item }}>Work on this</button>{/if}
+    <button class="btn ghost sm" data-testid="github-detail-read" data-unread={!!unread(item)} onclick={() => markRead([item], !!unread(item))}>{unread(item) ? "Mark read" : "Mark unread"}</button>
+    <select class="field" data-testid="github-detail-snooze" aria-label="Snooze item" value="" onchange={e => { snooze(item, e.currentTarget.value as "tomorrow" | "activity" | "wake"); e.currentTarget.value = ""; }}><option value="" disabled>Snooze…</option><option value="tomorrow">Until tomorrow at 9</option><option value="activity">Until new activity</option><option value="wake">Unsnooze</option></select>
   </div>
   {#if item.branch || item.checks || item.review_decision || item.assignees.length || item.reviewers.length}
     <dl class="metadata">
@@ -67,21 +67,21 @@
   {#if item.labels.length}<div class="labels">{#each item.labels as label}<Tag>{label}</Tag>{/each}</div>{/if}
   <section><h3 class="t-section">SPLASH WORKSPACE</h3>
     {#each projects as project (project.id)}
-      <div class="project"><div class="project-name"><Icon name="folder" size={13} />{project.name}</div><div class="t-mono-meta selectable path">{project.path}</div>
+      <div class="project" data-testid="github-detail-project" data-project-id={project.id} data-path={project.path}><div class="project-name"><Icon name="folder" size={13} />{project.name}</div><div class="t-mono-meta selectable path">{project.path}</div>
         {#each sessionsFor(project.id) as session (session.id)}
-          <button class="plain session-link" onclick={() => openSession(session.id).catch(showError)}><Icon name={session.isolation === "worktree" ? "branch" : "monitor"} size={12} /><span>{session.title}</span>{#if prefs[`session.github.${session.id}`] === item.url}<Tag>this item</Tag>{:else if item.branch && session.branch === item.branch}<Tag>this branch</Tag>{/if}</button>
+          <button class="plain session-link" data-testid="github-detail-session" data-session-id={session.id} data-match={prefs[`session.github.${session.id}`] === item.url ? "item" : item.branch && session.branch === item.branch ? "branch" : undefined} onclick={() => openSession(session.id).catch(showError)}><Icon name={session.isolation === "worktree" ? "branch" : "monitor"} size={12} /><span>{session.title}</span>{#if prefs[`session.github.${session.id}`] === item.url}<Tag>this item</Tag>{:else if item.branch && session.branch === item.branch}<Tag>this branch</Tag>{/if}</button>
         {/each}
         <button class="btn ghost sm" onclick={() => app.newSession = { projectId: project.id }}><Icon name="plus" size={12} />New session</button>
       </div>
-    {:else}<p class="t-meta">No matching local project.</p>{/each}
-    <button class="plain link" onclick={() => linking = true}>{projects.length ? "Link another project…" : "Link to Splash…"}</button>
+    {:else}<p class="t-meta" data-testid="github-detail-no-project">No matching local project.</p>{/each}
+    <button class="plain link" data-testid="github-detail-link" onclick={() => linking = true}>{projects.length ? "Link another project…" : "Link to Splash…"}</button>
   </section>
   <section><h3 class="t-section">{item.kind === "branch" ? "LATEST COMMIT" : "DESCRIPTION"}</h3>{#if item.body}<Markdown text={item.body} />{:else}<p class="t-meta">No description.</p>{/if}</section>
   {#if item.number}
     <section><h3 class="t-section">DISCUSSION</h3>
       {#if loading}<p class="t-meta" role="status">Loading discussion…</p>{/if}
       {#if error}<p class="error" role="alert">{error}</p><button class="btn sm" onclick={() => revision++}>Retry</button>{/if}
-      {#each discussion?.comments ?? [] as comment (comment.url)}<article class="comment"><div class="comment-head"><strong>{comment.author || "GitHub"}</strong><button class="plain t-meta" onclick={() => openExternal(comment.url)}>{ago(comment.created_at)} ↗</button></div><Markdown text={comment.body} /></article>{/each}
+      {#each discussion?.comments ?? [] as comment (comment.url)}<article class="comment" data-testid="github-comment"><div class="comment-head"><strong>{comment.author || "GitHub"}</strong><button class="plain t-meta" onclick={() => openExternal(comment.url)}>{ago(comment.created_at)} ↗</button></div><Markdown text={comment.body} /></article>{/each}
       {#if discussion && !discussion.comments.length}<p class="t-meta">No comments yet.</p>{/if}
       {#if discussion?.has_more}<button class="btn ghost sm" onclick={() => openExternal(item.url)}>Older comments on GitHub ↗</button>{/if}
       {#if item.kind === "pull_request"}<p class="t-meta">Inline code reviews are available on GitHub.</p>{/if}
@@ -90,9 +90,9 @@
 </aside>
 
 {#if linking}
-  <Modal label="Link repository to Splash" width="480px" onclose={() => { if (!linkPending) linking = false; }}>
+  <Modal data-testid="github-link-dialog" label="Link repository to Splash" width="480px" onclose={() => { if (!linkPending) linking = false; }}>
     <ModalHeader title="Link to Splash" onclose={() => { if (!linkPending) linking = false; }} />
-    <div class="link-choices"><p class="t-mono-value">{item.repository}</p>{#each app.projects as project (project.id)}<button class="btn" disabled={linkPending || projects.some(p => p.id === project.id)} onclick={() => link(project.id)}><Icon name="folder" size={13} />{project.name}</button>{/each}<button class="btn ghost" disabled={linkPending} onclick={addFolder}>Add a project folder…</button></div>
+    <div class="link-choices"><p class="t-mono-value">{item.repository}</p>{#each app.projects as project (project.id)}<button class="btn" data-testid="github-link-project" data-project-id={project.id} data-path={project.path} disabled={linkPending || projects.some(p => p.id === project.id)} onclick={() => link(project.id)}><Icon name="folder" size={13} />{project.name}</button>{/each}<button class="btn ghost" disabled={linkPending} onclick={addFolder}>Add a project folder…</button></div>
   </Modal>
 {/if}
 

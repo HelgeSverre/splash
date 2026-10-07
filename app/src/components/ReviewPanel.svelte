@@ -56,7 +56,7 @@
     <p class="meta">{git?.branch ?? session.branch ?? "Current folder"}{session.base_sha ? ` · base ${session.base_sha.slice(0, 8)}` : ""}</p>
     <div class="actions">
       <button class="btn sm" data-testid="review-all-changes" disabled={!changes.length} onclick={() => { for (const c of [...changes].reverse()) openTab({ kind: "diff", path: c.path }); }}>Review all changes</button>
-      {#if git?.pr}<button class="btn sm" data-testid="review-open-pr" onclick={() => git?.pr && openExternal(git.pr.url)}>Open PR #{git.pr.number}</button>{/if}
+      {#if git?.pr}<button class="btn sm" data-testid="review-open-pr" data-number={git.pr.number} onclick={() => git?.pr && openExternal(git.pr.url)}>Open PR #{git.pr.number}</button>{/if}
       {#if session.attention?.kind === "review"}<button class="btn sm" data-testid="review-mark-reviewed" onclick={reviewed}>Mark reviewed</button>{/if}
     </div>
   </section>

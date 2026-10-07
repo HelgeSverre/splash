@@ -63,6 +63,7 @@ export class Review {
   get reviewAllChanges() {
     return testId(this.panel, "review-all-changes");
   }
+  /** Opens the session's pull request; `data-number` is its number. */
   get openPullRequest() {
     return testId(this.panel, "review-open-pr");
   }

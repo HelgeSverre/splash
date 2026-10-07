@@ -1,6 +1,6 @@
 // The fake GitHub: the `gh` router's scenario and call log (fakes/gh,
 // fakes/gh-router), pull requests on the offline github.com remote
-// (support/git.ts), and the GitHub and Actions views.
+// (support/git.ts), and the GitHub and Actions views, found by test id.
 //
 //   test.use({ gh: true });
 //   test.beforeEach(async ({ world, page }) => {
@@ -10,11 +10,12 @@
 //   const gh = new FakeGithub(world);
 //   gh.fail(/^graphql pullRequests e2e-labs\/widgets$/, "gh: Not Found (HTTP 404)");
 //   expect(gh.graphql(/search/)[0].variables.q).toBe("…");
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createPrRef, git, write } from "./git.ts";
 import { E2E } from "./paths.ts";
+import { testId } from "./testid.ts";
 import type { World } from "./world.ts";
 
 /** "Now" in the triage scenario. Tests pin the browser clock to it (pinClock). */
@@ -172,70 +173,488 @@ export async function pinClock(page: Page, time = NOW) {
   await page.clock.install({ time });
 }
 
-/** The GitHub triage view. */
+/** An item's kind in the GitHub view. */
+export type GithubKind = "issue" | "pull_request" | "branch" | "activity";
+
+/** The GitHub triage view. Rows carry `data-repo`, `data-kind`, `data-number`
+ * (issues and pull requests) and `data-branch` (branches and pull requests). */
 export class GithubView {
   readonly page: Page;
   constructor(page: Page) {
     this.page = page;
   }
+  get root() {
+    return testId(this.page, "github-view");
+  }
+  /** "@login" in the header. */
+  get account() {
+    return testId(this.page, "github-account");
+  }
+  get refresh() {
+    return testId(this.page, "github-refresh");
+  }
+  get newIssue() {
+    return testId(this.page, "github-new-issue");
+  }
+
+  // ── Scope and filters ──────────────────────────────────────────────────────
+
+  /** Filters loaded items, or holds the text to search GitHub for. */
+  get search() {
+    return testId(this.page, "github-search");
+  }
+  /** Values are owner logins, "" for all owners. */
+  get owner() {
+    return testId(this.page, "github-owner");
+  }
+  /** Opens the repository picker; `data-count` is the repositories in scope. */
+  get repositories() {
+    return testId(this.page, "github-repositories");
+  }
+  /** Linked to Splash; `aria-pressed` while on. */
+  get linked() {
+    return testId(this.page, "github-linked");
+  }
+  /** Saved views by id; "" is the unsaved, custom view. */
+  get savedView() {
+    return testId(this.page, "github-saved-view");
+  }
+  /** The view the saved-view menu shows. */
+  get currentView() {
+    return this.savedView.locator("option:checked");
+  }
+  /** The saved views on offer, without the custom view. */
+  get savedViews() {
+    return this.savedView.locator('option:not([value=""])');
+  }
+  get saveView() {
+    return testId(this.page, "github-save-view");
+  }
+  get deleteView() {
+    return testId(this.page, "github-delete-view");
+  }
+  get saveDialog() {
+    return testId(this.page, "github-save-dialog");
+  }
+  get saveName() {
+    return testId(this.saveDialog, "github-save-name");
+  }
+  get saveSubmit() {
+    return testId(this.saveDialog, "github-save-submit");
+  }
+  /** inbox, unread, snoozed or all (inbox and snoozed). */
+  get inboxFilter() {
+    return testId(this.page, "github-inbox-filter");
+  }
+  get markAllRead() {
+    return testId(this.page, "github-mark-all-read");
+  }
+  /** loaded (filter loaded activity) or github (search GitHub). */
+  get searchSource() {
+    return testId(this.page, "github-search-source");
+  }
+  /** Search GitHub's fields, shown while the source is `github`. */
+  get author() {
+    return testId(this.page, "github-search-author");
+  }
+  get assignee() {
+    return testId(this.page, "github-search-assignee");
+  }
+  get label() {
+    return testId(this.page, "github-search-label");
+  }
+  /** "", requested, required, approved or changes_requested. */
+  get review() {
+    return testId(this.page, "github-search-review");
+  }
+  get searchGithub() {
+    return testId(this.page, "github-search-submit");
+  }
+  tab(tab: "all" | "needs_me" | "issue" | "pull_request" | "branch") {
+    return testId(testId(this.page, "github-tabs"), "tab", { tab });
+  }
+  /** all, open, or closed (closed and merged). */
+  get itemStatus() {
+    return testId(this.page, "github-item-status");
+  }
+
+  // ── The list ───────────────────────────────────────────────────────────────
+
   get list() {
-    return this.page.getByRole("region", { name: "GitHub activity" });
+    return testId(this.page, "github-list");
   }
-  /** Rows of the activity list, or the one whose title matches. */
-  rows(title?: string | RegExp) {
-    const rows = this.list.getByRole("button").filter({ has: this.page.locator(".item-title") });
-    return title === undefined ? rows : rows.filter({ has: this.page.locator(".item-title").getByText(title, { exact: true }) });
+  /** "n loaded items"; `data-count` is n. */
+  get count() {
+    return testId(this.list, "github-count");
   }
-  get detail() {
-    return this.page.getByRole("complementary", { name: "GitHub item details" });
+  /** Rows of the list, all or narrowed by their data. */
+  items(data: { repo?: string; kind?: GithubKind; number?: number; branch?: string } = {}) {
+    const { number, ...rest } = data;
+    return testId(this.list, "github-item", number === undefined ? rest : { ...rest, number: String(number) });
   }
-  /** The footer's "n / m feeds loaded". */
+  /** An issue's or pull request's row. */
+  item(repo: string, number: number) {
+    return this.items({ repo, number });
+  }
+  /** A branch's row. */
+  branch(repo: string, name: string) {
+    return this.items({ repo, kind: "branch", branch: name });
+  }
+  /** Every row's title, in order. */
+  get titles() {
+    return testId(this.list, "github-item-title");
+  }
+  title(row: Locator) {
+    return testId(row, "github-item-title");
+  }
+  /** The unread marks in the list, or on one row. */
+  unread(row: Locator = this.list) {
+    return testId(row, "github-item-unread");
+  }
+  /** Shown on a row whose repository is linked to a Splash project. */
+  linkedMark(row: Locator) {
+    return testId(row, "github-item-linked");
+  }
+  get empty() {
+    return testId(this.list, "github-empty");
+  }
+  /** Loads older items; `data-count` is the feeds that have more. */
+  get loadMore() {
+    return testId(this.list, "github-load-more");
+  }
+
+  // ── Failed feeds ───────────────────────────────────────────────────────────
+
+  /** The failed feeds' report, a `<details>`; `data-count` is how many. */
+  get failures() {
+    return testId(this.page, "github-failures");
+  }
+  /** Unfolds and folds the report. */
+  get failuresSummary() {
+    return testId(this.failures, "github-failures-summary");
+  }
+  failure(repo: string, kind: GithubKind) {
+    return testId(this.failures, "github-failure", { repo, kind });
+  }
+  get retryFailures() {
+    return testId(this.failures, "github-failures-retry");
+  }
+
+  // ── Footer ─────────────────────────────────────────────────────────────────
+
+  /** "n / m feeds loaded", or "Loading n / m" while `data-loading`; `data-loaded` and `data-total` are n and m. */
   get sync() {
-    return this.page.getByRole("status").filter({ hasText: /feeds loaded|^Loading \d/ });
+    return testId(this.page, "github-sync");
   }
-  tab(name: "All activity" | "Needs me" | "Issues" | "PRs" | "Branches") {
-    return this.page.getByRole("tablist", { name: "GitHub activity type" }).getByRole("tab", { name, exact: true });
+  /** The footer once loading stopped with `loaded` of `total` feeds answered. */
+  synced(loaded: number, total = loaded) {
+    return testId(this.page, "github-sync", { loading: "false", loaded: String(loaded), total: String(total) });
   }
-  get repositoriesButton() {
-    return this.page.getByRole("button", { name: /^Repositories \d+$/ });
-  }
-  select(label: string) {
-    return this.page.getByRole("combobox", { name: label, exact: true });
-  }
-  /** Wait until every feed in scope has loaded. */
   /** Every feed answered. Each is a fake gh process, so allow for a busy machine. */
   async loaded(feeds: number) {
-    await expect(this.sync).toHaveText(new RegExp(`^${feeds} / ${feeds} feeds loaded`), { timeout: 30_000 });
+    await expect(this.synced(feeds)).toBeVisible({ timeout: 30_000 });
+  }
+  get pause() {
+    return testId(this.page, "github-pause");
+  }
+  get resume() {
+    return testId(this.page, "github-resume");
+  }
+  get resumeSearch() {
+    return testId(this.page, "github-resume-search");
+  }
+
+  // ── The selected item ──────────────────────────────────────────────────────
+
+  /** The selected item's details; `data-repo`, `data-kind` and `data-number` say which. */
+  get detail() {
+    return testId(this.page, "github-detail");
+  }
+  get detailTitle() {
+    return testId(this.detail, "github-detail-title");
+  }
+  get comments() {
+    return testId(this.detail, "github-comment");
+  }
+  get workOnThis() {
+    return testId(this.detail, "github-detail-work");
+  }
+  /** Mark read or Mark unread; `data-unread` is the item's state. */
+  get readToggle() {
+    return testId(this.detail, "github-detail-read");
+  }
+  /** tomorrow (until 9 tomorrow), activity (until new activity) or wake. */
+  get snooze() {
+    return testId(this.detail, "github-detail-snooze");
+  }
+  /** A Splash project of the item's repository, by its folder. */
+  detailProject(path: string) {
+    return testId(this.detail, "github-detail-project", { path });
+  }
+  get noProject() {
+    return testId(this.detail, "github-detail-no-project");
+  }
+  /** A session of a linked project; `data-match` is `item` or `branch` when it works on this one. */
+  detailSession(sessionId: string) {
+    return testId(this.detail, "github-detail-session", { "session-id": sessionId });
+  }
+  /** Link to Splash…, or Link another project… once linked. */
+  get linkProject() {
+    return testId(this.detail, "github-detail-link");
+  }
+  get linkDialog() {
+    return testId(this.page, "github-link-dialog");
+  }
+  /** A project to link the repository to, by its folder. */
+  linkChoice(path: string) {
+    return testId(this.linkDialog, "github-link-project", { path });
   }
 }
 
-/** The Actions view. */
+/** The GitHub view's repository picker. */
+export class RepoPicker {
+  readonly page: Page;
+  constructor(page: Page) {
+    this.page = page;
+  }
+  get dialog() {
+    return testId(this.page, "github-repo-picker");
+  }
+  get filter() {
+    return testId(this.dialog, "github-repo-filter");
+  }
+  /** A repository's checkbox. */
+  repo(name: string) {
+    return testId(this.dialog, "github-repo", { repo: name });
+  }
+  /** The checked repositories. */
+  get checked() {
+    return testId(this.dialog, "github-repo").and(this.page.locator(":checked"));
+  }
+  /** "n selected"; `data-count` is n. */
+  get selected() {
+    return testId(this.dialog, "github-repo-selected");
+  }
+  get all() {
+    return testId(this.dialog, "github-repo-all");
+  }
+  get clear() {
+    return testId(this.dialog, "github-repo-clear");
+  }
+  /** `data-count` is how many match the filter. */
+  get selectMatches() {
+    return testId(this.dialog, "github-repo-select-matches");
+  }
+  get apply() {
+    return testId(this.dialog, "github-repo-apply");
+  }
+}
+
+/** The New issue dialog. */
+export class IssueComposer {
+  readonly page: Page;
+  constructor(page: Page) {
+    this.page = page;
+  }
+  get dialog() {
+    return testId(this.page, "issue-composer");
+  }
+  /** Values are repository names. */
+  get repo() {
+    return testId(this.dialog, "issue-repo");
+  }
+  /** The repositories it can be filed in. */
+  get repoChoices() {
+    return this.repo.locator("option:not([disabled])");
+  }
+  get title() {
+    return testId(this.dialog, "issue-title");
+  }
+  get body() {
+    return testId(this.dialog, "issue-body");
+  }
+  get write() {
+    return testId(this.dialog, "issue-write");
+  }
+  /** Shows the preview; `aria-pressed` while it does. */
+  get preview() {
+    return testId(this.dialog, "issue-preview");
+  }
+  /** The headings and bold text the preview rendered from the Markdown. */
+  get previewHeadings() {
+    return testId(this.dialog, "issue-preview-pane").getByRole("heading");
+  }
+  get previewBold() {
+    return testId(this.dialog, "issue-preview-pane").locator("strong");
+  }
+  get error() {
+    return testId(this.dialog, "issue-error");
+  }
+  get checkGithub() {
+    return testId(this.error, "issue-check-github");
+  }
+  get cancel() {
+    return testId(this.dialog, "issue-cancel");
+  }
+  get create() {
+    return testId(this.dialog, "issue-create");
+  }
+}
+
+/** The Actions view. Runs carry `data-repo`, `data-run-id`, `data-status` and
+ * `data-conclusion`; jobs and steps their status and conclusion too. */
 export class ActionsView {
   readonly page: Page;
   constructor(page: Page) {
     this.page = page;
   }
-  get runs() {
-    return this.page.getByRole("region", { name: "Workflow runs" });
+  get root() {
+    return testId(this.page, "actions-view");
   }
-  /** Run rows, or the one with this title. */
-  run(title?: string) {
-    const rows = this.runs.getByRole("button").filter({ has: this.page.locator(".row-main") });
-    return title === undefined ? rows : rows.filter({ has: this.page.locator("strong").getByText(title, { exact: true }) });
+  /** "@login" in the header. */
+  get account() {
+    return testId(this.page, "actions-account");
   }
-  get detail() {
-    return this.page.getByRole("complementary", { name: "Workflow run details" });
+  tab(tab: "runs" | "workflows") {
+    return testId(testId(this.page, "actions-tabs"), "tab", { tab });
   }
-  get sync() {
-    return this.page.getByRole("status").filter({ hasText: /repositories loaded|^Loading \d/ });
+
+  // ── Run filters ────────────────────────────────────────────────────────────
+
+  /** GitHub's run statuses (failure, success…), "" for all. */
+  get status() {
+    return testId(this.page, "actions-status");
   }
+  /** Days back (7, 30, 90), or "" for all available history. */
+  get range() {
+    return testId(this.page, "actions-range");
+  }
+  get branch() {
+    return testId(this.page, "actions-branch");
+  }
+  get event() {
+    return testId(this.page, "actions-event");
+  }
+  /** Applies the branch and event filters. */
+  get apply() {
+    return testId(this.page, "actions-apply");
+  }
+  /** "owner/name · workflow" while one workflow's runs show; `data-workflow-id` is which. */
+  get workflowFilter() {
+    return testId(this.page, "actions-workflow-filter");
+  }
+  get allWorkflows() {
+    return testId(this.page, "actions-all-workflows");
+  }
+  /** The loaded runs, counted in `data-runs`, `data-active`, `data-failed` and `data-passed`. */
   get summary() {
-    return this.page.locator(".summary");
+    return testId(this.page, "actions-summary");
   }
-  select(label: string) {
-    return this.page.getByRole("combobox", { name: label, exact: true });
+
+  // ── Runs and workflows ─────────────────────────────────────────────────────
+
+  get runs() {
+    return testId(this.page, "actions-list", { tab: "runs" });
   }
+  /** A run's row, by its id. */
+  run(id: string) {
+    return testId(this.runs, "actions-run", { "run-id": id });
+  }
+  /** Every run's title, in order. */
+  get titles() {
+    return testId(this.runs, "actions-run-title");
+  }
+  get workflows() {
+    return testId(this.page, "actions-list", { tab: "workflows" });
+  }
+  /** A workflow, by id; `data-state` is GitHub's (active, disabled_manually…). */
+  workflow(id: string) {
+    return testId(this.workflows, "actions-workflow", { "workflow-id": id });
+  }
+  /** Every workflow's name, in order. */
+  get workflowNames() {
+    return testId(this.workflows, "actions-workflow-name");
+  }
+  viewRuns(workflow: Locator) {
+    return testId(workflow, "actions-workflow-runs");
+  }
+
+  // ── The selected run ───────────────────────────────────────────────────────
+
+  get detail() {
+    return testId(this.page, "actions-detail");
+  }
+  get detailTitle() {
+    return testId(this.detail, "actions-detail-title");
+  }
+  /** The run's `data-status`, `data-conclusion` and `data-attempt` (its latest). */
+  get detailStatus() {
+    return testId(this.detail, "actions-detail-status");
+  }
+  /** A session on the run's branch. */
+  session(sessionId: string) {
+    return testId(this.detail, "actions-detail-session", { "session-id": sessionId });
+  }
+  get attempt() {
+    return testId(this.detail, "actions-attempt");
+  }
+  /** A job of the attempt shown, by name: a `<details>`, `open` while unfolded. */
+  job(name: string) {
+    return testId(this.detail, "actions-job", { name });
+  }
+  /** Unfolds and folds a job. */
+  jobToggle(job: Locator) {
+    return testId(job, "actions-job-summary");
+  }
+  /** A job's steps: name, status and duration. */
+  steps(job: Locator) {
+    return testId(job, "actions-step");
+  }
+  viewLog(job: Locator) {
+    return testId(job, "actions-job-log");
+  }
+  /** Says where a running job's log is until it finishes. */
+  liveLog(job: Locator) {
+    return testId(job, "actions-job-live");
+  }
+  get log() {
+    return testId(this.detail, "actions-log");
+  }
+  get logFilter() {
+    return testId(this.detail, "actions-log-filter");
+  }
+  get logTruncated() {
+    return testId(this.detail, "actions-log-truncated");
+  }
+  get logError() {
+    return testId(this.detail, "actions-log-error");
+  }
+  get retryLog() {
+    return testId(this.detail, "actions-log-retry");
+  }
+
+  // ── Footer ─────────────────────────────────────────────────────────────────
+
+  /** "n / m repositories loaded", or "Loading n / m" while `data-loading`; `data-loaded` and `data-total` are n and m. */
+  get sync() {
+    return testId(this.page, "actions-sync");
+  }
+  /** The footer while loading, with `done` of `total` repositories answered. */
+  loading(done: number, total: number) {
+    return testId(this.page, "actions-sync", { loading: "true", loaded: String(done), total: String(total) });
+  }
+  /** The footer once loading stopped with `loaded` of `total` repositories answered. */
+  synced(loaded: number, total = loaded) {
+    return testId(this.page, "actions-sync", { loading: "false", loaded: String(loaded), total: String(total) });
+  }
+  /** Every repository answered. Each is a fake gh process, so allow for a busy machine. */
   async loaded(repositories: number) {
-    await expect(this.sync).toHaveText(new RegExp(`^${repositories} / ${repositories} repositories loaded`), { timeout: 30_000 });
+    await expect(this.synced(repositories)).toBeVisible({ timeout: 30_000 });
+  }
+  get pause() {
+    return testId(this.page, "actions-pause");
+  }
+  get resume() {
+    return testId(this.page, "actions-resume");
   }
 }

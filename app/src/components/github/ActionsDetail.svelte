@@ -38,22 +38,22 @@
     finally { if(token===logRequest)logLoading=false; }
   }
 </script>
-<aside class="detail" aria-label="Workflow run details">
+<aside class="detail" data-testid="actions-detail" data-repo={run.repository} data-run-id={run.id} aria-label="Workflow run details">
   <p class="t-mono-meta">{run.repository} · {run.workflow} #{run.number}</p>
-  <h2 class="t-page-title">{run.title || run.workflow}</h2>
-  <p class="status {actionTone(run.status,run.conclusion)}">{actionStatus(run.status,run.conclusion)} · latest attempt {run.attempt}</p>
+  <h2 class="t-page-title" data-testid="actions-detail-title">{run.title || run.workflow}</h2>
+  <p class="status {actionTone(run.status,run.conclusion)}" data-testid="actions-detail-status" data-status={run.status} data-conclusion={run.conclusion} data-attempt={run.attempt}>{actionStatus(run.status,run.conclusion)} · latest attempt {run.attempt}</p>
   <div class="buttons"><button class="btn sm" onclick={()=>openExternal(run.url)}>Open run on GitHub ↗</button><button class="btn ghost sm" onclick={()=>refresh++} disabled={loading}>Refresh jobs</button></div>
   <dl><dt>Branch</dt><dd>{run.branch || "No branch"}</dd><dt>Commit</dt><dd><button class="plain" onclick={()=>openExternal(`https://github.com/${run.repository}/commit/${run.sha}`)}>{run.sha.slice(0,12)}</button></dd><dt>Triggered by</dt><dd>{run.actor} · {run.event}</dd><dt>Created</dt><dd>{new Date(run.created_at).toLocaleString()}</dd><dt>Started</dt><dd>{run.started_at ? new Date(run.started_at).toLocaleString() : "Not started"}</dd></dl>
-  {#if projects.length}<section><h3 class="t-section">SPLASH WORKSPACES</h3>{#each projects as project}<p>{project.name}</p>{#each sessionsFor(project.id).filter(s=>s.branch===run.branch) as session}<button class="btn ghost sm" onclick={()=>openSession(session.id).catch(showError)}>{session.title}</button>{/each}<button class="btn ghost sm" onclick={()=>app.newSession={projectId:project.id}}>New session</button>{/each}</section>{/if}
-  <section><div class="buttons"><h3 class="t-section">JOBS AND STEPS</h3><span class="spacer"></span><label class="t-meta">Attempt <select class="field" aria-label="Run attempt" value={attempt} onchange={e=>chosenAttempt=Number(e.currentTarget.value)}>{#each Array.from({length:run.attempt},(_,i)=>i+1) as n}<option value={n}>{n}{n===run.attempt ? " (latest)" : ""}</option>{/each}</select></label></div>
+  {#if projects.length}<section><h3 class="t-section">SPLASH WORKSPACES</h3>{#each projects as project}<p>{project.name}</p>{#each sessionsFor(project.id).filter(s=>s.branch===run.branch) as session}<button class="btn ghost sm" data-testid="actions-detail-session" data-session-id={session.id} onclick={()=>openSession(session.id).catch(showError)}>{session.title}</button>{/each}<button class="btn ghost sm" onclick={()=>app.newSession={projectId:project.id}}>New session</button>{/each}</section>{/if}
+  <section><div class="buttons"><h3 class="t-section">JOBS AND STEPS</h3><span class="spacer"></span><label class="t-meta">Attempt <select class="field" data-testid="actions-attempt" aria-label="Run attempt" value={attempt} onchange={e=>chosenAttempt=Number(e.currentTarget.value)}>{#each Array.from({length:run.attempt},(_,i)=>i+1) as n}<option value={n}>{n}{n===run.attempt ? " (latest)" : ""}</option>{/each}</select></label></div>
     {#if error}<p class="error" role="alert">{error}</p><button class="btn sm" onclick={()=>loadJobs(next ?? 1)}>Retry jobs</button>{/if}
     {#each jobs as job (job.id)}
-      <details open={actionTone(job.status,job.conclusion)==="failed"}>
-        <summary><span class="status {actionTone(job.status,job.conclusion)}">{actionStatus(job.status,job.conclusion)}</span> · {job.name}<span class="t-meta">{` · ${duration(job.started_at,job.completed_at,now)}`}</span></summary>
+      <details data-testid="actions-job" data-job-id={job.id} data-name={job.name} data-status={job.status} data-conclusion={job.conclusion} open={actionTone(job.status,job.conclusion)==="failed"}>
+        <summary data-testid="actions-job-summary"><span class="status {actionTone(job.status,job.conclusion)}">{actionStatus(job.status,job.conclusion)}</span> · {job.name}<span class="t-meta">{` · ${duration(job.started_at,job.completed_at,now)}`}</span></summary>
         {#if job.runner}<p class="t-meta">Runner: {job.runner}</p>{/if}
-        <ol>{#each job.steps as step}<li><span>{step.name}</span><span class="status {actionTone(step.status,step.conclusion)}">{actionStatus(step.status,step.conclusion)}</span><span class="t-mono-meta">{duration(step.started_at,step.completed_at,now)}</span></li>{/each}</ol>
-        <div class="buttons"><button class="btn sm" disabled={job.status!=="completed" || logLoading} onclick={()=>loadLog(job)}>View log</button><button class="btn ghost sm" onclick={()=>openExternal(job.url)}>Full job and logs ↗</button></div>
-        {#if job.status!=="completed"}<p class="t-meta">Live logs are available on GitHub. The log preview becomes available when this job finishes.</p>{/if}
+        <ol>{#each job.steps as step}<li data-testid="actions-step" data-status={step.status} data-conclusion={step.conclusion}><span>{step.name}</span><span class="status {actionTone(step.status,step.conclusion)}">{actionStatus(step.status,step.conclusion)}</span><span class="t-mono-meta">{duration(step.started_at,step.completed_at,now)}</span></li>{/each}</ol>
+        <div class="buttons"><button class="btn sm" data-testid="actions-job-log" disabled={job.status!=="completed" || logLoading} onclick={()=>loadLog(job)}>View log</button><button class="btn ghost sm" onclick={()=>openExternal(job.url)}>Full job and logs ↗</button></div>
+        {#if job.status!=="completed"}<p class="t-meta" data-testid="actions-job-live">Live logs are available on GitHub. The log preview becomes available when this job finishes.</p>{/if}
       </details>
     {:else}{#if !loading && !error}<p class="t-meta">No jobs yet for this attempt.</p>{/if}{/each}
     {#if loading}<p class="t-meta" role="status">Loading jobs…</p>{/if}
@@ -61,11 +61,11 @@
   </section>
   {#if logJob}<section><div class="buttons"><h3 class="t-section">LOG · {logJob.name}</h3><span class="spacer"></span><button class="btn ghost sm" onclick={()=>{logRequest++;log=null;logJob=null;logLoading=false;}}>Close log</button></div>
     {#if logLoading}<p class="t-meta" role="status">Loading log…</p>{/if}
-    {#if logError}<p class="error" role="alert">{logError}</p><button class="btn sm" onclick={()=>{if(logJob)void loadLog(logJob);}}>Retry log</button>{/if}
-    {#if log}<FilterInput bind:value={logQuery} placeholder="Find lines in this log…" />{#if log.truncated}<p class="t-meta">Showing the first 512 KiB. Open the full job on GitHub for the rest.</p>{/if}
+    {#if logError}<p class="error" role="alert" data-testid="actions-log-error">{logError}</p><button class="btn sm" data-testid="actions-log-retry" onclick={()=>{if(logJob)void loadLog(logJob);}}>Retry log</button>{/if}
+    {#if log}<FilterInput data-testid="actions-log-filter" bind:value={logQuery} placeholder="Find lines in this log…" />{#if log.truncated}<p class="t-meta" data-testid="actions-log-truncated">Showing the first 512 KiB. Open the full job on GitHub for the rest.</p>{/if}
     <!-- Keyboard access to the scrollable log, matching the app’s other code regions. -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <pre class="selectable scroll-region" tabindex="0" role="region" aria-label="Job log"><code>{visibleLog || (logQuery ? "No matching lines." : "Empty log.")}</code></pre>{/if}
+    <pre class="selectable scroll-region" data-testid="actions-log" tabindex="0" role="region" aria-label="Job log"><code>{visibleLog || (logQuery ? "No matching lines." : "Empty log.")}</code></pre>{/if}
   </section>{/if}
 </aside>
 <style>

@@ -106,83 +106,83 @@
   }
 </script>
 
-<div class="github-view">
-  <header><IconButton icon="monitor" title="Toggle sidebar" onclick={toggleLeft} /><Icon name="github" size={16} /><h1 class="t-pane-title">GitHub</h1><span class="spacer"></span><button class="btn ghost sm" onclick={openActions}>Actions</button>{#if github.catalog}<span class="account t-meta">@{github.catalog.login}</span>{/if}<IconButton icon="refresh" title="Refresh GitHub" onclick={refresh} disabled={github.catalogLoading || busy} /><button class="btn primary sm" onclick={() => newIssue(selected?.repository ?? (scoped.length === 1 ? scoped[0].full_name : ""))} disabled={!github.catalog}><Icon name="plus" size={12} />New issue</button></header>
+<div class="github-view" data-testid="github-view">
+  <header><IconButton icon="monitor" title="Toggle sidebar" onclick={toggleLeft} /><Icon name="github" size={16} /><h1 class="t-pane-title">GitHub</h1><span class="spacer"></span><button class="btn ghost sm" onclick={openActions}>Actions</button>{#if github.catalog}<span class="account t-meta" data-testid="github-account">@{github.catalog.login}</span>{/if}<IconButton data-testid="github-refresh" icon="refresh" title="Refresh GitHub" onclick={refresh} disabled={github.catalogLoading || busy} /><button class="btn primary sm" data-testid="github-new-issue" onclick={() => newIssue(selected?.repository ?? (scoped.length === 1 ? scoped[0].full_name : ""))} disabled={!github.catalog}><Icon name="plus" size={12} />New issue</button></header>
   {#if !github.catalog}
     <EmptyState icon="github" loading={github.catalogLoading} title={github.catalogLoading ? "Loading your GitHub repositories…" : "Connect your GitHub account"} detail="Splash uses GitHub CLI. Run gh auth login --hostname github.com, then retry. Private and organization repositories require access through that login.">
       {#if github.catalogError}<p class="error" role="alert">{github.catalogError}</p>{/if}<button class="btn" onclick={() => loadCatalog(true)} disabled={github.catalogLoading}>Retry</button>
     </EmptyState>
   {:else}
     <div class="filters">
-      <FilterInput bind:value={query} placeholder={mode === "github" ? "Search issues and PRs on GitHub…" : "Filter loaded items…"} label="Search GitHub items" onenter={() => { if (mode === "github" && !busy && scoped.length) void runSearch(); }} />
-      <select class="field" aria-label="GitHub owner" value={owner} onchange={e => setPref("github.owner", e.currentTarget.value)}><option value="">All owners</option>{#each owners as name}<option value={name}>{name}</option>{/each}</select>
-      <button class="btn" onclick={showPicker}><Icon name="folder" size={13} />Repositories <span class="t-count">{scoped.length}</span></button>
-      <button class="btn ghost" aria-pressed={linkedOnly} onclick={() => setPref("github.linked", String(!linkedOnly))}>Linked to Splash</button>
+      <FilterInput data-testid="github-search" bind:value={query} placeholder={mode === "github" ? "Search issues and PRs on GitHub…" : "Filter loaded items…"} label="Search GitHub items" onenter={() => { if (mode === "github" && !busy && scoped.length) void runSearch(); }} />
+      <select class="field" data-testid="github-owner" aria-label="GitHub owner" value={owner} onchange={e => setPref("github.owner", e.currentTarget.value)}><option value="">All owners</option>{#each owners as name}<option value={name}>{name}</option>{/each}</select>
+      <button class="btn" data-testid="github-repositories" data-count={scoped.length} onclick={showPicker}><Icon name="folder" size={13} />Repositories <span class="t-count">{scoped.length}</span></button>
+      <button class="btn ghost" data-testid="github-linked" aria-pressed={linkedOnly} onclick={() => setPref("github.linked", String(!linkedOnly))}>Linked to Splash</button>
     </div>
     <div class="view-tools">
-      <select class="field" aria-label="Saved view" value={activeView} onchange={e => restoreView(e.currentTarget.value)}><option value="">Custom view</option>{#each saved as view}<option value={view.id}>{view.name}</option>{/each}</select>
-      <button class="btn ghost sm" onclick={() => { viewName = saved.find(v => v.id === activeView)?.name ?? ""; saving = true; }}>Save view…</button>
-      {#if activeView}<button class="btn ghost sm" onclick={() => { persist(accountKey("views"), saved.filter(v => v.id !== activeView)); activeView = ""; }}>Delete view</button>{/if}
+      <select class="field" data-testid="github-saved-view" aria-label="Saved view" value={activeView} onchange={e => restoreView(e.currentTarget.value)}><option value="">Custom view</option>{#each saved as view}<option value={view.id}>{view.name}</option>{/each}</select>
+      <button class="btn ghost sm" data-testid="github-save-view" onclick={() => { viewName = saved.find(v => v.id === activeView)?.name ?? ""; saving = true; }}>Save view…</button>
+      {#if activeView}<button class="btn ghost sm" data-testid="github-delete-view" onclick={() => { persist(accountKey("views"), saved.filter(v => v.id !== activeView)); activeView = ""; }}>Delete view</button>{/if}
       <span class="spacer"></span>
-      <select class="field" aria-label="Inbox filter" bind:value={inboxFilter}><option value="inbox">Inbox</option><option value="unread">Unread</option><option value="snoozed">Snoozed</option><option value="all">Include snoozed</option></select>
-      <button class="btn ghost sm" disabled={!items.length} onclick={() => markRead(items)}>Mark loaded read</button>
-      <select class="field" aria-label="Search source" bind:value={mode}><option value="loaded">Loaded activity</option><option value="github">Search GitHub</option></select>
+      <select class="field" data-testid="github-inbox-filter" aria-label="Inbox filter" bind:value={inboxFilter}><option value="inbox">Inbox</option><option value="unread">Unread</option><option value="snoozed">Snoozed</option><option value="all">Include snoozed</option></select>
+      <button class="btn ghost sm" data-testid="github-mark-all-read" disabled={!items.length} onclick={() => markRead(items)}>Mark loaded read</button>
+      <select class="field" data-testid="github-search-source" aria-label="Search source" bind:value={mode}><option value="loaded">Loaded activity</option><option value="github">Search GitHub</option></select>
     </div>
     {#if mode === "github"}
       <form class="search-tools" onsubmit={e => { e.preventDefault(); void runSearch(); }}>
-        <input class="field" aria-label="Author" placeholder="Author / @me" bind:value={author} />
-        <input class="field" aria-label="Assignee" placeholder="Assignee / @me" bind:value={assignee} />
-        <input class="field" aria-label="Label" placeholder="Label" bind:value={label} />
-        <select class="field" aria-label="Review status" bind:value={review} onchange={e => { if (e.currentTarget.value) void setPref("github.feed", "pull_request"); }}><option value="">Any review</option><option value="requested">Review requested from me</option><option value="required">Review required</option><option value="approved">Approved</option><option value="changes_requested">Changes requested</option></select>
-        <button class="btn primary sm" disabled={busy || !scoped.length}>Search GitHub</button>
+        <input class="field" data-testid="github-search-author" aria-label="Author" placeholder="Author / @me" bind:value={author} />
+        <input class="field" data-testid="github-search-assignee" aria-label="Assignee" placeholder="Assignee / @me" bind:value={assignee} />
+        <input class="field" data-testid="github-search-label" aria-label="Label" placeholder="Label" bind:value={label} />
+        <select class="field" data-testid="github-search-review" aria-label="Review status" bind:value={review} onchange={e => { if (e.currentTarget.value) void setPref("github.feed", "pull_request"); }}><option value="">Any review</option><option value="requested">Review requested from me</option><option value="required">Review required</option><option value="approved">Approved</option><option value="changes_requested">Changes requested</option></select>
+        <button class="btn primary sm" data-testid="github-search-submit" disabled={busy || !scoped.length}>Search GitHub</button>
       </form>
       <div class="notice t-meta">Searches issues and PRs in {scoped.length} repositories. Text is literal; use the fields for qualifiers. Review filters search PRs only. Select Issues or PRs to narrow the type.</div>
     {/if}
-    <Tabs items={mode === "github" ? tabs.filter(t => ["all", "issue", "pull_request"].includes(t.id)) : tabs} active={visibleFeed} prefix="github" label="GitHub activity type" onselect={id => { if (mode === "github" && id === "issue") review = ""; void setPref("github.feed", id); }}>
-      {#snippet actions()}<select class="field state-filter" aria-label="Item status" bind:value={status}><option value="all">All states</option><option value="open">Open</option><option value="closed">Closed / merged</option></select>{/snippet}
+    <Tabs data-testid="github-tabs" items={mode === "github" ? tabs.filter(t => ["all", "issue", "pull_request"].includes(t.id)) : tabs} active={visibleFeed} prefix="github" label="GitHub activity type" onselect={id => { if (mode === "github" && id === "issue") review = ""; void setPref("github.feed", id); }}>
+      {#snippet actions()}<select class="field state-filter" data-testid="github-item-status" aria-label="Item status" bind:value={status}><option value="all">All states</option><option value="open">Open</option><option value="closed">Closed / merged</option></select>{/snippet}
     </Tabs>
     {#if github.catalogError}<div class="notice error" role="alert">Repository refresh failed. Showing the previous catalog. {github.catalogError}</div>{/if}
     {#if mode === "loaded" && feed === "needs_me"}<div class="notice t-meta">Assigned to you, directly requesting your review, or your PRs with failing checks / requested changes.</div>{/if}
-    {#if failures.length}<details class="failures"><summary>{failures.length} GitHub {failures.length === 1 ? "feed failed" : "feeds failed"}. Results may be incomplete.</summary><div class="failure-list">{#each failures as s}<p><strong>{s.repository} · {s.kind.replaceAll("_", " ")}</strong><br>{pageStore[sourceKey(s)]?.error}</p>{/each}</div><button class="btn sm" disabled={busy} onclick={() => mode === "github" ? runSearch() : loadSources(failures, "refresh")}>Retry failed requests</button></details>{/if}
+    {#if failures.length}<details class="failures" data-testid="github-failures" data-count={failures.length}><summary data-testid="github-failures-summary">{failures.length} GitHub {failures.length === 1 ? "feed failed" : "feeds failed"}. Results may be incomplete.</summary><div class="failure-list">{#each failures as s}<p data-testid="github-failure" data-repo={s.repository} data-kind={s.kind}><strong>{s.repository} · {s.kind.replaceAll("_", " ")}</strong><br>{pageStore[sourceKey(s)]?.error}</p>{/each}</div><button class="btn sm" data-testid="github-failures-retry" disabled={busy} onclick={() => mode === "github" ? runSearch() : loadSources(failures, "refresh")}>Retry failed requests</button></details>{/if}
     <div class="triage" role="tabpanel" id="github-panel-{visibleFeed}" aria-labelledby="github-tab-{visibleFeed}">
-      <section class="list" aria-label="GitHub activity">
-        <div class="list-head t-meta"><span>{items.length} loaded {items.length === 1 ? "item" : "items"}</span><span>Updated most recently</span></div>
+      <section class="list" data-testid="github-list" aria-label="GitHub activity">
+        <div class="list-head t-meta"><span data-testid="github-count" data-count={items.length}>{items.length} loaded {items.length === 1 ? "item" : "items"}</span><span>Updated most recently</span></div>
         <div class="rows">
           {#each items.slice(0, limit) as item (itemKey(item))}
-            <button class="plain item focus-inset" class:active={selected && itemKey(item) === itemKey(selected)} aria-pressed={selected && itemKey(item) === itemKey(selected)} onclick={() => github.selected = itemKey(item)}>
+            <button class="plain item focus-inset" data-testid="github-item" data-repo={item.repository} data-kind={item.kind} data-number={item.number} data-branch={item.branch} class:active={selected && itemKey(item) === itemKey(selected)} aria-pressed={selected && itemKey(item) === itemKey(selected)} onclick={() => github.selected = itemKey(item)}>
               <span class="item-icon" class:failing={itemStatus(item) === "Checks failing"} class:merged={item.state === "MERGED"}><Icon name={itemIcon(item.kind)} size={15} /></span>
-              <span class="item-content"><span class="item-title">{#if unread(item)}<span class="unread" role="img" aria-label="Unread" title="New or updated since last read"></span>{/if}{item.title}</span><span class="item-meta"><span class="repo-name">{item.repository}</span>{#if item.number}<span>#{item.number}</span>{/if}<span>{itemStatus(item)}</span>{#if repoByName.get(item.repository)?.project_ids.length}<span title="Linked to a Splash project"><Icon name="folder" size={11} /></span>{/if}</span></span>
+              <span class="item-content"><span class="item-title" data-testid="github-item-title">{#if unread(item)}<span class="unread" data-testid="github-item-unread" role="img" aria-label="Unread" title="New or updated since last read"></span>{/if}{item.title}</span><span class="item-meta"><span class="repo-name">{item.repository}</span>{#if item.number}<span>#{item.number}</span>{/if}<span>{itemStatus(item)}</span>{#if repoByName.get(item.repository)?.project_ids.length}<span data-testid="github-item-linked" title="Linked to a Splash project"><Icon name="folder" size={11} /></span>{/if}</span></span>
               <time class="t-mono-meta" datetime={item.updated_at} title={item.updated_at}>{ago(item.updated_at)}</time>
             </button>
-          {:else}<EmptyState inline loading={busy} title={busy ? "Loading activity…" : "No matching items loaded"} detail={scoped.length ? "Try another filter, refresh, or load older items." : "Choose repositories or clear your scope filters."} />{/each}
+          {:else}<EmptyState data-testid="github-empty" inline loading={busy} title={busy ? "Loading activity…" : "No matching items loaded"} detail={scoped.length ? "Try another filter, refresh, or load older items." : "Choose repositories or clear your scope filters."} />{/each}
           {#if items.length > limit}<button class="btn ghost more" onclick={() => limit += 150}>Show {Math.min(150, items.length - limit)} more loaded items</button>{/if}
-          {#if older && !busy}<button class="btn ghost more" onclick={() => mode === "github" ? runSearch(true) : loadSources(sources, "older")}>Load more ({older} feeds)</button>{/if}
+          {#if older && !busy}<button class="btn ghost more" data-testid="github-load-more" data-count={older} onclick={() => mode === "github" ? runSearch(true) : loadSources(sources, "older")}>Load more ({older} feeds)</button>{/if}
         </div>
       </section>
       {#if selected}<GithubDetail item={selected} />{:else}<div class="blank"><EmptyState icon="github" title="Your GitHub workspace" detail="Select an issue, pull request, branch, or activity to see details and linked Splash sessions." /></div>{/if}
     </div>
-    <footer><span class="sync" role="status">{#if busy}<span class="spinner"></span>Loading {mode === "github" ? search.completed : github.completed} / {mode === "github" ? search.total : github.total}{:else}{loaded} / {sources.length} feeds loaded{#if latestSync} · Updated {new Date(latestSync).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}{/if}</span><span class="spacer"></span>{#if busy}<button class="btn ghost sm" onclick={() => mode === "github" ? stopSearch() : stopLoading()}>Pause</button>{:else if mode === "loaded" && (github.paused || loaded < sources.length)}<button class="btn ghost sm" onclick={() => retry++}>Resume</button>{:else if mode === "github" && search.signature && loaded < sources.length}<button class="btn ghost sm" onclick={() => runSearch()}>Resume search</button>{/if}<span class="t-meta">{scoped.length} / {repositories.length} repositories</span></footer>
+    <footer><span class="sync" role="status" data-testid="github-sync" data-loading={busy} data-loaded={busy ? (mode === "github" ? search.completed : github.completed) : loaded} data-total={busy ? (mode === "github" ? search.total : github.total) : sources.length}>{#if busy}<span class="spinner"></span>Loading {mode === "github" ? search.completed : github.completed} / {mode === "github" ? search.total : github.total}{:else}{loaded} / {sources.length} feeds loaded{#if latestSync} · Updated {new Date(latestSync).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}{/if}</span><span class="spacer"></span>{#if busy}<button class="btn ghost sm" data-testid="github-pause" onclick={() => mode === "github" ? stopSearch() : stopLoading()}>Pause</button>{:else if mode === "loaded" && (github.paused || loaded < sources.length)}<button class="btn ghost sm" data-testid="github-resume" onclick={() => retry++}>Resume</button>{:else if mode === "github" && search.signature && loaded < sources.length}<button class="btn ghost sm" data-testid="github-resume-search" onclick={() => runSearch()}>Resume search</button>{/if}<span class="t-meta">{scoped.length} / {repositories.length} repositories</span></footer>
     <div class="coverage t-meta">{mode === "github" ? "GitHub search returns up to 1,000 matches per group of up to 10 repositories and type. Narrow the scope if you reach that limit. Load more to continue. Search indexing may be delayed." : "Recent items per repository; load older items for more. GitHub’s activity feed has limited history and may be delayed."} Read and snooze apply only in Splash. New activity wakes snoozed items.</div>
   {/if}
 </div>
 
 {#if picker}
-  <Modal label="Choose GitHub repositories" width="620px" height="620px" onclose={() => picker = false}>
+  <Modal data-testid="github-repo-picker" label="Choose GitHub repositories" width="620px" height="620px" onclose={() => picker = false}>
     <ModalHeader title="Repositories" onclose={() => picker = false} />
-    <div class="picker-tools"><FilterInput bind:value={repoQuery} placeholder="Find a repository across all owners…" /><div class="picker-actions"><button class="btn ghost sm" onclick={() => draftRepos = null}>All repositories</button><button class="btn ghost sm" onclick={() => draftRepos = []}>Clear all</button><button class="btn ghost sm" disabled={!pickerRepos.length} onclick={() => selectMatches(true)}>Select matches ({pickerRepos.length})</button><button class="btn ghost sm" disabled={!pickerRepos.length} onclick={() => selectMatches(false)}>Deselect matches</button><span class="spacer"></span><span class="t-meta">{draftRepos === null ? repositories.length : draftRepos.length} selected</span></div><p class="t-meta">All repositories visible to your GitHub CLI login, including private and organization repositories. New repositories are included automatically when “All” is selected.</p></div>
-    <div class="repo-list">{#each pickerRepos as r (r.full_name)}<label class="repo-choice"><input type="checkbox" checked={draftRepos === null || draftRepos.includes(r.full_name)} onchange={e => toggleRepo(r.full_name, e.currentTarget.checked)} /><span><span class="t-mono-value">{r.full_name}</span><span class="t-meta">{r.private ? "Private" : "Public"}{r.archived ? " · Archived" : ""}{r.project_ids.length ? " · Linked to Splash" : ""}</span></span></label>{:else}<EmptyState inline title="No matching repositories" />{/each}</div>
-    <div class="picker-footer"><button class="btn ghost" onclick={() => picker = false}>Cancel</button><span class="spacer"></span><button class="btn primary" onclick={applyRepos}>Apply scope</button></div>
+    <div class="picker-tools"><FilterInput data-testid="github-repo-filter" bind:value={repoQuery} placeholder="Find a repository across all owners…" /><div class="picker-actions"><button class="btn ghost sm" data-testid="github-repo-all" onclick={() => draftRepos = null}>All repositories</button><button class="btn ghost sm" data-testid="github-repo-clear" onclick={() => draftRepos = []}>Clear all</button><button class="btn ghost sm" data-testid="github-repo-select-matches" data-count={pickerRepos.length} disabled={!pickerRepos.length} onclick={() => selectMatches(true)}>Select matches ({pickerRepos.length})</button><button class="btn ghost sm" data-testid="github-repo-deselect-matches" disabled={!pickerRepos.length} onclick={() => selectMatches(false)}>Deselect matches</button><span class="spacer"></span><span class="t-meta" data-testid="github-repo-selected" data-count={draftRepos === null ? repositories.length : draftRepos.length}>{draftRepos === null ? repositories.length : draftRepos.length} selected</span></div><p class="t-meta">All repositories visible to your GitHub CLI login, including private and organization repositories. New repositories are included automatically when “All” is selected.</p></div>
+    <div class="repo-list">{#each pickerRepos as r (r.full_name)}<label class="repo-choice"><input type="checkbox" data-testid="github-repo" data-repo={r.full_name} checked={draftRepos === null || draftRepos.includes(r.full_name)} onchange={e => toggleRepo(r.full_name, e.currentTarget.checked)} /><span><span class="t-mono-value">{r.full_name}</span><span class="t-meta">{r.private ? "Private" : "Public"}{r.archived ? " · Archived" : ""}{r.project_ids.length ? " · Linked to Splash" : ""}</span></span></label>{:else}<EmptyState inline title="No matching repositories" />{/each}</div>
+    <div class="picker-footer"><button class="btn ghost" onclick={() => picker = false}>Cancel</button><span class="spacer"></span><button class="btn primary" data-testid="github-repo-apply" onclick={applyRepos}>Apply scope</button></div>
   </Modal>
 {/if}
 
 {#if saving}
-  <Modal label="Save GitHub view" width="420px" onclose={() => saving = false}>
+  <Modal data-testid="github-save-dialog" label="Save GitHub view" width="420px" onclose={() => saving = false}>
     <ModalHeader title="Save view" onclose={() => saving = false} />
     <form class="save-form" onsubmit={e => { e.preventDefault(); saveView(); }}>
-      <label>View name<input class="field" bind:value={viewName} required maxlength="80" /></label>
+      <label>View name<input class="field" data-testid="github-save-name" bind:value={viewName} required maxlength="80" /></label>
       <p class="t-meta">Saves repositories, owner, linked filter, activity type, inbox, search fields and status. GitHub searches run when you press Search.</p>
       {#if activeView}<label><input type="checkbox" checked={false} onchange={e => { if (e.currentTarget.checked) activeView = ""; }} /> Save as a new view</label>{/if}
-      <button class="btn primary" disabled={!viewName.trim()}>Save</button>
+      <button class="btn primary" data-testid="github-save-submit" disabled={!viewName.trim()}>Save</button>
     </form>
   </Modal>
 {/if}

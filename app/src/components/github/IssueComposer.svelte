@@ -33,33 +33,33 @@
   }
 </script>
 
-<Modal label="New GitHub issue" width="680px" onclose={close}>
+<Modal data-testid="issue-composer" label="New GitHub issue" width="680px" onclose={close}>
   <ModalHeader title="New issue" onclose={close} />
   <form onsubmit={submit}>
     <div class="fields">
       <label class="t-group" for="issue-repo">Repository</label>
-      <FilterInput bind:value={search} placeholder="Find any repository…" />
-      <select class="field" id="issue-repo" bind:value={github.draft.repository} required disabled={pending}>
+      <FilterInput data-testid="issue-repo-filter" bind:value={search} placeholder="Find any repository…" />
+      <select class="field" id="issue-repo" data-testid="issue-repo" bind:value={github.draft.repository} required disabled={pending}>
         <option value="" disabled>Choose a repository</option>
         {#each choices as r (r.full_name)}<option value={r.full_name}>{r.full_name}</option>{/each}
       </select>
       <p class="t-meta">All accessible repositories with issues enabled. Your current GitHub permissions apply.</p>
       <label class="t-group" for="issue-title">Title</label>
-      <input class="field" id="issue-title" bind:value={github.draft.title} placeholder="What needs to happen?" required maxlength="256" disabled={pending} />
+      <input class="field" id="issue-title" data-testid="issue-title" bind:value={github.draft.title} placeholder="What needs to happen?" required maxlength="256" disabled={pending} />
       <div class="editor-head">
         <label class="t-group" for="issue-body">Description</label><span class="spacer"></span>
-        <button type="button" class="btn ghost sm" aria-pressed={!preview} onclick={() => preview = false}>Write</button>
-        <button type="button" class="btn ghost sm" aria-pressed={preview} onclick={() => preview = true}>Preview</button>
+        <button type="button" class="btn ghost sm" data-testid="issue-write" aria-pressed={!preview} onclick={() => preview = false}>Write</button>
+        <button type="button" class="btn ghost sm" data-testid="issue-preview" aria-pressed={preview} onclick={() => preview = true}>Preview</button>
       </div>
       {#if preview}
-        <div class="preview">{#if github.draft.body}<Markdown text={github.draft.body} />{:else}<span class="t-meta">Nothing to preview.</span>{/if}</div>
+        <div class="preview" data-testid="issue-preview-pane">{#if github.draft.body}<Markdown text={github.draft.body} />{:else}<span class="t-meta">Nothing to preview.</span>{/if}</div>
       {:else}
-        <textarea class="field" id="issue-body" bind:value={github.draft.body} placeholder="Add context, a checklist, or a thought for later…" maxlength="65536" disabled={pending}></textarea>
+        <textarea class="field" id="issue-body" data-testid="issue-body" bind:value={github.draft.body} placeholder="Add context, a checklist, or a thought for later…" maxlength="65536" disabled={pending}></textarea>
       {/if}
       <span class="t-meta">GitHub-flavoured Markdown supported. Closing keeps your draft until you leave Splash.</span>
-      {#if error}<div class="error" role="alert">{error}<button type="button" class="btn sm" onclick={() => openExternal(`https://github.com/${github.draft.repository}/issues`)}>Check issues on GitHub</button></div>{/if}
+      {#if error}<div class="error" role="alert" data-testid="issue-error">{error}<button type="button" class="btn sm" data-testid="issue-check-github" onclick={() => openExternal(`https://github.com/${github.draft.repository}/issues`)}>Check issues on GitHub</button></div>{/if}
     </div>
-    <footer><button type="button" class="btn ghost" onclick={close} disabled={pending}>Cancel</button><span class="spacer"></span><button class="btn primary" type="submit" disabled={pending || !validRepo || !github.draft.title.trim()}>{#if pending}<span class="spinner"></span>{:else}<Icon name="plus" size={13} />{/if}{pending ? "Creating…" : "Create issue"}</button></footer>
+    <footer><button type="button" class="btn ghost" data-testid="issue-cancel" onclick={close} disabled={pending}>Cancel</button><span class="spacer"></span><button class="btn primary" type="submit" data-testid="issue-create" disabled={pending || !validRepo || !github.draft.title.trim()}>{#if pending}<span class="spinner"></span>{:else}<Icon name="plus" size={13} />{/if}{pending ? "Creating…" : "Create issue"}</button></footer>
   </form>
 </Modal>
 

@@ -90,7 +90,7 @@
 <Modal data-testid="new-session" label="New session" width="620px" top onclose={close}>
   <ModalHeader title="New session" onclose={close} />
   <div class="dialog" bind:this={dialogEl}>
-    {#if context}<p class="desc">{context.repository} #{context.number}: {context.title}</p><p class="desc">The description and GitHub link will be ready in the composer for you to review and send.</p>{/if}
+    {#if context}<p class="desc" data-testid="new-session-context" data-repo={context.repository} data-number={context.number}>{context.repository} #{context.number}: {context.title}</p><p class="desc">The description and GitHub link will be ready in the composer for you to review and send.</p>{/if}
     <div class="label t-group first" id="ns-project">Project</div>
     <ChoiceGroup data-testid="new-session-project" items={app.projects} value={projectId} key={(p) => p.id} title={(p) => p.path} labelledby="ns-project"
       variant="stack" onchange={(p) => (projectId = p.id)}>
