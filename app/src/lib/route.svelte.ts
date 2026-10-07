@@ -35,6 +35,8 @@ let installed = false;
 export function installRoute() {
   if (installed) return;
   installed = true;
-  routeFromHash();
+  // A view opened while the app was still loading wins over an empty address.
+  if (location.hash || app.view.kind === "welcome") routeFromHash();
+  else syncPlaygroundHash();
   window.addEventListener("hashchange", routeFromHash);
 }
