@@ -33,7 +33,7 @@
   <PageHeader agent={id} title="{agent?.name ?? id} · Skills">
     {#snippet lede()}<code>SKILL.md</code> folders from {agent?.name ?? id} and <code>.agents/skills</code>.{/snippet}
   </PageHeader>
-  <div class="filter-bar"><FilterInput bind:value={filter} placeholder="Filter skills" shown={shown.length} total={all?.length ?? 0} /></div>
+  <div class="filter-bar"><FilterInput data-testid="settings-filter" bind:value={filter} placeholder="Filter skills" shown={shown.length} total={all?.length ?? 0} /></div>
 
   {#if all === null}
     <SettingsGroup><EmptyState inline loading /></SettingsGroup>
@@ -42,11 +42,11 @@
       <SettingsGroup>
         {#snippet title()}<span class="t-mono-meta">{home(source)}</span> {#if !list[0].agents.length}<Tag>shared</Tag>{/if}{/snippet}
         {#each list as s (s.path)}
-          <SettingsRow onclick={() => open(s)}>
+          <SettingsRow data-testid="settings-skill" data-name={s.name} data-path={s.path} onclick={() => open(s)}>
             {#snippet label()}
               {s.name}
-              {#if !s.user_invocable}<Tag title="user-invocable: false">not in / menu</Tag>{/if}
-              {#if s.manual_only}<Tag title="disable-model-invocation: true">manual only</Tag>{/if}
+              {#if !s.user_invocable}<Tag data-testid="settings-tag" title="user-invocable: false">not in / menu</Tag>{/if}
+              {#if s.manual_only}<Tag data-testid="settings-tag" title="disable-model-invocation: true">manual only</Tag>{/if}
             {/snippet}
             {#snippet desc()}{#if s.description}<span class="clamp">{s.description}</span>{/if}{/snippet}
             <RevealButton path={s.path} />
@@ -54,7 +54,7 @@
         {/each}
       </SettingsGroup>
     {:else}
-      <SettingsGroup><EmptyState inline icon="skills" title={filter ? "No skills match." : "No skills yet."} /></SettingsGroup>
+      <SettingsGroup><EmptyState data-testid="settings-empty" inline icon="skills" title={filter ? "No skills match." : "No skills yet."} /></SettingsGroup>
     {/each}
   {/if}
 </div>

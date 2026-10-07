@@ -14,8 +14,13 @@ export const elyra = (page: Page) => ({
   /** The open dialog's message (or its title, when it has no message). */
   modalMessage: page.locator(".elyra-modal-overlay").locator(".elyra-modal-body, .elyra-modal-title").first(),
   toasts: page.locator(".elyra-toast"),
+  errorToasts: page.locator(".elyra-toast.error"),
   palette: page.locator(".elyra-cmdk input"),
   paletteItems: page.locator(".elyra-cmdk-item"),
+  /** A palette item by its title: a command ("New session"), or a session's title. */
+  paletteItem: (title: string | RegExp): Locator => page.locator(".elyra-cmdk-item").filter({ hasText: title }),
+  /** The line under a palette item's title: a command's shortcut, a session's project and agent. */
+  paletteDetail: (item: Locator): Locator => item.locator(".sub"),
   /** A context menu item, once the menu is open. */
   menuItem: (label: string | RegExp): Locator => page.locator(".elyra-ctx-item").filter({ hasText: label }),
 });

@@ -21,10 +21,10 @@
   <SettingsGroup>
     {#each app.agents as a (a.id)}
       {@const r = readiness(a)}
-      <SettingsRow desc="{transportLabel(a)}{a.installed ? ` · v${a.version ?? '?'}` : ''}" onclick={() => (app.settings = `agent:${a.id}`)}>
+      <SettingsRow data-testid="settings-agent" data-agent={a.id} desc="{transportLabel(a)}{a.installed ? ` · v${a.version ?? '?'}` : ''}" onclick={() => (app.settings = `agent:${a.id}`)}>
         {#snippet lead()}<AgentIcon id={a.id} size={20} />{/snippet}
         {#snippet label()}{a.name} {#if a.experimental}<Tag tone="warn">experimental</Tag>{/if}{/snippet}
-        {#snippet trail()}<StatusBadge tone={r.tone} label={r.label} /><Chevron size={12} />{/snippet}
+        {#snippet trail()}<StatusBadge data-testid="settings-agent-status" data-agent={a.id} tone={r.tone} label={r.label} /><Chevron size={12} />{/snippet}
       </SettingsRow>
     {/each}
   </SettingsGroup>

@@ -1,19 +1,22 @@
 <script lang="ts">
   // A bordered group of SettingsRows, with an optional title above it.
   // `dense` tightens rows that each hold one small control (shortcuts).
+  // `data-*` attributes go on the group's box.
   import type { Snippet } from "svelte";
+  import type { DataAttrs } from "../../lib/attrs";
 
   let {
     title,
     dense = false,
     children,
-  }: { title?: string | Snippet; dense?: boolean; children: Snippet } = $props();
+    ...rest
+  }: { title?: string | Snippet; dense?: boolean; children: Snippet } & DataAttrs = $props();
 </script>
 
 {#if title}
-  <div class="title t-group">{#if typeof title === "string"}{title}{:else}{@render title()}{/if}</div>
+  <div class="title t-group" data-testid="settings-group-title">{#if typeof title === "string"}{title}{:else}{@render title()}{/if}</div>
 {/if}
-<div class="group" class:dense>{@render children()}</div>
+<div {...rest} class="group" class:dense>{@render children()}</div>
 
 <style>
   .title { display: flex; align-items: center; gap: 8px; margin: 20px 0 8px; }

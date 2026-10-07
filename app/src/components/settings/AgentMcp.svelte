@@ -33,8 +33,8 @@
     {/snippet}
   </PageHeader>
   <div class="filter-bar">
-    <FilterInput bind:value={filter} placeholder="Filter servers" shown={shown.length} total={scoped.length} />
-    {#if projectCount}<Checkbox bind:checked={showProjects} label="Per project ({projectCount})" />{/if}
+    <FilterInput data-testid="settings-filter" bind:value={filter} placeholder="Filter servers" shown={shown.length} total={scoped.length} />
+    {#if projectCount}<Checkbox data-testid="settings-mcp-projects" data-count={projectCount} bind:checked={showProjects} label="Per project ({projectCount})" />{/if}
   </div>
 
   {#if servers === null}
@@ -42,11 +42,11 @@
   {:else}
     <SettingsGroup>
       {#each errors as e (e.source)}
-        <SettingsRow label="Couldn't read {home(e.source)}" desc={e.error} />
+        <SettingsRow data-testid="settings-mcp-error" data-source={e.source} label="Couldn't read {home(e.source)}" desc={e.error} />
       {/each}
       {#each shown as s (s.name + (s.project ?? ""))}
-        <SettingsRow>
-          {#snippet label()}{s.name} <Tag>{s.transport}</Tag> {#if !s.enabled}<Tag tone="warn">disabled</Tag>{/if}{/snippet}
+        <SettingsRow data-testid="settings-mcp-server" data-name={s.name} data-project={s.project}>
+          {#snippet label()}{s.name} <Tag data-testid="settings-tag">{s.transport}</Tag> {#if !s.enabled}<Tag data-testid="settings-tag" tone="warn">disabled</Tag>{/if}{/snippet}
           {#snippet desc()}
             <div class="target truncate" title={s.target}>{s.target}</div>
             {#if s.project || s.header_keys.length || s.env_keys.length}
@@ -59,7 +59,7 @@
           {/snippet}
         </SettingsRow>
       {:else}
-        {#if !errors.length}<EmptyState inline icon="mcp" title={filter ? "No servers match." : "No servers configured."} />{/if}
+        {#if !errors.length}<EmptyState data-testid="settings-empty" inline icon="mcp" title={filter ? "No servers match." : "No servers configured."} />{/if}
       {/each}
     </SettingsGroup>
   {/if}

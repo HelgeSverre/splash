@@ -21,7 +21,7 @@
   <span class="spacer"></span>
   {#if actions}{@render actions()}{/if}
 </div>
-{#if lede}<p class="lede">{@render lede()}</p>{/if}
+{#if lede}<p class="lede" data-testid="settings-lede">{@render lede()}</p>{/if}
 
 <style>
   .page-head { display: flex; align-items: center; gap: 10px; min-height: var(--control-h); margin-bottom: 4px; min-width: 0; }

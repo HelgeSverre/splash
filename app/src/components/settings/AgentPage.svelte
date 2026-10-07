@@ -47,47 +47,47 @@
         {#if a.experimental}<Tag tone="warn">experimental</Tag>{/if}
       {/snippet}
       {#snippet actions()}
-        <StatusBadge tone={r.tone} label={r.label} />
-        <IconButton title="Refresh {a.name}" icon="refresh" loading={probing} disabled={!a.installed} onclick={probe} />
+        <StatusBadge data-testid="settings-agent-status" data-agent={a.id} tone={r.tone} label={r.label} />
+        <IconButton data-testid="settings-agent-refresh" title="Refresh {a.name}" icon="refresh" loading={probing} disabled={!a.installed} onclick={probe} />
       {/snippet}
     </PageHeader>
 
     <div class="links">
       {#each links as l (l.page)}
-        <button class="plain link" onclick={() => (app.settings = `agent:${id}:${l.page}`)}>
+        <button class="plain link" data-testid="settings-agent-link" data-page={l.page} data-count={l.count} onclick={() => (app.settings = `agent:${id}:${l.page}`)}>
           <span class="n">{l.count ?? "…"}</span><span>{l.title}</span><span class="spacer"></span><Chevron size={12} />
         </button>
       {/each}
     </div>
 
     <SettingsGroup title="Installation">
-      <SettingsRow label="Host compatibility" value={p?.ok ? "ACP handshake verified on this host" : "Unverified on this host"} desc="Installation alone does not confirm ACP support. Refresh to test the installed adapter. WSL agents need a server running inside WSL." />
-      <SettingsRow label="Installed" value={a.installed ? a.cli_path : "not found on PATH"} path={a.installed} />
-      <SettingsRow label="Login" value={login} />
-      <SettingsRow label="Launch" value={[a.extra_args, a.launch].filter(Boolean).join(" ")} mono />
-      <SettingsRow label="Extra arguments" desc="Placed before the ACP arguments.">
-        <input class="field sm args" value={a.extra_args} placeholder="e.g. --verbose" aria-label="Extra arguments"
+      <SettingsRow data-testid="settings-row" data-key="host" label="Host compatibility" value={p?.ok ? "ACP handshake verified on this host" : "Unverified on this host"} desc="Installation alone does not confirm ACP support. Refresh to test the installed adapter. WSL agents need a server running inside WSL." />
+      <SettingsRow data-testid="settings-row" data-key="installed" label="Installed" value={a.installed ? a.cli_path : "not found on PATH"} path={a.installed} />
+      <SettingsRow data-testid="settings-row" data-key="login" label="Login" value={login} />
+      <SettingsRow data-testid="settings-row" data-key="launch" label="Launch" value={[a.extra_args, a.launch].filter(Boolean).join(" ")} mono />
+      <SettingsRow data-testid="settings-row" data-key="extra-args" label="Extra arguments" desc="Placed before the ACP arguments.">
+        <input class="field sm args" data-testid="settings-extra-args" value={a.extra_args} placeholder="e.g. --verbose" aria-label="Extra arguments"
           onblur={(e) => saveArgs(e.currentTarget.value)} onkeydown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
       </SettingsRow>
     </SettingsGroup>
 
-    <SettingsGroup title="Handshake">
+    <SettingsGroup title="Handshake" data-testid="settings-handshake" data-state={!p ? "unchecked" : p.ok ? "ok" : "failed"}>
       {#if !p}
         <EmptyState inline icon="refresh" title="Not checked yet." detail="Refresh runs a free handshake." />
       {:else if !p.ok}
         <EmptyState inline icon="alert" title="Handshake failed · {ago(p.probed_at)}">
-          {#if p.error}<pre class="card-code err">{p.error}</pre>{/if}
+          {#if p.error}<pre class="card-code err" data-testid="settings-handshake-error">{p.error}</pre>{/if}
         </EmptyState>
       {:else}
-        <SettingsRow label="Reports as" value="{p.agent_name} {p.agent_version} · protocol v{p.protocol_version} · {Math.round(p.duration_ms)} ms · {ago(p.probed_at)}" />
-        <SettingsRow label="Capabilities">
-          {#each [["resume", p.load_session], ["images", p.image], ["audio", p.audio], ["embedded context", p.embedded_context]] as [label, on] (label)}
-            <Tag off={!on} title={on ? undefined : "not supported"}>{label}</Tag>
+        <SettingsRow data-testid="settings-row" data-key="reports-as" label="Reports as" value="{p.agent_name} {p.agent_version} · protocol v{p.protocol_version} · {Math.round(p.duration_ms)} ms · {ago(p.probed_at)}" />
+        <SettingsRow data-testid="settings-row" data-key="capabilities" label="Capabilities">
+          {#each [["load_session", "resume", p.load_session], ["image", "images", p.image], ["audio", "audio", p.audio], ["embedded_context", "embedded context", p.embedded_context]] as [key, label, on] (key)}
+            <Tag data-testid="settings-capability" data-capability={key} data-supported={on} off={!on} title={on ? undefined : "not supported"}>{label}</Tag>
           {/each}
         </SettingsRow>
-        {#if p.auth_methods.length}<SettingsRow label="Auth methods" value={p.auth_methods.join(", ")} />{/if}
+        {#if p.auth_methods.length}<SettingsRow data-testid="settings-row" data-key="auth-methods" label="Auth methods" value={p.auth_methods.join(", ")} />{/if}
         {#each p.options as o (o.id)}
-          <SettingsRow label={o.name} desc="{o.choices.length} choices" value={o.choices.find((c) => c.value === o.current)?.name ?? o.current} />
+          <SettingsRow data-testid="settings-option" data-option={o.id} label={o.name} desc="{o.choices.length} choices" value={o.choices.find((c) => c.value === o.current)?.name ?? o.current} />
         {/each}
       {/if}
     </SettingsGroup>

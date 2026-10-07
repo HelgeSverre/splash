@@ -39,14 +39,14 @@
   const close = () => (preview.doc = null);
 </script>
 
-<Modal label="{d.kind} preview" width="940px" height="660px" onclose={close}>
+<Modal data-testid="doc-preview" data-kind={d.kind} label="{d.kind} preview" width="940px" height="660px" onclose={close}>
   <ModalHeader title={d.title} onclose={close}>
     {#snippet icon()}<AgentIcon id={d.agent} size={16} />{/snippet}
     <Tag>{d.kind}</Tag>
     {#if d.path}<PathLabel path={d.path} muted />{/if}
     {#snippet actions()}
       {#if doc}
-        <SegmentedControl label="View" value={mode} onchange={(m) => (mode = m)}
+        <SegmentedControl data-testid="doc-preview-view" label="View" value={mode} onchange={(m) => (mode = m)}
           options={[{ value: "rendered", label: "Rendered" }, { value: "source", label: "Source" }]} />
       {/if}
       {#if d.path}<RevealButton path={d.path} size="lg" />{/if}
@@ -56,9 +56,9 @@
   <div class="body">
     <!-- Scroll panes: tabindex so the keyboard reaches them in WebKit too. -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div class="main scroll-region" tabindex="0" role="region" aria-label="Document">
+    <div class="main scroll-region" data-testid="doc-preview-document" data-mode={mode} tabindex="0" role="region" aria-label="Document">
       {#if !d.path}
-        <div class="builtin">
+        <div class="builtin" data-testid="doc-preview-builtin">
           <p class="big t-page-title">{d.title}</p>
           {#if d.description}<p>{d.description}</p>{/if}
           {#if d.hint}<p class="muted">Arguments: <code>{d.hint}</code></p>{/if}
@@ -79,16 +79,16 @@
 
     {#if doc?.frontmatter.length}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <aside class="front scroll-region" tabindex="0" aria-label="Frontmatter">
+      <aside class="front scroll-region" data-testid="doc-preview-frontmatter" tabindex="0" aria-label="Frontmatter">
         <div class="front-title t-section">Frontmatter</div>
         {#each doc?.frontmatter ?? [] as f (f.key)}
           {@const list = asList(f.value)}
-          <div class="field">
+          <div class="field" data-testid="doc-preview-field" data-key={f.key}>
             <div class="k" title={f.key}>{label(f.key)}</div>
             {#if typeof f.value === "boolean"}
               <div class="v"><Tag tone={f.value ? "ok" : "default"}>{f.value ? "on" : "off"}</Tag></div>
             {:else if list}
-              <div class="v chips">{#each list as item (item)}<Tag>{item}</Tag>{/each}</div>
+              <div class="v chips">{#each list as item (item)}<Tag data-testid="doc-preview-chip">{item}</Tag>{/each}</div>
             {:else if typeof f.value === "string"}
               <div class="v text">{f.value}</div>
             {:else}

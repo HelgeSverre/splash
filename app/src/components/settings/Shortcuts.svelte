@@ -24,14 +24,14 @@
 
 <div class="set-page">
   <PageHeader title="Keyboard shortcuts">
-    {#snippet actions()}{#if anyCustom}<button class="btn sm ghost" onclick={resetAll}>Reset all</button>{/if}{/snippet}
+    {#snippet actions()}{#if anyCustom}<button class="btn sm ghost" data-testid="settings-reset-shortcuts" onclick={resetAll}>Reset all</button>{/if}{/snippet}
     {#snippet lede()}Click a shortcut to change it. Defaults follow {appleClient ? "macOS" : "Windows and Linux"} conventions{serverMode ? " and avoid browser navigation shortcuts" : ""}.{/snippet}
   </PageHeader>
 
   {#each groups as g (g)}
     <SettingsGroup title={g} dense>
       {#each ACTIONS.filter((a) => a.group === g) as a (a.id)}
-        <SettingsRow label={a.title}><KeyRecorder id={a.id} /></SettingsRow>
+        <SettingsRow label={a.title}><KeyRecorder data-testid="settings-shortcut" data-action={a.id} id={a.id} /></SettingsRow>
       {/each}
     </SettingsGroup>
   {/each}

@@ -126,6 +126,14 @@ export class App {
   get welcome() {
     return testId(this.page, "welcome");
   }
+  /** "Agents · n ready", which opens Settings on Agents; `data-ready` is n. */
+  get welcomeAgents() {
+    return testId(this.welcome, "welcome-agents");
+  }
+  /** The keycaps the Welcome page lists for an action (`session.new`, `app.palette`…). */
+  welcomeShortcut(action: string) {
+    return testId(this.welcome, "welcome-shortcut", { action });
+  }
 
   // ── New session ────────────────────────────────────────────────────────────
 

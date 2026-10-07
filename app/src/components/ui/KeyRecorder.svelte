@@ -2,6 +2,7 @@
   // Shows an action's shortcut; click it, press a new combo to rebind.
   // Esc cancels, ⌫ removes the shortcut, a clash asks before taking it over.
   import { onDestroy, tick } from "svelte";
+  import type { DataAttrs } from "../../lib/attrs";
   import Kbd from "../Kbd.svelte";
   import {
     ACTIONS,
@@ -15,7 +16,7 @@
     setBindings,
   } from "../../lib/keybindings.svelte";
 
-  let { id }: { id: string } = $props();
+  let { id, ...rest }: { id: string } & DataAttrs = $props();
   let recording = $state(false);
   let hint = $state("");
   let clash: { combo: string; other: string; otherTitle: string } | null = $state(null);
@@ -105,17 +106,17 @@
 
 <svelte:window onkeydowncapture={onkeydown} />
 
-<span class="rec" bind:this={root}>
+<span {...rest} class="rec" bind:this={root}>
   {#if clash}
-    <span class="clash">{format(clash.combo)} is used by “{clash.otherTitle}”</span>
-    <button class="btn sm" bind:this={useBtn} onclick={takeOver}>Use here</button>
-    <button class="btn sm ghost" onclick={endClash}>Cancel</button>
+    <span class="clash" data-testid="shortcut-clash">{format(clash.combo)} is used by “{clash.otherTitle}”</span>
+    <button class="btn sm" data-testid="shortcut-use-here" bind:this={useBtn} onclick={takeOver}>Use here</button>
+    <button class="btn sm ghost" data-testid="shortcut-cancel" onclick={endClash}>Cancel</button>
   {:else}
-    {#if hint}<span class="hint">{hint}</span>{/if}
+    {#if hint}<span class="hint" data-testid="shortcut-hint">{hint}</span>{/if}
     {#if custom}
-      <button class="plain reset" title="Back to {defaults.map(format).join(' or ') || 'none'}" onclick={() => setBindings(id, defaults)}>reset</button>
+      <button class="plain reset" data-testid="shortcut-reset" title="Back to {defaults.map(format).join(' or ') || 'none'}" onclick={() => setBindings(id, defaults)}>reset</button>
     {/if}
-    <button class="plain keys" class:recording aria-pressed={recording} bind:this={keysBtn} onclick={() => (recording ? stop() : start())}
+    <button class="plain keys" data-testid="shortcut-keys" class:recording aria-pressed={recording} bind:this={keysBtn} onclick={() => (recording ? stop() : start())}
       onblur={() => recording && stop()}
       title={recording ? "Press a shortcut. Esc cancels, ⌫ clears." : "Click to change"}>
       {#if recording}

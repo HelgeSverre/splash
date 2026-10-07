@@ -64,7 +64,7 @@
 <Modal data-testid="settings" label="Settings" width="1000px" height="720px" onclose={close}>
   <div class="settings" onkeydowncapture={onkeydown} role="presentation">
     <nav class="rail">
-      <div class="search"><FilterInput bind:value={query} bind:ref={searchEl} placeholder="Search" label="Search settings" /></div>
+      <div class="search"><FilterInput data-testid="settings-search" bind:value={query} bind:ref={searchEl} placeholder="Search" label="Search settings" /></div>
       <div class="groups">
         {#if appItems.some((i) => hit(i.title, i.keywords))}
           <div class="group-title t-section">App</div>
@@ -77,14 +77,14 @@
 
         <div class="group-title t-section">Agents</div>
         {#if hit("overview agents probe detect refresh")}
-          <NavItem label="Overview" active={app.settings === "agents"} onclick={() => (app.settings = "agents")}>
+          <NavItem data-testid="settings-nav" data-page="agents" label="Overview" active={app.settings === "agents"} onclick={() => (app.settings = "agents")}>
             {#snippet lead()}<Icon name="agents" size={15} />{/snippet}
           </NavItem>
         {/if}
         {#each agents.filter((x) => x.show) as { a, children } (a.id)}
           {@const open = expanded[a.id] ?? (openAgent === a.id || !!q)}
           {@const r = readiness(a)}
-          <NavItem label={a.name} active={app.settings === `agent:${a.id}`} onclick={() => { app.settings = `agent:${a.id}`; expanded[a.id] = true; }}>
+          <NavItem data-testid="settings-nav" data-page="agent:{a.id}" label={a.name} active={app.settings === `agent:${a.id}`} onclick={() => { app.settings = `agent:${a.id}`; expanded[a.id] = true; }}>
             {#snippet lead()}<AgentIcon id={a.id} size={15} />{/snippet}
             {#snippet trail()}<span class="dot {r.tone}" title={r.label}></span>{/snippet}
             {#snippet action()}
@@ -94,7 +94,7 @@
           </NavItem>
           {#if open}
             {#each children as c (c.id)}
-              <NavItem label={c.title} indent={31} dense active={app.settings === c.id} onclick={() => (app.settings = c.id)}>
+              <NavItem data-testid="settings-nav" data-page={c.id} label={c.title} indent={31} dense active={app.settings === c.id} onclick={() => (app.settings = c.id)}>
                 {#snippet lead()}<Icon name={c.icon} size={13} />{/snippet}
                 {#snippet trail()}{#if c.count !== undefined}<span class="t-count">{c.count}</span>{/if}{/snippet}
               </NavItem>
@@ -104,7 +104,7 @@
 
         {#if hit("about version data")}
           <div class="group-title t-section">About</div>
-          <NavItem label="About Splash" active={app.settings === "about"} onclick={() => (app.settings = "about")}>
+          <NavItem data-testid="settings-nav" data-page="about" label="About Splash" active={app.settings === "about"} onclick={() => (app.settings = "about")}>
             {#snippet lead()}<Icon name="info" size={15} />{/snippet}
           </NavItem>
         {/if}
@@ -113,7 +113,7 @@
 
     <div class="content">
       <span class="close"><ModalClose onclose={close} /></span>
-      <div class="page">
+      <div class="page" data-testid="settings-page" data-page={app.settings}>
         {#if app.settings === "general"}
           <General />
         {:else if app.settings === "shortcuts"}

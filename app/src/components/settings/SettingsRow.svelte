@@ -3,8 +3,10 @@
   // on the left; a read-only value, and any controls, on the right.
   // With `onclick`, the row minus its controls is one button that opens
   // something; `trail` sits inside that button (a badge, a chevron),
-  // `children` outside it (a Reveal button, a switch).
+  // `children` outside it (a Reveal button, a switch). `data-*` attributes
+  // go on the row.
   import type { Snippet } from "svelte";
+  import type { DataAttrs } from "../../lib/attrs";
 
   let {
     label,
@@ -18,6 +20,7 @@
     lead,
     trail,
     children,
+    ...rest
   }: {
     /** Plain text, or a snippet for a name with tags after it. */
     label: string | Snippet;
@@ -35,7 +38,7 @@
     lead?: Snippet;
     trail?: Snippet;
     children?: Snippet;
-  } = $props();
+  } & DataAttrs = $props();
 </script>
 
 {#snippet main()}
@@ -44,13 +47,13 @@
     {#if typeof label === "string"}<div class="label" id={labelId}>{label}</div>{:else}<div class="label named" id={labelId}>{@render label()}</div>{/if}
     {#if desc}<div class="desc">{#if typeof desc === "string"}{desc}{:else}{@render desc()}{/if}</div>{/if}
   </div>
-  {#if value}<span class="value" class:mono={mono || path} class:path title={valueTitle ?? value}>{#if path}<bdi>{value}</bdi>{:else}{value}{/if}</span>{/if}
+  {#if value}<span class="value" data-testid="settings-value" class:mono={mono || path} class:path title={valueTitle ?? value}>{#if path}<bdi>{value}</bdi>{:else}{value}{/if}</span>{/if}
   {#if trail}{@render trail()}{/if}
 {/snippet}
 
-<div class="set-row row" class:link={!!onclick}>
+<div {...rest} class="set-row row" class:link={!!onclick}>
   {#if onclick}
-    <button class="plain main focus-inset" {onclick}>{@render main()}</button>
+    <button class="plain main focus-inset" data-testid="settings-row-open" {onclick}>{@render main()}</button>
   {:else}
     {@render main()}
   {/if}

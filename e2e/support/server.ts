@@ -88,6 +88,10 @@ export class FolderPicker {
   folder(path?: string) {
     return testId(this.list, "folder-picker-folder", path ? { path } : {});
   }
+  /** The listed folders' paths, in order. */
+  folderPaths(): Promise<(string | null)[]> {
+    return this.folder().evaluateAll((folders) => folders.map((folder) => folder.getAttribute("data-path")));
+  }
   get add() {
     return testId(this.dialog, "folder-picker-add");
   }

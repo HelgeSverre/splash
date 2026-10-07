@@ -25,14 +25,14 @@
     <SettingsRow label="Default agent" labelId="set-default-agent" desc="Preselected in the new-session dialog.">
       <!-- Wraps to a second row rather than squeezing the label. -->
       <div class="agent-choices">
-      <ChoiceGroup items={app.agents} value={defaultAgent} key={(a) => a.id} title={(a) => a.name} labelledby="set-default-agent"
+      <ChoiceGroup data-testid="settings-default-agent" items={app.agents} value={defaultAgent} key={(a) => a.id} title={(a) => a.name} labelledby="set-default-agent"
         layout="row" variant="icon" onchange={(a) => setPref("default_agent", a.id)}>
         {#snippet item(a)}<AgentIcon id={a.id} size={14} />{/snippet}
       </ChoiceGroup>
       </div>
     </SettingsRow>
     <SettingsRow label="Where sessions work" desc="A new worktree keeps your checkout untouched; in place edits it directly.">
-      <SegmentedControl label="Where sessions work" value={isolation} onchange={(v) => setPref("default_isolation", v)}
+      <SegmentedControl data-testid="settings-isolation" label="Where sessions work" value={isolation} onchange={(v) => setPref("default_isolation", v)}
         options={[{ value: "worktree", label: "Worktree" }, { value: "in_place", label: "In place" }]} />
     </SettingsRow>
   </SettingsGroup>
@@ -45,11 +45,11 @@
   </SettingsGroup>
 
   <SettingsGroup title="Storage">
-    <SettingsRow label="Data folder" desc="Projects, sessions and transcripts (SQLite)."
+    <SettingsRow data-testid="settings-row" data-key="data-folder" label="Data folder" desc="Projects, sessions and transcripts (SQLite)."
       value={home(prefs.data_dir ?? "")} valueTitle={prefs.data_dir} path>
       <RevealButton path={prefs.data_dir} />
     </SettingsRow>
-    <SettingsRow label="Worktrees" desc="One folder per worktree session; archiving removes it and keeps the branch."
+    <SettingsRow data-testid="settings-row" data-key="worktrees" label="Worktrees" desc="One folder per worktree session; archiving removes it and keeps the branch."
       value={home(prefs.worktrees_dir ?? "")} valueTitle={prefs.worktrees_dir} path>
       <RevealButton path={prefs.worktrees_dir} />
     </SettingsRow>

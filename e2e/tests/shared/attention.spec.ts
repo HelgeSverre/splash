@@ -1,7 +1,7 @@
 // Needs attention: permissions, failures and finished work wait in one inbox,
 // survive a restart, and background sessions announce themselves.
 import { expect, test } from "../../fixtures.ts";
-import { notifySwitch, openSettingsButton, settingsPage } from "../../support/settings-core.ts";
+import { Settings } from "../../support/settings.ts";
 import { Attention } from "../../support/views.ts";
 
 test("a pending permission waits in the inbox until answered", async ({ splash }) => {
@@ -98,12 +98,11 @@ test.describe("with notifications off", () => {
 
   test("a background session does not toast", async ({ splash }) => {
     const { app, page, world } = splash;
-    await openSettingsButton(page).click();
-    await settingsPage(page, "general").click();
-    const toggle = notifySwitch(page);
-    await expect(toggle).toBeChecked();
-    await toggle.click();
-    await expect(toggle).not.toBeChecked();
+    const settings = new Settings(app);
+    await settings.open();
+    await expect(settings.notify).toBeChecked();
+    await settings.notify.click();
+    await expect(settings.notify).not.toBeChecked();
     await page.keyboard.press("Escape");
 
     world.agents.fixture("claude", "pool/read.jsonl");

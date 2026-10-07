@@ -1,12 +1,20 @@
-// Settings: the dialog's rail, pages and rows; a home folder with skills,
-// commands and MCP servers to list; and shortcuts as Settings writes them.
+// Settings: the dialog's rail and pages, the skill and command preview; a home
+// folder with skills, commands and MCP servers to list; and shortcuts as
+// Settings writes them. Found by test id, like everything in support/.
 import { expect, type Locator, type Page } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { APPLE, type App } from "./app.ts";
 import { write } from "./git.ts";
 import { FIXTURES } from "./paths.ts";
+import { testId } from "./testid.ts";
 import type { World } from "./world.ts";
+
+/** A Settings page, as the app names it (`app.settings`): `general`,
+ * `shortcuts`, `agents` (the overview), `about`, `agent:claude`, or an agent's
+ * sub-page `agent:claude:skills` (`commands`, `mcp`). */
+export type SettingsPage = "general" | "shortcuts" | "agents" | "about" | `agent:${string}`;
+export type AgentSubPage = "skills" | "commands" | "mcp";
 
 export class Settings {
   readonly app: App;
@@ -17,62 +25,246 @@ export class Settings {
   }
 
   get dialog() {
-    return this.page.getByRole("dialog", { name: "Settings" });
+    return testId(this.page, "settings");
   }
-  get rail() {
-    return this.dialog.getByRole("navigation");
+  /** The sidebar's gear. */
+  get openButton() {
+    return testId(this.page, "sidebar-settings");
   }
-  /** The open page's title. */
-  get heading() {
-    return this.dialog.getByRole("heading", { level: 2 });
+  get closeButton() {
+    return testId(this.dialog, "modal-close");
+  }
+  /** Search settings, over the rail. */
+  get search() {
+    return testId(this.dialog, "settings-search");
+  }
+  /** A rail item, by the page it opens. An agent's is named with its status too. */
+  nav(page: SettingsPage) {
+    return testId(this.dialog, "settings-nav", { page });
+  }
+  /** The pages the rail lists, in order. */
+  railPages(): Promise<(string | null)[]> {
+    return testId(this.dialog, "settings-nav").evaluateAll((items) => items.map((item) => item.getAttribute("data-page")));
+  }
+  /** The open page; its `data-page` says which. */
+  get current() {
+    return testId(this.dialog, "settings-page");
+  }
+  async expectPage(page: SettingsPage) {
+    await expect(this.current).toHaveAttribute("data-page", page);
   }
 
   /** Open Settings from the sidebar's gear (it opens on General), then a page. */
-  async open(item?: string) {
-    await this.app.sidebar.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(this.heading).toHaveText("General");
-    if (item) await this.go(item);
+  async open(page?: SettingsPage) {
+    await this.openButton.click();
+    await this.expectPage("general");
+    if (page) await this.go(page);
   }
-
-  /** A rail item by its label. An agent's item is named with its status too. */
-  nav(label: string) {
-    return this.rail.locator(".nav-item").filter({ has: this.page.locator(".label").getByText(label, { exact: true }) });
-  }
-
   /** Go to a rail item and wait for its page. */
-  async go(label: string, heading = label === "Overview" ? "Agents" : label) {
-    await this.nav(label).click();
-    await expect(this.heading).toHaveText(heading);
+  async go(page: SettingsPage) {
+    await this.nav(page).click();
+    await this.expectPage(page);
   }
-
-  /** An agent's sub-page (Skills, Commands, MCP servers), from the links on its page. */
-  async subPage(agent: string, title: "Skills" | "Commands" | "MCP servers") {
-    await this.go(agent);
-    await this.dialog.locator(".links").getByRole("button", { name: new RegExp(`${title}$`) }).click();
-    await expect(this.heading).toHaveText(`${agent} · ${title}`);
-  }
-
-  /** A settings row by its label. */
-  row(label: string | RegExp): Locator {
-    const text = typeof label === "string" ? this.page.locator(".label").getByText(label, { exact: true }) : this.page.locator(".label", { hasText: label });
-    return this.dialog.locator(".set-row").filter({ has: text });
-  }
-  /** A row's read-only value. */
-  value(label: string) {
-    return this.row(label).locator(".value");
-  }
-  /** A status badge in a row or the page header ("ready", "signed out"…). */
-  badge(scope: Locator = this.dialog.locator(".page-head")) {
-    return scope.locator(".badge");
-  }
-  /** The keys button of an action on the Keyboard shortcuts page. */
-  shortcut(action: string) {
-    return this.row(action).locator("button.keys");
+  /** An agent's sub-page, from the links on its page. */
+  async subPage(agent: string, sub: AgentSubPage) {
+    await this.go(`agent:${agent}`);
+    await this.link(sub).click();
+    await this.expectPage(`agent:${agent}:${sub}`);
   }
 
   async close() {
-    await this.dialog.getByRole("button", { name: "Close" }).click();
+    await this.closeButton.click();
     await expect(this.dialog).toBeHidden();
+  }
+
+  // ── Any page ───────────────────────────────────────────────────────────────
+
+  /** The line under the page's title. */
+  get lede() {
+    return testId(this.current, "settings-lede");
+  }
+  /** The titles over the page's groups. */
+  get groupTitles() {
+    return testId(this.current, "settings-group-title");
+  }
+  /** A row by its key (`host`, `login`, `launch`, `data-folder`…). */
+  row(key: string) {
+    return testId(this.current, "settings-row", { key });
+  }
+  /** A row's read-only value: a row's by key, or the one in `row`. */
+  value(row: string | Locator) {
+    return testId(typeof row === "string" ? this.row(row) : row, "settings-value");
+  }
+  /** The button that makes up a row that opens something (an agent, a skill). */
+  rowLink(row: Locator) {
+    return testId(row, "settings-row-open");
+  }
+  /** The labels on a skill, command or MCP server ("built in", "disabled"…). */
+  tags(row: Locator) {
+    return testId(row, "settings-tag");
+  }
+  /** The filter over a list of skills, commands or servers. */
+  get filter() {
+    return testId(this.current, "settings-filter");
+  }
+  /** The filter's "n of m"; `data-shown` and `data-total`. */
+  get filterCount() {
+    return testId(this.current, "filter-count");
+  }
+  /** What a list says when it has nothing to show. */
+  get empty() {
+    return testId(this.current, "settings-empty");
+  }
+
+  // ── General ────────────────────────────────────────────────────────────────
+
+  /** A card of Default agent, by agent id. */
+  defaultAgent(agent: string) {
+    return testId(testId(this.current, "settings-default-agent"), "choice", { value: agent });
+  }
+  /** Where sessions work: `worktree` or `in_place`. */
+  isolation(value: "worktree" | "in_place") {
+    return testId(testId(this.current, "settings-isolation"), "segment", { value });
+  }
+  /** "Notify when a background session needs you". */
+  get notify() {
+    return testId(this.current, "settings-notify");
+  }
+
+  // ── Agents ─────────────────────────────────────────────────────────────────
+
+  /** An agent's row on the Agents overview. */
+  agentRow(agent: string) {
+    return testId(this.current, "settings-agent", { agent });
+  }
+  /** An agent's status ("ready", "signed out"…): its overview row's, or its page's. */
+  status(agent: string) {
+    return testId(this.current, "settings-agent-status", { agent });
+  }
+  /** Refresh on an agent's page: runs the handshake. */
+  get refresh() {
+    return testId(this.current, "settings-agent-refresh");
+  }
+  /** A link on an agent's page to its skills, commands or MCP servers; `data-count` is how many. */
+  link(sub: AgentSubPage) {
+    return testId(this.current, "settings-agent-link", { page: sub });
+  }
+  get extraArgs() {
+    return testId(this.current, "settings-extra-args");
+  }
+  /** The Handshake group; `data-state` is `unchecked`, `ok` or `failed`. */
+  get handshake() {
+    return testId(this.current, "settings-handshake");
+  }
+  /** The agent's error, when the handshake failed. */
+  get handshakeError() {
+    return testId(this.handshake, "settings-handshake-error");
+  }
+  /** What the handshake reported the agent supports; `data-supported` on each. */
+  capabilities(key?: "load_session" | "image" | "audio" | "embedded_context") {
+    return testId(this.current, "settings-capability", key ? { capability: key } : {});
+  }
+  /** One of the agent's options from the handshake (`model`, `mode`…), by id. */
+  option(id: string) {
+    return testId(this.current, "settings-option", { option: id });
+  }
+
+  // ── Skills, commands and MCP servers ───────────────────────────────────────
+
+  skills(name?: string) {
+    return testId(this.current, "settings-skill", name ? { name } : {});
+  }
+  /** Commands by name, without the slash (`compact`, `git:commit`). */
+  commands(name?: string) {
+    return testId(this.current, "settings-command", name ? { name } : {});
+  }
+  mcpServers(name?: string) {
+    return testId(this.current, "settings-mcp-server", name ? { name } : {});
+  }
+  /** A config that couldn't be read. */
+  get mcpErrors() {
+    return testId(this.current, "settings-mcp-error");
+  }
+  /** Per project (n): also lists servers configured for one project; `data-count` is n. */
+  get perProject() {
+    return testId(this.current, "settings-mcp-projects");
+  }
+
+  /** The skill or command preview, over Settings. */
+  get preview() {
+    return new DocPreview(this.page);
+  }
+
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
+
+  /** An action's shortcut (`session.new`, `view.terminal`, `app.palette`…). */
+  private recorder(action: string) {
+    return testId(this.current, "settings-shortcut", { action });
+  }
+  /** The action's keys, which record a new shortcut on click; `aria-pressed` while recording. */
+  shortcut(action: string) {
+    return testId(this.recorder(action), "shortcut-keys");
+  }
+  /** Back to the action's default; shown once it has been changed. */
+  shortcutReset(action: string) {
+    return testId(this.recorder(action), "shortcut-reset");
+  }
+  /** Why a recorded combo can't be used ("Add ⌘, ⌥ or ⌃"). */
+  shortcutHint(action: string) {
+    return testId(this.recorder(action), "shortcut-hint");
+  }
+  /** "… is used by …", and its two answers. */
+  shortcutClash(action: string) {
+    return {
+      message: testId(this.recorder(action), "shortcut-clash"),
+      useHere: testId(this.recorder(action), "shortcut-use-here"),
+      cancel: testId(this.recorder(action), "shortcut-cancel"),
+    };
+  }
+  /** Reset all; shown once any shortcut has been changed. */
+  get resetShortcuts() {
+    return testId(this.current, "settings-reset-shortcuts");
+  }
+}
+
+/** The read-only preview of a skill or command file. */
+export class DocPreview {
+  readonly page: Page;
+  constructor(page: Page) {
+    this.page = page;
+  }
+  /** Its `data-kind` is `skill` or `command`. */
+  get dialog() {
+    return testId(this.page, "doc-preview");
+  }
+  /** Rendered or Source. */
+  view(mode: "rendered" | "source") {
+    return testId(testId(this.dialog, "doc-preview-view"), "segment", { value: mode });
+  }
+  /** The file's body, rendered or as source (`data-mode`). */
+  get document() {
+    return testId(this.dialog, "doc-preview-document");
+  }
+  /** A built-in command's note, in place of a file. */
+  get builtin() {
+    return testId(this.dialog, "doc-preview-builtin");
+  }
+  /** A frontmatter field, by its key (`description`, `allowed-tools`…). */
+  field(key: string) {
+    return testId(testId(this.dialog, "doc-preview-frontmatter"), "doc-preview-field", { key });
+  }
+  /** A list field's items. */
+  chips(field: Locator) {
+    return testId(field, "doc-preview-chip");
+  }
+  // The rendered markdown is the document's own HTML, without test ids.
+  /** The rendered document's headings. */
+  get headings() {
+    return this.document.getByRole("heading");
+  }
+  /** The rendered document's bold text. */
+  get bold() {
+    return this.document.locator("strong");
   }
 }
 

@@ -25,19 +25,19 @@
     {#snippet lede()}Built-in, custom and skill commands. Type <code>/</code> in the composer to use one.{/snippet}
   </PageHeader>
   {#if !agent?.probe?.ok}
-    <SettingsGroup><EmptyState inline icon="refresh" title="Refresh {agent?.name ?? 'the agent'} to list its commands." /></SettingsGroup>
+    <SettingsGroup><EmptyState data-testid="settings-empty" inline icon="refresh" title="Refresh {agent?.name ?? 'the agent'} to list its commands." /></SettingsGroup>
   {:else}
-    <div class="filter-bar"><FilterInput bind:value={filter} placeholder="Filter commands" shown={shown.length} total={all.length} /></div>
+    <div class="filter-bar"><FilterInput data-testid="settings-filter" bind:value={filter} placeholder="Filter commands" shown={shown.length} total={all.length} /></div>
     <SettingsGroup>
       <div class="list">
       {#each shown as c (c.name)}
-        <button class="plain cmd focus-inset" onclick={() => open(c)}>
+        <button class="plain cmd focus-inset" data-testid="settings-command" data-name={c.name} data-source={c.source} onclick={() => open(c)}>
           <span class="name t-item-name mono">/{c.name}</span>
           <span class="desc t-item-desc truncate">{c.description}{#if c.hint}<span class="muted">{` · ${c.hint}`}</span>{/if}</span>
-          {#if c.source === "builtin"}<Tag>built in</Tag>{:else if c.source === "skill"}<Tag>skill</Tag>{/if}
+          {#if c.source === "builtin"}<Tag data-testid="settings-tag">built in</Tag>{:else if c.source === "skill"}<Tag data-testid="settings-tag">skill</Tag>{/if}
         </button>
       {:else}
-        <EmptyState inline title="No commands{filter ? ' match' : ''}." />
+        <EmptyState data-testid="settings-empty" inline title="No commands{filter ? ' match' : ''}." />
       {/each}
       </div>
     </SettingsGroup>
