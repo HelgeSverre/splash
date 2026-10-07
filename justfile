@@ -50,7 +50,7 @@ clean:
 # Run all tests (mapper fixtures, actor vs fake-acp, store, workspace, pty)
 [group('qa')]
 test:
-    cargo test
+    cargo test --no-fail-fast
 
 # Format the Rust code
 [group('qa')]

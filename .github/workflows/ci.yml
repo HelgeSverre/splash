@@ -32,6 +32,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -86,6 +88,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-on-failure: true
           key: headless
       - uses: actions/setup-node@v5
         with:

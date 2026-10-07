@@ -627,6 +627,21 @@ async fn closing_one_browser_keeps_the_other_workspace_subscription() {
     .expect("remaining browser must receive filesystem changes");
     hub.workspace.watch(id, false, "browser-b").unwrap();
     drop(hub);
-    std::fs::remove_dir_all(data).unwrap();
+    // SQLx closes its SQLite writer asynchronously after the last sender drops.
+    // Windows cannot unlink the database until that worker releases its handle.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match std::fs::remove_dir_all(&data) {
+            Ok(()) => break,
+            Err(error)
+                if cfg!(windows)
+                    && error.raw_os_error() == Some(32)
+                    && std::time::Instant::now() < deadline =>
+            {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            Err(error) => panic!("test database cleanup failed: {error}"),
+        }
+    }
     std::fs::remove_dir_all(repo).unwrap();
 }
