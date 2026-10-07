@@ -86,5 +86,7 @@ test("…", async ({ splash }) => {
   runtime's confirm, prompt, toast, palette and context menu.
 - Transcript entries carry `data-kind`, the session header's status `data-status`.
 - Options: `test.use({ agents: [...], gh: true, folders: "none", signIn: false })`.
+- To prepare files before the backend starts, use a `beforeEach` that asks
+  only for `world`: `test.beforeEach(({ world }) => world.signInPool())`.
 - `splash.restart()` restarts the backend on the same port and data.
 - No screenshot baselines: assertions are semantic and platform independent.

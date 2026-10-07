@@ -5,6 +5,9 @@
 //
 // Options (test.use): `agents`, `gh`, `folders` ("repo" adds the temp repo as a
 // project at startup, "none" starts empty), `signIn` (web: log in first).
+// To prepare the World before the backend starts:
+//
+//   test.beforeEach(({ world }) => world.signInPool());
 import { test as base, expect, type Page } from "@playwright/test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -41,15 +44,22 @@ type Options = {
   signIn: boolean;
 };
 
-export const test = base.extend<Options & { splash: Splash }>({
+export const test = base.extend<Options & { world: World; splash: Splash }>({
   harness: ["desktop", { option: true }],
   agents: [["claude", "codex", "glue"], { option: true }],
   gh: [false, { option: true }],
   folders: ["repo", { option: true }],
   signIn: [true, { option: true }],
 
-  splash: async ({ harness, agents, gh, folders, signIn, page }, use, testInfo) => {
+  // Set up before the backend starts: a beforeEach that asks only for `world`
+  // can seed the home folder, fake agents or gh first.
+  world: async ({ agents, gh }, use) => {
     const world = new World({ agents, gh });
+    await use(world);
+    world.dispose();
+  },
+
+  splash: async ({ harness, agents, folders, signIn, page, world }, use, testInfo) => {
     const backend = new Backend(harness, world, folders === "repo" ? [world.repo] : []);
     const app = new App(page, harness);
     const splash: Splash = {
@@ -115,7 +125,6 @@ export const test = base.extend<Options & { splash: Splash }>({
         await attach("launches.jsonl", join(world.control, "launches.jsonl"));
         for (const agent of agents) await attach(`${agent}.audit.jsonl`, join(world.control, `${agent}.audit.jsonl`));
       }
-      world.dispose();
     }
   },
 });
