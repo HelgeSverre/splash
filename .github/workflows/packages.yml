@@ -38,9 +38,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev pkg-config squashfs-tools appstream desktop-file-utils
+      # The Chocolatey feed sometimes answers 504 and choco still exits 0, so
+      # retry and fail here rather than at packaging time.
       - name: Windows installer tool
         if: runner.os == 'Windows'
-        run: choco install nsis --no-progress -y
+        run: |
+          makensis="/c/Program Files (x86)/NSIS/makensis.exe"
+          for attempt in 1 2 3 4; do
+            choco install nsis --no-progress -y || true
+            [[ -x "$makensis" ]] && break
+            echo "NSIS not installed (attempt $attempt); retrying" >&2
+            sleep $((attempt * 15))
+          done
+          "$makensis" -VERSION
       - name: Build native binaries
         run: |
           npm ci --prefix app
