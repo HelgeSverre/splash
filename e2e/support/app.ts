@@ -416,7 +416,13 @@ export class App {
     await expect(this.ui.modal.filter({ hasText: message })).toHaveCount(0);
   }
 
-  async waitReady() {
+  /** Drawn, though it may still be loading (agent detection, routing). */
+  async waitShown() {
     await expect(this.newSessionButton).toBeVisible();
+  }
+
+  /** Loaded, and showing the view the URL names. */
+  async waitReady() {
+    await expect(testId(this.page, "app")).toHaveAttribute("data-ready", "true");
   }
 }

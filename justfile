@@ -63,6 +63,7 @@ e2e *ARGS: frontend
     cargo build --bin splash-web --bin fake-acp
     cargo build --no-default-features --bin splash-server
     @[ -d e2e/node_modules ] || (cd e2e && npm ci && npx playwright install chromium)
+    cd e2e && npm run check
     cd e2e && npx playwright test {{ ARGS }}
 
 # The browser tests in Playwright's UI mode: pick tests, watch them, read traces

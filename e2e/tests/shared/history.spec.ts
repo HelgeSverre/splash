@@ -24,7 +24,7 @@ test.describe("Open from agent", () => {
       await route.continue();
     });
     await page.reload();
-    await app.waitReady();
+    await app.waitShown();
     const history = new History(app);
     await history.open();
     // Only "All installed agents" so far.

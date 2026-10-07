@@ -35,7 +35,8 @@
   import { reconnectTerminals } from './components/TerminalPane.svelte';
 
   installLive();
-  let routeInstalled = false;
+  // Loaded and routed: the URL's view is shown (data-ready, for the tests).
+  let routeInstalled = $state(false);
   async function restoreWorkspace() {
     await loadAll();
     if (!routeInstalled) { installRoute(); routeInstalled = true; }
@@ -73,7 +74,7 @@
   });
 </script>
 
-<div class="workbench" style:grid-template-columns={layout.leftOpen ? `${layout.left}px 1px minmax(0, 1fr)` : "minmax(0, 1fr)"}>
+<div class="workbench" data-testid="app" data-ready={routeInstalled} style:grid-template-columns={layout.leftOpen ? `${layout.left}px 1px minmax(0, 1fr)` : "minmax(0, 1fr)"}>
   {#if layout.leftOpen}
     <div class="left"><Sidebar /></div>
     <Splitter axis="x" label="Resize sidebar" value={layout.left} min={200} max={420} onmove={(d) => (layout.left = clamp(layout.left + d, 200, 420))} onend={saveLayout} />

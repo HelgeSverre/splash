@@ -113,7 +113,7 @@ test("GitHub opened while Splash is still starting stays open", async ({ splash 
     await route.continue();
   });
   await page.reload();
-  await app.waitReady();
+  await app.waitShown();
   await app.openNav("github");
   await expect(view.root).toBeVisible();
 
