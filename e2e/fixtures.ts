@@ -114,9 +114,16 @@ export const test = base.extend<Options & { world: World; splash: Splash }>({
           await page.reload();
           await app.waitReady();
         } else if (harness === "web") {
+          // Both at once: the page adopts the new instance, then resyncs
+          // ("Restoring your workspace…") before it shows Connected again.
           const { instance } = await (await page.request.get(backend.url + "/__server/state")).json();
-          await page.waitForFunction((i) => globalThis.__SPLASH_SERVER__?.instance === i, instance, { timeout: 15_000 });
-          await expect(page.getByRole("status").filter({ hasText: "Connected · files and agents run on this server" })).toBeVisible();
+          await page.waitForFunction(
+            (i) =>
+              globalThis.__SPLASH_SERVER__?.instance === i &&
+              !!document.querySelector(".server-connection [role=status]")?.textContent?.startsWith("Connected"),
+            instance,
+            { timeout: 15_000 },
+          );
         }
       },
     };
