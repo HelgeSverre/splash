@@ -4,7 +4,7 @@
 	import AppWindow from './AppWindow.svelte';
 	import DownloadButton from './DownloadButton.svelte';
 	import GithubMark from './GithubMark.svelte';
-	import { VERSION } from '../releases.ts';
+	import { latest } from '../latest.svelte.ts';
 	import { REPO } from '../site';
 
 	type Phase = 'idle' | 'running' | 'permission' | 'done';
@@ -34,7 +34,7 @@
 	<div class="wrap">
 		<a class="pill" href="/download#changelog">
 			<span class="dot"></span>
-			<span>v{VERSION}</span>
+			<span>v{latest.version}</span>
 			<span class="sep">·</span>
 			<span>macOS, Windows, Linux</span>
 			<span class="sep">·</span>

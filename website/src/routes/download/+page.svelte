@@ -3,6 +3,7 @@
 	import CodeBlock from '#lib/components/CodeBlock.svelte';
 	import SplashMark from '$splash/components/SplashMark.svelte';
 	import { OS_NAMES, PLATFORMS, RELEASES, SERVER, VERSION, detect, primaryFor, type Os } from '#lib/releases.ts';
+	import { latest, loadLatest, resolve } from '#lib/latest.svelte.ts';
 	import { REPO, RELEASES_URL } from '#lib/site.ts';
 	import type { PageProps } from './$types';
 
@@ -11,6 +12,7 @@
 	let os: Os = $state('macos');
 	let intel = $state(false);
 	onMount(async () => {
+		loadLatest();
 		const found = await detect();
 		if (found.os) os = found.os;
 		intel = found.intel;
@@ -18,12 +20,13 @@
 
 	const platform = $derived(PLATFORMS.find((p) => p.os === os)!);
 	const primary = $derived(primaryFor(os, intel));
+	const primaryFile = $derived(resolve(primary));
 	const date = (iso: string) => (iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }) : '');
 
 	const verify: Record<Os, { label: string; code: string }> = {
-		macos: { label: 'Verify on macOS', code: `shasum -a 256 -c ${primaryFor('macos').file}.sha256` },
-		windows: { label: 'Verify on Windows (PowerShell)', code: `Get-FileHash -Algorithm SHA256 .\\${primaryFor('windows').file}` },
-		linux: { label: 'Verify on Linux', code: `sha256sum -c ${primaryFor('linux').file}.sha256` }
+		macos: { label: 'Verify on macOS', code: `shasum -a 256 -c ${primaryFor('macos').file(latest.version)}.sha256` },
+		windows: { label: 'Verify on Windows (PowerShell)', code: `Get-FileHash -Algorithm SHA256 .\\${primaryFor('windows').file(latest.version)}` },
+		linux: { label: 'Verify on Linux', code: `sha256sum -c ${primaryFor('linux').file(latest.version)}.sha256` }
 	};
 </script>
 
@@ -38,7 +41,7 @@
 		<div class="hero">
 			<div class="mark"><SplashMark size={56} /></div>
 			<div>
-				<p class="eyebrow"><span class="n">v{VERSION}</span> · macOS · Windows · Linux · MIT</p>
+				<p class="eyebrow"><span class="n">v{latest.version}</span> · macOS · Windows · Linux · MIT</p>
 				<h1 class="display">Download Splash</h1>
 				<p class="lede">Free and open source. Splash runs the agents you already have installed and signed in; bring one or several.</p>
 			</div>
@@ -47,12 +50,12 @@
 		<div class="card main">
 			<div class="info">
 				<span class="os">Splash for {OS_NAMES[os]}</span>
-				<span class="file">{primary.label} · {primary.file}</span>
+				<span class="file">{primary.label} · {primaryFile.file}</span>
 				<span class="meta">{platform.requires}. {platform.install}</span>
 			</div>
 			<div class="actions">
-				<a class="cta primary" href={primary.url}>Download {primary.detail}</a>
-				<a class="sum" href={primary.sha256}>SHA-256</a>
+				<a class="cta primary" href={primaryFile.url}>Download {primary.detail}</a>
+				<a class="sum" href={primaryFile.sha256}>SHA-256</a>
 			</div>
 		</div>
 
@@ -62,10 +65,11 @@
 					<h2 class="name">{p.name}</h2>
 					<p class="requires">{p.requires}</p>
 					<ul>
-						{#each p.downloads as d (d.file)}
+						{#each p.downloads as d (d.label)}
+							{@const f = resolve(d)}
 							<li>
-								<a class="file-link" href={d.url}><span class="label">{d.label}</span><span class="ext">{d.detail}</span></a>
-								<a class="hash" href={d.sha256} aria-label="SHA-256 for {d.file}">sha256</a>
+								<a class="file-link" href={f.url}><span class="label">{d.label}</span><span class="ext">{d.detail}</span></a>
+								<a class="hash" href={f.sha256} aria-label="SHA-256 for {f.file}">sha256</a>
 							</li>
 						{/each}
 					</ul>
@@ -79,8 +83,9 @@
 				<p class="requires">Headless, no window or WebKit needed. Run it where your repositories live and <a class="prose-link" href="/features/server">use it over SSH</a>.</p>
 			</div>
 			<ul>
-				{#each SERVER as d (d.file)}
-					<li><a class="file-link" href={d.url}><span class="label">{d.label}</span><span class="ext">{d.detail}</span></a><a class="hash" href={d.sha256} aria-label="SHA-256 for {d.file}">sha256</a></li>
+				{#each SERVER as d (d.label)}
+					{@const f = resolve(d)}
+					<li><a class="file-link" href={f.url}><span class="label">{d.label}</span><span class="ext">{d.detail}</span></a><a class="hash" href={f.sha256} aria-label="SHA-256 for {f.file}">sha256</a></li>
 				{/each}
 			</ul>
 		</div>
