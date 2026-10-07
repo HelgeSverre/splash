@@ -33,7 +33,7 @@
       {#each shown as c (c.name)}
         <button class="plain cmd focus-inset" onclick={() => open(c)}>
           <span class="name t-item-name mono">/{c.name}</span>
-          <span class="desc t-item-desc truncate">{c.description}{#if c.hint}<span class="muted"> · {c.hint}</span>{/if}</span>
+          <span class="desc t-item-desc truncate">{c.description}{#if c.hint}<span class="muted">{` · ${c.hint}`}</span>{/if}</span>
           {#if c.source === "builtin"}<Tag>built in</Tag>{:else if c.source === "skill"}<Tag>skill</Tag>{/if}
         </button>
       {:else}
