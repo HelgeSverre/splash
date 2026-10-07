@@ -626,6 +626,9 @@ async fn closing_one_browser_keeps_the_other_workspace_subscription() {
     .await
     .expect("remaining browser must receive filesystem changes");
     hub.workspace.watch(id, false, "browser-b").unwrap();
+    // Closing a browser intentionally does not stop its agent. Shut down the
+    // fixture session before dropping the hub and deleting its database.
+    hub.sessions.delete(id, false).await.unwrap();
     drop(hub);
     // SQLx closes its SQLite writer asynchronously after the last sender drops.
     // Windows cannot unlink the database until that worker releases its handle.
