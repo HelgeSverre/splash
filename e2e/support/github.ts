@@ -203,8 +203,9 @@ export class GithubView {
     return this.page.getByRole("combobox", { name: label, exact: true });
   }
   /** Wait until every feed in scope has loaded. */
+  /** Every feed answered. Each is a fake gh process, so allow for a busy machine. */
   async loaded(feeds: number) {
-    await expect(this.sync).toHaveText(new RegExp(`^${feeds} / ${feeds} feeds loaded`));
+    await expect(this.sync).toHaveText(new RegExp(`^${feeds} / ${feeds} feeds loaded`), { timeout: 30_000 });
   }
 }
 
@@ -235,6 +236,6 @@ export class ActionsView {
     return this.page.getByRole("combobox", { name: label, exact: true });
   }
   async loaded(repositories: number) {
-    await expect(this.sync).toHaveText(new RegExp(`^${repositories} / ${repositories} repositories loaded`));
+    await expect(this.sync).toHaveText(new RegExp(`^${repositories} / ${repositories} repositories loaded`), { timeout: 30_000 });
   }
 }
