@@ -78,16 +78,16 @@
 <svelte:window {onpointerdown} />
 
 <div class="picker" bind:this={root} {onfocusout}>
-  <button class="plain trigger" class:open {disabled} bind:this={trigger} onclick={() => (open ? hide() : show())} onkeydown={ontriggerkey}
+  <button class="plain trigger" data-testid="option-picker" data-option={option.id} class:open {disabled} bind:this={trigger} onclick={() => (open ? hide() : show())} onkeydown={ontriggerkey}
     title={option.name} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined}>
     <span class="label">{label}</span>
     <span class="chev"><Chevron down /></span>
   </button>
   {#if open}
-    <div class="menu popover {align}" id={menuId} role="listbox" aria-label={option.name} tabindex="-1" bind:this={menu} onkeydown={onmenukey}>
+    <div class="menu popover {align}" data-testid="option-menu" id={menuId} role="listbox" aria-label={option.name} tabindex="-1" bind:this={menu} onkeydown={onmenukey}>
       <div class="menu-title t-section">{option.name}</div>
       {#each option.choices as c (c.value)}
-        <MenuItem role="option" aria-selected={c.value === option.current} name={c.name} description={c.description} checked={c.value === option.current}
+        <MenuItem data-testid="option-choice" data-value={c.value} role="option" aria-selected={c.value === option.current} name={c.name} description={c.description} checked={c.value === option.current}
           onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} onclick={() => choose(c.value)} />
       {/each}
     </div>

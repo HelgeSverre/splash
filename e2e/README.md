@@ -108,14 +108,43 @@ test("…", async ({ splash }) => {
 });
 ```
 
-- Wait on what the user sees (roles, labels, text), `expect.poll` for the
-  database and files. Never sleep, never wait for `networkidle` (the event
-  stream is a long poll).
+- Find elements by test id through the helpers in `support/` (see Test ids
+  below). Wait on what the user sees and `expect.poll` for the database and
+  files. Never sleep, never wait for `networkidle` (the event stream is a long
+  poll).
 - `support/app.ts` has the common steps; `support/elyra.ts` locates the
   runtime's confirm, prompt, toast, palette and context menu.
-- Transcript entries carry `data-kind`, the session header's status `data-status`.
 - Options: `test.use({ agents: [...], gh: true, folders: "none", signIn: false })`.
 - To prepare files before the backend starts, use a `beforeEach` that asks
   only for `world`: `test.beforeEach(({ world }) => world.signInPool())`.
 - `splash.restart()` restarts the backend on the same port and data.
 - No screenshot baselines: assertions are semantic and platform independent.
+
+## Test ids
+
+Components mark what tests use with `data-testid` (the repository convention
+is in `AGENTS.md`):
+
+```svelte
+<button data-testid="composer-send" …>
+{#each sessions as s (s.id)}<NavItem testid="sidebar-session" data={{ "session-id": s.id }} …/>{/each}
+<span data-testid="session-status" data-status={session.status}>…</span>
+```
+
+```ts
+// support/app.ts: the only place the id is spelled out
+get sendButton() { return testId(this.page, "composer-send"); }
+// a spec: no ids, no classes, no copy to find things
+await app.sendButton.click();
+await expect(app.status).toHaveAttribute("data-status", "idle");
+```
+
+- `testId(scope, id)` in `support/testid.ts` is how support code finds an
+  element. `scripts/check-testids.ts` (run by `npm run check`) fails if a
+  `testId(…, "id")` has no `data-testid="id"` in `app/src` or the server's
+  login page.
+- Repeated elements share an id and carry their identity in `data-*`
+  (`data-session-id`, `data-path`, `data-kind`). Narrow by that, or by data
+  the test created (a title it typed), not by UI copy.
+- Assert text where the text is the behaviour: messages, labels the feature
+  is about, user data.

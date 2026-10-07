@@ -3,8 +3,7 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "../../fixtures.ts";
-
-const sessionTabs = (page: import("@playwright/test").Page) => page.getByRole("tablist", { name: "Session tabs" });
+import { Review, Workbench } from "../../support/views.ts";
 
 test.describe("an agent that plans and edits", () => {
   test.beforeEach(({ world }) => {
@@ -19,59 +18,59 @@ test.describe("an agent that plans and edits", () => {
     const { cwd } = db.session(id)!;
     expect(readFileSync(join(cwd, "calc.py"), "utf8")).toContain("def multiply(a, b):");
 
-    await expect(app.entries("thought").first()).toContainText("Thought");
+    await expect(app.thought(app.entries("thought").first()).toggle).toHaveAttribute("data-open", "false");
     // Each plan update replaces the plan.
-    const plan = app.entries("plan");
-    await expect(plan).toHaveCount(1);
-    await expect(plan).toContainText("Plan 2/3");
-    await expect(plan.locator(".item.completed")).toHaveText(["Read calc.py", "Add multiply to calc.py"]);
-    await expect(plan.locator(".item.in_progress")).toHaveText("Run the tests");
+    await expect(app.entries("plan")).toHaveCount(1);
+    await expect(app.entries("plan")).toContainText("Plan 2/3");
+    await expect(app.planItems("completed")).toHaveText(["Read calc.py", "Add multiply to calc.py"]);
+    await expect(app.planItems("in_progress")).toHaveText("Run the tests");
 
-    // Completed edits open with their diff.
-    const edit = app.entries("tool").filter({ hasText: "Edit calc.py" });
-    await expect(edit.locator(".diff-head")).toContainText("calc.py");
-    const created = app.entries("tool").filter({ hasText: "Write test_calc.py" });
-    await expect(created.locator(".diff-head")).toContainText("new file");
+    // Completed edits open with their diff; a created file is marked new.
+    const [edit, created] = [app.tools("edit").first(), app.tools("edit").last()];
+    await expect(app.toolDiffs(edit)).toHaveAttribute("data-path", join(cwd, "calc.py"));
+    await expect(app.toolDiffs(created)).toHaveAttribute("data-path", join(cwd, "test_calc.py"));
+    await expect(app.toolDiffs(created)).toHaveAttribute("data-new", "true");
 
     // The diff's path opens a diff tab; the location opens the file at its line.
-    await edit.locator(".diff-head").getByRole("button", { name: "calc.py" }).click();
-    await expect(sessionTabs(page).getByRole("tab", { name: /calc\.py/, selected: true })).toContainText("±");
-    await sessionTabs(page).getByRole("tab", { name: "Chat" }).click();
-    await edit.locator(".row .loc").filter({ hasText: "calc.py:7" }).click();
-    await expect(sessionTabs(page).getByRole("tab", { name: "calc.py", exact: true, selected: true })).toBeVisible();
-    await expect(page.getByText("read-only")).toBeVisible();
+    await app.toolDiffPath(app.toolDiffs(edit)).click();
+    await expect(app.sessionTab("diff", join(cwd, "calc.py"))).toHaveAttribute("aria-selected", "true");
+    await app.sessionTab("chat").click();
+    await app.toolLocations(edit).click();
+    await expect(app.sessionTab("file", join(cwd, "calc.py"))).toHaveAttribute("aria-selected", "true");
+    await expect(new Workbench(page).fileReadOnly).toBeVisible();
   });
 
   test("lists the changes, opens diffs and reviews them all", async ({ splash }) => {
     const { app, page } = splash;
     await app.newSession({ where: "worktree" });
     await app.prompt("Add a multiply function with a test");
+    const bench = new Workbench(page);
 
-    await app.sideTab("Changes").click();
-    const changes = page.getByRole("tabpanel").locator(".change");
-    await expect(changes).toHaveCount(2);
-    await expect(page.locator(".files")).toHaveText("2 files");
-    await expect(changes.filter({ hasText: "calc.py" }).first()).toHaveAttribute("title", /calc\.py/);
+    await app.sideTab("changes").click();
+    await expect(bench.changes()).toHaveCount(2);
+    await expect(bench.changesCount).toHaveAttribute("data-count", "2");
+    await expect(bench.changes("calc.py")).toHaveAttribute("data-status", "M");
+    await expect(bench.changes("test_calc.py")).toHaveAttribute("data-status", "?");
 
-    await changes.filter({ hasText: "test_calc.py" }).click();
-    const tab = sessionTabs(page).getByRole("tab", { name: /test_calc\.py/, selected: true });
-    await expect(tab).toBeVisible();
-    await expect(page.getByRole("tabpanel", { name: /test_calc\.py/ }).locator(".tag", { hasText: "new file" })).toBeVisible();
+    await bench.changes("test_calc.py").click();
+    await expect(app.sessionTab("diff", "test_calc.py")).toHaveAttribute("aria-selected", "true");
+    await expect(bench.diffNewFile).toBeVisible();
 
-    await changes.filter({ hasNotText: "test_" }).click();
-    const layout = page.getByRole("radiogroup", { name: "Diff layout" });
-    await expect(layout.getByRole("radio", { name: "Unified" })).toBeChecked();
-    await layout.getByRole("radio", { name: "Split" }).click();
-    await expect(layout.getByRole("radio", { name: "Split" })).toBeChecked();
-    await page.getByRole("checkbox", { name: "Whole file" }).check();
-    await page.getByRole("button", { name: "Open file" }).click();
-    await expect(sessionTabs(page).getByRole("tab", { name: "calc.py", exact: true, selected: true })).toBeVisible();
+    await bench.changes("calc.py").click();
+    await expect(bench.diffLayout("unified")).toBeChecked();
+    await bench.diffLayout("split").click();
+    await expect(bench.diffLayout("split")).toBeChecked();
+    await bench.wholeFile.click();
+    await expect(bench.wholeFile).toBeChecked();
+    await bench.openFile.click();
+    await expect(app.sessionTab("file", "calc.py")).toHaveAttribute("aria-selected", "true");
 
     // Review all changes opens one diff tab per change.
-    await sessionTabs(page).getByRole("button", { name: /^Close/ }).first().click();
-    await app.sideTab("Review").click();
-    await page.getByRole("button", { name: "Review all changes" }).click();
-    await expect(sessionTabs(page).getByRole("tab").filter({ hasText: "±" })).toHaveCount(2);
+    await app.closeTab("diff", "test_calc.py").click();
+    await expect(app.sessionTab("diff", "test_calc.py")).toHaveCount(0);
+    await app.sideTab("review").click();
+    await new Review(page).reviewAllChanges.click();
+    await expect(app.sessionTab("diff")).toHaveCount(2);
   });
 });
 
@@ -79,109 +78,106 @@ test("the Changes tab follows the files without a refresh", async ({ splash }) =
   const { app, page, db } = splash;
   const id = await app.newSession({ where: "worktree" });
   const { cwd } = db.session(id)!;
-  await app.sideTab("Changes").click();
-  await expect(page.getByText("No changes")).toBeVisible();
+  const bench = new Workbench(page);
+  await app.sideTab("changes").click();
+  await expect(bench.noChanges).toBeVisible();
 
   writeFileSync(join(cwd, "calc.py"), readFileSync(join(cwd, "calc.py"), "utf8").replace("a - b", "b - a"));
   writeFileSync(join(cwd, "notes.txt"), "todo\n");
   rmSync(join(cwd, "README.md"));
-  const changes = page.getByRole("tabpanel").locator(".change");
-  await expect(changes).toHaveCount(3, { timeout: 15_000 });
-  await expect(app.sideTab("Changes")).toContainText("3");
+  await expect(bench.changes()).toHaveCount(3, { timeout: 15_000 });
+  await expect(app.sideTab("changes")).toContainText("3");
 
-  await changes.filter({ hasText: "README.md" }).click();
-  await expect(page.getByRole("tabpanel", { name: /README\.md/ }).locator(".tag", { hasText: "deleted" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open file" })).toHaveCount(0);
+  await bench.changes("README.md").click();
+  await expect(bench.diffDeleted).toBeVisible();
+  await expect(bench.openFile).toHaveCount(0);
 });
 
 test("the file tree opens files and changed files as diffs", async ({ splash }) => {
   const { app, page, db } = splash;
   const id = await app.newSession({ where: "worktree" });
   writeFileSync(join(db.session(id)!.cwd, "calc.py"), "def add(a, b):\n    return a + b\n");
-  await app.sideTab("Files").click();
-  const tree = page.getByRole("tree", { name: "Files" });
-  await expect(tree.getByRole("treeitem", { name: "README.md" })).toBeVisible();
+  await app.sideTab("files").click();
+  const bench = new Workbench(page);
+  await expect(bench.node("README.md")).toBeVisible();
 
-  const src = tree.getByRole("treeitem", { name: "src" });
+  const src = bench.node("src");
   await expect(src).toHaveAttribute("aria-expanded", "false");
   await src.click();
   await expect(src).toHaveAttribute("aria-expanded", "true");
-  await expect(tree.getByRole("treeitem", { name: "util.py" })).toBeVisible();
+  await expect(bench.node("src/util.py")).toBeVisible();
   await src.press("ArrowLeft");
   await expect(src).toHaveAttribute("aria-expanded", "false");
   await src.press("ArrowRight");
   await expect(src).toHaveAttribute("aria-expanded", "true");
 
-  await tree.getByRole("treeitem", { name: "util.py" }).click();
-  await expect(sessionTabs(page).getByRole("tab", { name: "util.py", selected: true })).toBeVisible();
-  await expect(page.getByText(/^3 lines · /)).toBeVisible();
-  await expect(page.locator(".content")).toContainText("return x * 2");
+  await bench.node("src/util.py").click();
+  await expect(app.sessionTab("file", "src/util.py")).toHaveAttribute("aria-selected", "true");
+  await expect(bench.fileMeta).toHaveAttribute("data-lines", "3");
+  await expect(bench.fileContent).toContainText("return x * 2");
 
   // A changed file is marked, and opens as its diff.
-  const calc = tree.getByRole("treeitem", { name: /calc\.py/ });
-  await expect(calc.locator(".mark")).toBeVisible({ timeout: 15_000 });
-  await calc.click();
-  await expect(sessionTabs(page).getByRole("tab", { name: /calc\.py/, selected: true })).toContainText("±");
+  await expect(bench.changeMark(bench.node("calc.py"))).toHaveAttribute("data-status", "M", { timeout: 15_000 });
+  await bench.node("calc.py").click();
+  await expect(app.sessionTab("diff", "calc.py")).toHaveAttribute("aria-selected", "true");
 });
 
 test("the log shows the agent's JSON-RPC traffic and filters it", async ({ splash }) => {
   const { app, page } = splash;
   await app.newSession({ where: "in_place" });
   await app.prompt("What does subtract do?");
-  await page.getByRole("button", { name: "Log", exact: true }).click();
-  const tab = sessionTabs(page).getByRole("tab", { name: "Log", selected: true });
-  await expect(tab).toBeVisible();
+  await app.openLogButton.click();
+  await expect(app.sessionTab("log")).toHaveAttribute("aria-selected", "true");
 
-  const filter = page.getByRole("searchbox", { name: "Filter the log" }).or(page.getByRole("textbox", { name: "Filter the log" }));
-  const lines = page.locator(".log .line");
+  const bench = new Workbench(page);
   // The finished turn's traffic loads with the tab.
-  await expect.poll(() => lines.count()).toBeGreaterThan(10);
-  const total = await lines.count();
-  await filter.fill("session/prompt");
-  await expect(lines).toHaveCount(1);
-  await expect(page.getByText(`1 of ${total} lines`)).toBeVisible();
-  await filter.fill("");
+  await expect.poll(() => bench.logLines.count()).toBeGreaterThan(10);
+  const total = await bench.logLines.count();
+  await bench.logFilter.fill("session/prompt");
+  await expect(bench.logLines).toHaveCount(1);
+  await expect(bench.logLines).toHaveAttribute("data-method", "session/prompt");
+  await expect(bench.filterCount).toHaveAttribute("data-shown", "1");
+  await expect(bench.filterCount).toHaveAttribute("data-total", String(total));
+  await bench.logFilter.fill("");
 
   // A new turn appends while the tab is open.
-  await sessionTabs(page).getByRole("tab", { name: "Chat" }).click();
+  await app.sessionTab("chat").click();
   await app.prompt("And add?");
-  await sessionTabs(page).getByRole("tab", { name: "Log" }).click();
-  await expect.poll(() => lines.count()).toBeGreaterThan(total);
+  await app.sessionTab("log").click();
+  await expect.poll(() => bench.logLines.count()).toBeGreaterThan(total);
 
-  await page.getByRole("button", { name: "Close Log" }).click();
-  await expect(sessionTabs(page).getByRole("tab", { name: "Log" })).toHaveCount(0);
+  await app.closeTab("log").click();
+  await expect(app.sessionTab("log")).toHaveCount(0);
 });
 
 test("the terminal runs a shell in the session's folder", async ({ splash }) => {
   const { app, page, world } = splash;
   await app.newSession({ where: "in_place" });
-  await page.getByRole("button", { name: "Terminal" }).click();
-  const terminal = page.locator("#terminal-pane .xterm");
-  await expect(terminal).toBeVisible();
-  await terminal.click();
+  await app.terminalToggle.click();
+  const bench = new Workbench(page);
+  await expect(bench.terminalInput).toBeVisible();
+  await bench.terminalInput.click();
   await page.keyboard.type("echo e2e-ok-$((6*7)) && pwd\n");
-  const rows = page.locator("#terminal-pane .xterm-rows");
-  await expect(rows).toContainText("e2e-ok-42");
-  await expect(rows).toContainText(world.repo);
+  await expect(bench.terminalScreen).toContainText("e2e-ok-42");
+  await expect(bench.terminalScreen).toContainText(world.repo);
 
-  await page.getByRole("button", { name: "Hide the terminal" }).click();
-  await expect(terminal).toBeHidden();
+  await bench.hideTerminal.click();
+  await expect(bench.terminal).toHaveCount(0);
   await expect(app.composer).toBeFocused();
 });
 
 test("the side panel stays as it was left after a reload", async ({ splash }) => {
   const { app, page } = splash;
   await app.newSession({ where: "in_place" });
-  const toggle = page.getByRole("button", { name: "Changes & files" });
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  await app.sideTab("Files").click();
+  await expect(app.panelToggle).toHaveAttribute("aria-pressed", "true");
+  await app.sideTab("files").click();
   await page.reload();
-  await expect(app.sideTab("Files")).toHaveAttribute("aria-selected", "true");
+  await expect(app.sideTab("files")).toHaveAttribute("aria-selected", "true");
 
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByRole("tablist", { name: "Side panel" })).toHaveCount(0);
+  await app.panelToggle.click();
+  await expect(app.panelToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(app.sidePanel).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole("button", { name: "Changes & files" })).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByRole("tablist", { name: "Side panel" })).toHaveCount(0);
+  await expect(app.panelToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(app.sidePanel).toHaveCount(0);
 });

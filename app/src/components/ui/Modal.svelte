@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // A centred dialog over a scrim. Esc and a click outside close it.
   // Focus moves in on open (the first [autofocus], else the first tabbable),
   // Tab cycles inside, the rest of the app is inert, and focus goes back to
@@ -14,7 +15,8 @@
     top = false,
     label,
     children,
-  }: { onclose: () => void; width?: string; height?: string; top?: boolean; label: string; children: Snippet } = $props();
+    ...rest
+  }: { onclose: () => void; width?: string; height?: string; top?: boolean; label: string; children: Snippet } & DataAttrs = $props();
 
   const me = pushModal();
   // Taken before the children mount, so an [autofocus] inside can't hide it.
@@ -48,7 +50,7 @@
 <svelte:window {onkeydown} />
 
 <div class="scrim" class:top role="presentation" bind:this={scrim} onclick={onclose}>
-  <div class="panel" role="dialog" aria-modal="true" aria-label={label} tabindex="-1" style:width style:height
+  <div {...rest} class="panel" role="dialog" aria-modal="true" aria-label={label} tabindex="-1" style:width style:height
     bind:this={panel} onclick={(e) => e.stopPropagation()} onkeydown={(e) => panel && trapTab(e, panel)}>
     {@render children()}
   </div>

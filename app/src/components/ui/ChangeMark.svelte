@@ -11,7 +11,7 @@
   const tone = $derived(status === "M" || status === "T" ? "m" : status === "D" ? "d" : "a");
 </script>
 
-<span class="mark {tone}" title={changeName(status)}>{changeLetter(status)}</span>
+<span class="mark {tone}" data-testid="change-mark" data-status={status} title={changeName(status)}>{changeLetter(status)}</span>
 
 <style>
   .mark { font: var(--fs-xs) var(--font-mono); width: 12px; flex: none; text-align: center; }

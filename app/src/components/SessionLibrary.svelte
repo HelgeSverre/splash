@@ -47,27 +47,27 @@
 </script>
 
 <div class="library">
-  <header><div><h1>Sessions</h1><p>Find a conversation and pick up where you left off.</p></div><button class="btn" onclick={() => app.newSession = {}}>New session</button></header>
-  <Tabs items={[{ id: "saved", label: "In Splash", count: app.sessions.length }, { id: "external", label: "Open from agent" }]} active={tab} prefix="library" label="Session sources" onselect={(id) => tab = id} />
+  <header><div><h1>Sessions</h1><p>Find a conversation and pick up where you left off.</p></div><button class="btn" data-testid="library-new-session" onclick={() => app.newSession = {}}>New session</button></header>
+  <Tabs data-testid="library-tabs" items={[{ id: "saved", label: "In Splash", count: app.sessions.length }, { id: "external", label: "Open from agent" }]} active={tab} prefix="library" label="Session sources" onselect={(id) => tab = id} />
   <div class="content" role="tabpanel" id="library-panel-{tab}" aria-labelledby="library-tab-{tab}">
     {#if tab === "saved"}
       <div class="filters">
-        <label class="search">Search conversations<input class="field" type="search" bind:value={query} placeholder="Title, folder, or words in the transcript" /></label>
-        <label>Project<select class="field" bind:value={project}><option value="">All projects</option>{#each app.projects as p}<option value={p.id}>{p.name}</option>{/each}</select></label>
-        <label>Agent<select class="field" bind:value={agentFilter}><option value="">All agents</option>{#each app.agents as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
-        <label>Status<select class="field" bind:value={filterStatus}><option value="all">All sessions</option><option value="active">Not archived</option><option value="archived">Archived</option><option value="running">Running</option><option value="awaiting_permission">Needs permission</option><option value="error">Failed</option></select></label>
+        <label class="search">Search conversations<input class="field" data-testid="library-search" type="search" bind:value={query} placeholder="Title, folder, or words in the transcript" /></label>
+        <label>Project<select class="field" data-testid="library-project" bind:value={project}><option value="">All projects</option>{#each app.projects as p}<option value={p.id}>{p.name}</option>{/each}</select></label>
+        <label>Agent<select class="field" data-testid="library-agent" bind:value={agentFilter}><option value="">All agents</option>{#each app.agents as a}<option value={a.id}>{a.name}</option>{/each}</select></label>
+        <label>Status<select class="field" data-testid="library-status" bind:value={filterStatus}><option value="all">All sessions</option><option value="active">Not archived</option><option value="archived">Archived</option><option value="running">Running</option><option value="awaiting_permission">Needs permission</option><option value="error">Failed</option></select></label>
       </div>
-      <p class="summary" role="status">{searching ? "Searching transcripts…" : `${saved.length} conversations`}{matches.length === 200 ? " · Showing up to 200 transcript matches. Refine your search for more." : ""}</p>
-      {#if searchError}<p class="err" role="alert">{searchError}</p>{/if}
+      <p class="summary" role="status" data-testid="library-summary" data-searching={searching} data-count={saved.length}>{searching ? "Searching transcripts…" : `${saved.length} conversations`}{matches.length === 200 ? " · Showing up to 200 transcript matches. Refine your search for more." : ""}</p>
+      {#if searchError}<p class="err" role="alert" data-testid="library-error">{searchError}</p>{/if}
       <div class="results">
         {#each saved as s (s.id)}
           {@const match = matchById.get(s.id)}
-          <button class="plain session-row" onclick={() => openSession(s.id, match?.entry_index)}>
+          <button class="plain session-row" data-testid="library-session" data-session-id={s.id} data-archived={s.archived} data-entry={match?.entry_index} onclick={() => openSession(s.id, match?.entry_index)}>
             <AgentIcon id={s.agent_id} size={20} />
-            <span class="row-body"><strong>{s.title}</strong><span class="meta">{projectById(s.project_id)?.name} · {agentById(s.agent_id)?.name ?? s.agent_id} · {s.archived ? "Archived" : statusLabel(s.status)}{s.external ? " · Imported" : ""}</span>{#if match}<span class="excerpt">{match.excerpt}</span>{/if}</span>
+            <span class="row-body"><strong>{s.title}</strong><span class="meta">{projectById(s.project_id)?.name} · {agentById(s.agent_id)?.name ?? s.agent_id} · {s.archived ? "Archived" : statusLabel(s.status)}{s.external ? " · Imported" : ""}</span>{#if match}<span class="excerpt" data-testid="library-excerpt">{match.excerpt}</span>{/if}</span>
             <time datetime={new Date(s.updated_at * 1000).toISOString()}>{date(s.updated_at)}</time>
           </button>
-        {:else}<EmptyState inline title={query ? "No matching conversations" : "No saved conversations"} detail="Open an existing conversation from an agent, or start a new session." />{/each}
+        {:else}<EmptyState data-testid="library-empty" inline title={query ? "No matching conversations" : "No saved conversations"} detail="Open an existing conversation from an agent, or start a new session." />{/each}
       </div>
     {:else}
       <AgentSessionBrowser />

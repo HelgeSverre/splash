@@ -22,17 +22,17 @@
 
 <Toolbar side>
   {#if w.changes.length}
-    <span class="files">{plural(w.changes.length, "file")}</span>
+    <span class="files" data-testid="changes-count" data-count={w.changes.length}>{plural(w.changes.length, "file")}</span>
     <DiffStat add={totals.add} del={totals.del} />
   {/if}
   {#snippet end()}
-    <span class="t-mono-meta" title={session.base_sha ?? ""}>vs {session.isolation === "worktree" ? (session.base_sha?.slice(0, 7) ?? "base") : "HEAD"}</span>
+    <span class="t-mono-meta" data-testid="changes-base" title={session.base_sha ?? ""}>vs {session.isolation === "worktree" ? (session.base_sha?.slice(0, 7) ?? "base") : "HEAD"}</span>
   {/snippet}
 </Toolbar>
 {#if w.changes.length}
   <div class="list">
     {#each w.changes as c (c.path)}
-      <button class="plain change focus-inset" onclick={() => openTab({ kind: "diff", path: c.path })} title="{changeName(c.status)}: {c.path}">
+      <button class="plain change focus-inset" data-testid="change" data-path={c.path} data-status={c.status} onclick={() => openTab({ kind: "diff", path: c.path })} title="{changeName(c.status)}: {c.path}">
         <PathLabel path={c.path} split />
         <span class="spacer"></span>
         <DiffStat add={c.additions} del={c.deletions} binary={c.binary} />
@@ -41,7 +41,7 @@
     {/each}
   </div>
 {:else}
-  <EmptyState loading={w.loading} icon="check" title={w.loading ? undefined : "No changes"} />
+  <EmptyState data-testid="changes-empty" data-loading={w.loading} loading={w.loading} icon="check" title={w.loading ? undefined : "No changes"} />
 {/if}
 
 <style>

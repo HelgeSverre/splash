@@ -1,11 +1,12 @@
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // A small labelled checkbox: a 14px box that fills with the soft accent,
   // like every other "on" state.
   import Icon from "../Icon.svelte";
-  let { checked = $bindable(false), label }: { checked?: boolean; label: string } = $props();
+  let { checked = $bindable(false), label, ...rest }: { checked?: boolean; label: string } & DataAttrs = $props();
 </script>
 
-<button class="plain check" role="checkbox" aria-checked={checked} onclick={() => (checked = !checked)}>
+<button {...rest} class="plain check" role="checkbox" aria-checked={checked} onclick={() => (checked = !checked)}>
   <span class="box" class:on={checked}>{#if checked}<Icon name="check" size={10} />{/if}</span>{label}
 </button>
 

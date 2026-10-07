@@ -11,6 +11,8 @@ export const elyra = (page: Page) => ({
   modalButton: (label: string): Locator =>
     page.locator(".elyra-modal-overlay .elyra-modal-btn").filter({ hasText: new RegExp(`^${escape(label)}$`) }),
   modalInput: page.locator(".elyra-modal-overlay .elyra-modal-input"),
+  /** The open dialog's message (or its title, when it has no message). */
+  modalMessage: page.locator(".elyra-modal-overlay").locator(".elyra-modal-body, .elyra-modal-title").first(),
   toasts: page.locator(".elyra-toast"),
   palette: page.locator(".elyra-cmdk input"),
   paletteItems: page.locator(".elyra-cmdk-item"),

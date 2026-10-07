@@ -15,19 +15,19 @@
   }
 </script>
 
-<div class="perm card" class:pending={!entry.resolution}>
+<div class="perm card" class:pending={!entry.resolution} data-testid="permission" data-state={!entry.resolution ? "pending" : chosen?.kind.startsWith("reject") || entry.resolution === "cancelled" ? "rejected" : "allowed"}>
   <div class="head">
     <span class="q">{entry.resolution ? "Permission" : "Allow this?"}</span>
     <span class="title">{relText(entry.title, cwd)}</span>
   </div>
   {#if entry.resolution}
-    <div class="answer" class:rejected={chosen?.kind.startsWith("reject") || entry.resolution === "cancelled"}>
+    <div class="answer" data-testid="permission-answer" class:rejected={chosen?.kind.startsWith("reject") || entry.resolution === "cancelled"}>
       → {chosen?.name ?? entry.resolution}
     </div>
   {:else}
     <div class="options">
       {#each entry.options as o, i (o.id)}
-        <button class="btn sm {o.kind.startsWith('allow') ? (i === 0 ? 'primary' : '') : 'danger'}" onclick={() => choose(o.id)}>
+        <button class="btn sm {o.kind.startsWith('allow') ? (i === 0 ? 'primary' : '') : 'danger'}" data-testid="permission-option" data-option-id={o.id} data-option-kind={o.kind} onclick={() => choose(o.id)}>
           <Kbd keys={String(i + 1)} inline /> {o.name}
         </button>
       {/each}

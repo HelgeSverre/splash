@@ -40,7 +40,7 @@
   <SettingsGroup title="Notifications">
     <SettingsRow label="Notify when a background session needs you" labelId="set-notify"
       desc="A permission request, or a turn finishing while you're looking at something else.">
-      <Switch checked={notify} labelledby="set-notify" onchange={(on) => setPref("notify", on ? "on" : "off")} />
+      <Switch data-testid="settings-notify" checked={notify} labelledby="set-notify" onchange={(on) => setPref("notify", on ? "on" : "off")} />
     </SettingsRow>
   </SettingsGroup>
 

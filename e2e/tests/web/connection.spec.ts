@@ -1,23 +1,26 @@
 // The web version: signing in with the server token, losing the connection,
 // and coming back after the server restarts.
 import { expect, test } from "../../fixtures.ts";
+import { Connection, Login } from "../../support/server.ts";
 
 test.describe("sign in", () => {
   test.use({ signIn: false });
 
   test("the token signs in and out; a wrong one is refused", async ({ splash }) => {
-    const { page, backend } = splash;
+    const { app, page, backend } = splash;
+    const login = new Login(page);
     await page.goto(backend.url + "/");
-    await expect(page.getByRole("heading", { name: "Connect to your workspace" })).toBeVisible();
+    await expect(login.token).toBeVisible();
 
-    await page.getByLabel("Server token").fill("0".repeat(64));
-    await page.getByRole("button", { name: "Connect to server" }).click();
-    await expect(page.getByRole("alert")).toContainText("The token did not match");
+    await login.signIn("0".repeat(64));
+    await expect(login.error).toHaveText("The token did not match. Copy it from this server's server.token file.");
 
-    await page.getByLabel("Server token").fill(backend.token());
-    await page.getByRole("button", { name: "Connect to server" }).click();
-    await expect(page.getByRole("status").filter({ hasText: "Connected · files and agents run on this server" })).toBeVisible();
-    await expect(page.locator(".server-connection strong")).toHaveText("E2E box");
+    await login.signIn(backend.token());
+    const connection = new Connection(page);
+    await connection.expectStatus("online");
+    await expect(connection.message).toHaveText("Connected · files and agents run on this server");
+    await expect(connection.name).toHaveText("E2E box");
+    await app.waitReady();
     expect(await page.content()).not.toContain(backend.token());
 
     const [cookie] = await page.context().cookies(backend.url);
@@ -25,8 +28,8 @@ test.describe("sign in", () => {
     expect(cookie.httpOnly).toBe(true);
     expect(cookie.sameSite).toBe("Strict");
 
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page.getByRole("heading", { name: "Connect to your workspace" })).toBeVisible();
+    await connection.signOut.click();
+    await expect(login.token).toBeVisible();
     const res = await page.request.post(backend.url + "/__cmd/list_sessions", { headers: { origin: backend.url } });
     expect(res.status()).toBe(401);
   });
@@ -34,21 +37,22 @@ test.describe("sign in", () => {
 
 test("a lost connection keeps drafts and blocks sending until it returns", async ({ splash }) => {
   const { app, page, backend } = splash;
+  const connection = new Connection(page);
   await app.newSession({ where: "in_place" });
   await app.composer.fill("Keep this draft");
 
   await backend.stop();
-  await expect(page.getByRole("status").filter({ hasText: "Connection lost · reconnecting" })).toBeVisible();
-  await expect(page.getByText("Check that the server and SSH tunnel are running. Your drafts are kept here.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Retry connection" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+  await connection.expectStatus("offline");
+  await expect(connection.message).toHaveText("Connection lost · reconnecting");
+  await expect(connection.error).toHaveText("Check that the server and SSH tunnel are running. Your drafts are kept here.");
+  await expect(app.sendButton).toBeDisabled();
   await expect(app.composer).toHaveValue("Keep this draft");
 
   await backend.start();
-  await page.getByRole("button", { name: "Retry connection" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Connected · files and agents run on this server" })).toBeVisible();
+  await connection.retry.click();
+  await connection.expectStatus("online");
   await expect(app.composer).toHaveValue("Keep this draft");
-  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await expect(app.sendButton).toBeEnabled();
 });
 
 test("after a server restart the workspace is restored and the agent reconnects", async ({ splash }) => {
@@ -59,18 +63,18 @@ test("after a server restart the workspace is restored and the agent reconnects"
   const before = await (await page.request.get(backend.url + "/__server/state")).json();
 
   await splash.restart();
-  await expect(page.getByRole("status").filter({ hasText: "Connected · files and agents run on this server" })).toBeVisible({ timeout: 15_000 });
+  await new Connection(page).expectStatus("online");
   const after = await (await page.request.get(backend.url + "/__server/state")).json();
   expect(after.instance).not.toBe(before.instance);
 
   // The agent died with the server: the transcript is the saved history.
-  await expect(page.getByText("Viewing saved history. Continue to reconnect the agent.")).toBeVisible();
+  await expect(app.resumeNote).toContainText("Viewing saved history. Continue to reconnect the agent.");
   await app.expectStatus("exited");
   await expect(app.entries("agent").last()).toContainText("a - b");
   await expect(app.composer).toHaveValue("Next question");
   expect(world.agents.launches("claude")).toHaveLength(1);
 
-  await page.getByRole("button", { name: "Continue conversation" }).click();
+  await app.continueButton.click();
   await app.expectStatus("idle");
   expect(world.agents.launches("claude")).toHaveLength(2);
   expect(world.agents.requests("claude", "session/resume").at(-1)?.params.sessionId).toBe(splash.db.session(id)!.agent_session_id);

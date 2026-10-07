@@ -24,24 +24,24 @@
 {:else if entry.kind === "thought"}
   {@const shown = open || entry.streaming}
   <div class="thought">
-    <Disclosure class="thought-head" open={shown} ontoggle={() => (open = !open)}>
+    <Disclosure data-testid="thought-toggle" data-open={shown} class="thought-head" open={shown} ontoggle={() => (open = !open)}>
       {#snippet head()}
         <span class="thought-label">{entry.streaming ? "Thinking…" : "Thought"}<Chevron open={shown} /></span>
         {#if !shown}<span class="thought-preview">{entry.text.slice(0, 160).replace(/\s+/g, " ")}</span>{/if}
       {/snippet}
-      <div class="thought-text selectable">{entry.text}</div>
+      <div class="thought-text selectable" data-testid="thought-text">{entry.text}</div>
     </Disclosure>
   </div>
 {:else if entry.kind === "notice"}
   <div class="notice">
-    <Disclosure class="notice-head" open={open} ontoggle={() => (open = !open)} title="Output from the agent outside a turn">
+    <Disclosure data-testid="notice-toggle" class="notice-head" open={open} ontoggle={() => (open = !open)} title="Output from the agent outside a turn">
       {#snippet head()}
         <span class="notice-icon"><Icon name="alert" size={12} /></span>
         <span class="notice-label">Agent notice</span>
         {#if !open}<span class="notice-preview">{entry.text.trim().split("\n")[0]}</span>{/if}
         <Chevron open={open} />
       {/snippet}
-      <pre class="notice-text card-code selectable">{entry.text.trim()}</pre>
+      <pre class="notice-text card-code selectable" data-testid="notice-text">{entry.text.trim()}</pre>
     </Disclosure>
   </div>
 {:else if entry.kind === "tool"}
@@ -51,7 +51,7 @@
 {:else if entry.kind === "permission"}
   <PermissionCard entry={!entry.resolution && session.status !== "awaiting_permission" ? { ...entry, resolution: "cancelled" } : entry} session={session.id} cwd={session.cwd} />
 {:else if entry.kind === "turn_end"}
-  <div class="turn-end">
+  <div class="turn-end" data-testid="turn-end" data-stop-reason={entry.stop_reason}>
     <span>{entry.stop_reason === "end_turn" ? "done" : entry.stop_reason.replace("_", " ")}</span>
     {#if entry.duration_ms > 0}<span>· {duration(entry.duration_ms)}</span>{/if}
   </div>

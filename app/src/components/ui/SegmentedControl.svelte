@@ -1,4 +1,5 @@
 <script lang="ts" generics="T extends string">
+  import type { DataAttrs } from "../../lib/attrs";
   // A small one-of-n switch (Unified / Split). A radio group: one Tab stop,
   // the arrow keys move and select.
   import { radioKeydown } from "../../lib/focus";
@@ -9,7 +10,8 @@
     value,
     onchange,
     label,
-  }: { options: Option[]; value: T; onchange: (value: T) => void; label: string } = $props();
+    ...rest
+  }: { options: Option[]; value: T; onchange: (value: T) => void; label: string } & DataAttrs = $props();
 
   let root: HTMLDivElement | undefined = $state();
   const selected = $derived(Math.max(0, options.findIndex((o) => o.value === value)));
@@ -18,9 +20,9 @@
     radioKeydown(e, i, options.length, (j) => !!options[j].disabled, (j) => onchange(options[j].value), root);
 </script>
 
-<div class="seg" role="radiogroup" aria-label={label} bind:this={root}>
+<div {...rest} class="seg" role="radiogroup" aria-label={label} bind:this={root}>
   {#each options as o, i (o.value)}
-    <button class="plain" role="radio" aria-checked={o.value === value} tabindex={i === selected ? 0 : -1}
+    <button data-testid="segment" data-value={o.value} class="plain" role="radio" aria-checked={o.value === value} tabindex={i === selected ? 0 : -1}
       disabled={o.disabled} title={o.title} onclick={() => onchange(o.value)} onkeydown={(e) => onkeydown(e, i)}>{o.label}</button>
   {/each}
 </div>

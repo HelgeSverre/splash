@@ -1,12 +1,13 @@
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // A secondary bar under a tab bar or at the top of a pane (a diff, a file,
   // the log, the terminal). `side` is the side panel's: its gutter, and the
   // tab-bar height. Content after the `end` snippet is pushed to the right.
   import type { Snippet } from "svelte";
-  let { side = false, children, end }: { side?: boolean; children: Snippet; end?: Snippet } = $props();
+  let { side = false, children, end, ...rest }: { side?: boolean; children: Snippet; end?: Snippet } & DataAttrs = $props();
 </script>
 
-<div class="toolbar" class:side>
+<div {...rest} class="toolbar" class:side>
   {@render children()}
   {#if end}<span class="spacer"></span>{@render end()}{/if}
 </div>

@@ -27,14 +27,14 @@
 </script>
 
 <Splitter axis="y" label="Resize terminal" value={layout.bottom} min={100} max={window.innerHeight - 200} onmove={(d) => (layout.bottom = clamp(layout.bottom - d, 100, window.innerHeight - 200))} onend={saveLayout} />
-<div class="bottom" id={TERMINAL_PANE} style:height="{layout.bottom}px" bind:this={el}>
+<div class="bottom" data-testid="terminal" id={TERMINAL_PANE} style:height="{layout.bottom}px" bind:this={el}>
   <Toolbar>
     <span class="bar-title">Terminal</span>
     <PathLabel path={session.cwd} muted />
     {#snippet end()}
       <span class="bar-actions">
-        <IconButton title="Restart the shell" size="sm" icon="refresh" onclick={restartShell} />
-        <IconButton title={withKey("Hide", "view.terminal")} label="Hide the terminal" size="sm" icon="close" onclick={toggleBottom} />
+        <IconButton data-testid="terminal-restart" title="Restart the shell" size="sm" icon="refresh" onclick={restartShell} />
+        <IconButton data-testid="terminal-hide" title={withKey("Hide", "view.terminal")} label="Hide the terminal" size="sm" icon="close" onclick={toggleBottom} />
       </span>
     {/snippet}
   </Toolbar>

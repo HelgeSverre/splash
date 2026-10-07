@@ -15,7 +15,7 @@
   const tone = $derived(pct > 0.85 ? "err" : pct > 0.65 ? "warn" : status === "running" || status === "starting" ? "busy" : "ok");
 </script>
 
-<span class="ring {tone}" {title}>
+<span class="ring {tone}" data-testid="context-ring" data-tone={tone} {title}>
   <svg width="16" height="16" viewBox="0 0 16 16">
     <circle cx="8" cy="8" r={R} class="track" />
     <circle cx="8" cy="8" r={R} class="arc" stroke-dasharray="{C * pct} {C}" transform="rotate(-90 8 8)" />

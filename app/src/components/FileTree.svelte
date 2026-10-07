@@ -47,7 +47,7 @@
 </script>
 
 {#if (w.tree[""] ?? []).length}
-  <div class="tree" role="tree" aria-label="Files" tabindex="-1" {onkeydown}>
+  <div class="tree" data-testid="file-tree" role="tree" aria-label="Files" tabindex="-1" {onkeydown}>
     {#each w.tree[""] ?? [] as e (e.path)}
       <TreeNode session={session.id} entry={e} depth={0} {changed} {stop} onstop={(path) => (lastRow = path)} />
     {/each}

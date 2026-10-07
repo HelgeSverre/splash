@@ -49,6 +49,7 @@
       prefix: tab.kind === "diff" ? "±" : undefined,
       closable: tab.kind !== "chat",
       title: "path" in tab ? tab.path : undefined,
+      data: { kind: tab.kind, ...("path" in tab ? { path: tab.path } : {}) },
     })),
   );
 </script>
@@ -59,18 +60,18 @@
   <SessionHeader {session} />
   {#key session.id}<SessionHistoryActions {session} />{/key}
 
-  <Tabs items={tabItems} active={String(tabs.active)} {prefix} label="Session tabs"
+  <Tabs data-testid="session-tabs" items={tabItems} active={String(tabs.active)} {prefix} label="Session tabs"
     onselect={(id) => selectTab(Number(id))} onclose={(id) => closeTab(Number(id))}>
     {#snippet actions()}
       {#if !tabs.list.some((x) => x.kind === "log")}
-        <button class="plain log-tab focus-inset" onclick={() => openTab({ kind: "log" })} title="Raw JSON-RPC traffic">Log</button>
+        <button class="plain log-tab focus-inset" data-testid="session-open-log" onclick={() => openTab({ kind: "log" })} title="Raw JSON-RPC traffic">Log</button>
       {/if}
     {/snippet}
   </Tabs>
 
   <div class="body">
     {#each tabs.list as tab, i (tab.kind === "chat" ? "chat" : `${tab.kind}:${"path" in tab ? tab.path : ""}`)}
-      <div class="pane" class:hidden={i !== tabs.active} role="tabpanel" id="{prefix}-panel-{i}" aria-labelledby="{prefix}-tab-{i}">
+      <div class="pane" class:hidden={i !== tabs.active} data-testid="session-pane" data-active={i === tabs.active} role="tabpanel" id="{prefix}-panel-{i}" aria-labelledby="{prefix}-tab-{i}">
         {#if tab.kind === "chat"}
           <div class="chat">
             <div class="transcript">

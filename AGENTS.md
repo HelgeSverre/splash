@@ -17,6 +17,25 @@ and `python3 scripts/test-server-http.py target/debug/splash-server` after build
 the binary. Verify reconnects against an isolated server; do not interrupt the
 user's normal server or agents.
 
+## Test ids
+
+Browser tests find elements by test id, not by visible text or CSS classes, so
+copy and styling can change without breaking them:
+
+- Give every element a test reads or acts on a `data-testid`: kebab-case,
+  `<area>-<thing>` (`composer-send`, `sidebar-session`, `attention-item`),
+  named for what it is, never for its copy. Repeated items share one id and
+  carry their identity in a `data-*` attribute (`data-session-id`, `data-path`).
+- Expose state as `data-*` attributes (`data-status`, `data-kind`) or ARIA
+  state (`aria-selected`, `aria-pressed`, `checked`), never only as a class.
+- Tests assert text only where the text is what's under test (copy, user
+  data, error messages). They may pick a row by data the test itself created,
+  such as a session title it typed.
+- Only `e2e/support/*` names test ids, through `testId()`; specs go through
+  those helpers. `npm run check` in `e2e/` fails on an id the app doesn't have.
+- Elyra's own dialogs, toasts, palette and context menu have no test ids; only
+  `e2e/support/elyra.ts` knows their classes.
+
 ## UI screenshots and README
 
 For every substantial UI change:

@@ -7,17 +7,17 @@
   const ready = $derived(app.agents.filter((a) => a.installed && a.auth !== "logged_out"));
 </script>
 
-<div class="welcome">
+<div class="welcome" data-testid="welcome">
   <SplashMark size={44} />
   <h1>Splash</h1>
   <p>Run coding agents side by side. Each gets its own session, in place or in a worktree.</p>
   <div class="actions">
-    <button class="btn primary" onclick={() => (app.newSession = {})}>New session</button>
-    <button class="btn" onclick={() => openSettings("agents")}>Agents · {ready.length} ready</button>
+    <button class="btn primary" data-testid="welcome-new-session" onclick={() => (app.newSession = {})}>New session</button>
+    <button class="btn" data-testid="welcome-agents" data-ready={ready.length} onclick={() => openSettings("agents")}>Agents · {ready.length} ready</button>
   </div>
   <dl class="keys">
     {#each [["session.new", "New session"], ["session.go1", "Go to session 1, 2, …"], ["app.palette", "Command palette"], ["session.stop", "Stop the agent"], ["view.terminal", "Terminal"], ["view.right", "Changes, files & details"], ["app.settings", "Settings"]] as [id, label] (id)}
-      {#if shortcut(id)}<dt><Kbd keys={shortcut(id)} /></dt><dd>{label}</dd>{/if}
+      {#if shortcut(id)}<dt data-testid="welcome-shortcut" data-action={id}><Kbd keys={shortcut(id)} /></dt><dd>{label}</dd>{/if}
     {/each}
   </dl>
 </div>

@@ -63,7 +63,7 @@
   const onfocus = () => onstop(entry.path);
 </script>
 
-<button class="plain node focus-inset" style:padding-left="calc(var(--gutter-side) + {depth * 12}px)" onclick={toggle} {onkeydown} {onfocus} title={entry.path}
+<button class="plain node focus-inset" data-testid="tree-node" data-path={entry.path} data-dir={entry.is_dir || undefined} style:padding-left="calc(var(--gutter-side) + {depth * 12}px)" onclick={toggle} {onkeydown} {onfocus} title={entry.path}
   role="treeitem" aria-level={depth + 1} aria-expanded={entry.is_dir ? open : undefined} aria-selected="false" tabindex={entry.path === stop ? 0 : -1}>
   <span class="twist">{#if entry.is_dir}<Chevron {open} />{/if}</span>
   <span class="name" class:dir={entry.is_dir} class:dirty class:d={mark === "D"}>{entry.name}</span>

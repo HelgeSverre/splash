@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // The note an empty or loading pane shows: centred on both axes, with a dim
   // icon (or a spinner, or a `graphic` of your own), one line of text and an
   // optional detail. `inline` is the variant for an empty list inside a group
@@ -16,6 +17,7 @@
     error = false,
     inline = false,
     children,
+    ...rest
   }: {
     icon?: string;
     /** Drawn in place of the icon, dimmed the same way. */
@@ -29,10 +31,10 @@
     error?: boolean;
     inline?: boolean;
     children?: Snippet;
-  } = $props();
+  } & DataAttrs = $props();
 </script>
 
-<div class="empty" class:inline role={loading ? "status" : undefined} aria-label={loading && !title ? "Loading" : undefined}>
+<div {...rest} class="empty" class:inline role={loading ? "status" : undefined} aria-label={loading && !title ? "Loading" : undefined}>
   {#if graphic}<span class="icon graphic">{@render graphic()}</span>{/if}
   {#if loading}<span class="spinner"></span>{:else if icon && !graphic}<span class="icon"><Icon name={icon} size={inline ? 16 : 24} /></span>{/if}
   {#if title}<p class="title" class:error>{title}</p>{/if}

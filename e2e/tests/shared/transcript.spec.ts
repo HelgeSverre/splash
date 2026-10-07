@@ -1,6 +1,7 @@
 // The transcript: streamed messages and tools, thinking, permissions, stopping
 // a turn, slash commands, usage, and an agent that dies mid-turn.
 import { expect, test } from "../../fixtures.ts";
+import { Attention } from "../../support/views.ts";
 
 test("a turn streams text and tools, then retitles the session from the prompt", async ({ splash }) => {
   const { app, world } = splash;
@@ -8,8 +9,9 @@ test("a turn streams text and tools, then retitles the session from the prompt",
   await app.newSession({ where: "in_place" });
   await app.send("What does subtract do?");
   await app.expectStatus("running");
-  await expect(app.entries("tool").getByText("Read calc.py")).toBeVisible();
-  await expect(app.entries("turn_end")).toContainText(/done · /);
+  await expect(app.tools("read")).toHaveAttribute("data-status", "completed");
+  await expect(app.turnEnds()).toHaveAttribute("data-stop-reason", "end_turn");
+  await expect(app.turnEnds()).toContainText(/ · \d/);
   await app.expectStatus("idle");
   await expect(app.title).toHaveText("What does subtract do?");
   await expect(app.sessionRow("What does subtract do?")).toBeVisible();
@@ -27,7 +29,7 @@ test("a refusal ends the turn as such", async ({ splash }) => {
   const { app } = splash;
   await app.newSession({ agent: "glue", where: "in_place" });
   await app.prompt("Delete everything");
-  await expect(app.entries("turn_end")).toContainText("refusal");
+  await expect(app.turnEnds()).toHaveAttribute("data-stop-reason", "refusal");
 });
 
 test("thinking folds into a Thought once it finishes", async ({ splash }) => {
@@ -37,28 +39,28 @@ test("thinking folds into a Thought once it finishes", async ({ splash }) => {
   await app.send("Find calc.py");
   // Two permission requests on the way.
   await app.allowPermissions(2);
-  await expect(app.entries("turn_end")).toBeVisible();
-  const thought = app.entries("thought").first();
-  await expect(thought).toContainText("Thought");
-  await expect(thought.locator(".thought-text")).toHaveCount(0);
-  await thought.getByRole("button").first().click();
-  await expect(thought.locator(".thought-text")).toBeVisible();
+  await expect(app.turnEnds()).toBeVisible();
+  const thought = app.thought(app.entries("thought").first());
+  await expect(thought.toggle).toHaveAttribute("data-open", "false");
+  await expect(thought.text).toHaveCount(0);
+  await thought.toggle.click();
+  await expect(thought.text).toBeVisible();
 });
 
 test.describe("permissions", () => {
-  test.beforeEach(({ splash }) => splash.world.agents.fixture("claude", "pool/read.jsonl"));
+  test.beforeEach(({ world }) => world.agents.fixture("claude", "pool/read.jsonl"));
 
   test("are answered with number keys or a click, and wait in Needs attention", async ({ splash }) => {
     const { app, page, world } = splash;
     await app.newSession({ where: "in_place" });
     await app.send("Find calc.py");
 
-    const pending = app.entries("permission").locator(".perm.pending");
+    const pending = app.permissions("pending");
     await expect(pending).toHaveCount(1);
     await app.expectStatus("awaiting_permission");
     await expect(app.status).toHaveText("needs you");
-    await expect(app.transcript.getByText("Waiting for you: press 1 to 3 or click an option.")).toBeVisible();
-    await expect(app.sidebar.getByRole("button", { name: /^Needs attention/ })).toContainText("1");
+    await expect(app.transcriptHint).toHaveText("Waiting for you: press 1 to 3 or click an option.");
+    await expect(app.attentionCount).toHaveText("1");
 
     // Typing a draft keeps the number keys for the draft.
     await app.composer.fill("draft");
@@ -69,12 +71,12 @@ test.describe("permissions", () => {
 
     await app.transcript.focus();
     await page.keyboard.press("1");
-    await expect(app.entries("permission").first().locator(".answer")).toHaveText("→ Allow once");
+    await expect(app.permissionAnswer(app.permissions().first())).toHaveText("→ Allow once");
 
     await expect(pending).toHaveCount(1);
-    await pending.getByRole("button", { name: /Always allow/ }).click();
-    await expect(app.entries("permission").nth(1).locator(".answer")).toContainText("→ Always allow");
-    await expect(app.entries("turn_end")).toBeVisible();
+    await app.permissionOption(pending, "allow_always").click();
+    await expect(app.permissions("allowed")).toHaveCount(2);
+    await expect(app.turnEnds()).toBeVisible();
 
     const answers = world.agents.audit("claude").filter((m) => m.result?.outcome);
     expect(answers.map((m) => m.result.outcome)).toEqual([
@@ -87,25 +89,27 @@ test.describe("permissions", () => {
     const { app } = splash;
     await app.newSession({ where: "in_place" });
     await app.send("Find calc.py");
-    await app.entries("permission").locator(".perm.pending").getByRole("button", { name: /Reject/ }).click();
-    await expect(app.entries("permission").first().locator(".answer.rejected")).toHaveText("→ Reject");
+    await app.permissionOption(app.permissions("pending"), "reject_once").click();
+    await expect(app.permissions("rejected")).toHaveCount(1);
+    await expect(app.permissionAnswer(app.permissions("rejected"))).toHaveText("→ Reject");
   });
 
   test("stopping the turn cancels a pending request", async ({ splash }) => {
-    const { app, page, world } = splash;
+    const { app, world } = splash;
     await app.newSession({ where: "in_place" });
     await app.send("Find calc.py");
-    await expect(app.entries("permission").locator(".perm.pending")).toHaveCount(1);
+    await expect(app.permissions("pending")).toHaveCount(1);
     await app.stopButton.click();
-    await expect(app.entries("turn_end")).toContainText("cancelled");
-    await expect(app.entries("permission").first().locator(".answer.rejected")).toHaveText("→ cancelled");
+    await expect(app.turnEnds()).toHaveAttribute("data-stop-reason", "cancelled");
+    await expect(app.permissions("rejected")).toHaveCount(1);
+    await expect(app.permissionAnswer(app.permissions("rejected"))).toHaveText("→ cancelled");
     await app.expectStatus("idle");
     expect(world.agents.requests("claude", "session/cancel")).toHaveLength(1);
   });
 });
 
 test("Stop ends a running turn", async ({ splash }) => {
-  const { app, page, world } = splash;
+  const { app, world } = splash;
   world.agents.fixture("claude", "claude/cancel.jsonl");
   world.agents.speed("claude", 1);
   await app.newSession({ where: "in_place" });
@@ -113,70 +117,74 @@ test("Stop ends a running turn", async ({ splash }) => {
   await app.expectStatus("running");
   await expect(app.composer).toHaveAttribute("placeholder", "The agent is working…");
   await app.stopButton.click();
-  await expect(app.entries("turn_end")).toContainText("cancelled");
+  await expect(app.turnEnds()).toHaveAttribute("data-stop-reason", "cancelled");
   await app.expectStatus("idle");
   await expect(app.sendButton).toBeVisible();
   expect(world.agents.requests("claude", "session/cancel")).toHaveLength(1);
 });
 
 test("slash commands complete from the agent's list", async ({ splash }) => {
-  const { app, page } = splash;
+  const { app } = splash;
   await app.newSession({ where: "in_place" });
   // Claude lists its commands once the first turn starts.
   await app.prompt("What does subtract do?");
   await app.composer.fill("/");
-  const menu = page.locator(".slash.popover");
-  await expect(menu.getByRole("button")).toHaveCount(8);
+  await expect(app.slashCommands).toHaveCount(8);
   await app.composer.fill("/co");
-  await expect(menu).toContainText("/compact");
-  await expect(menu).toContainText("/context");
+  // Names that start with what's typed come first.
+  await expect.poll(() => app.slashCommands.evaluateAll((items) => items.map((i) => i.getAttribute("data-name")))).toEqual([
+    "compact",
+    "context",
+    "autocompact",
+  ]);
   await app.composer.press("ArrowDown");
+  await expect(app.slashCommands.nth(1)).toHaveAttribute("data-active", "true");
   await app.composer.press("Tab");
   await expect(app.composer).toHaveValue("/context ");
-  await expect(menu).toHaveCount(0);
+  await expect(app.slashMenu).toHaveCount(0);
 });
 
 test("an agent without commands shows no slash menu", async ({ splash }) => {
-  const { app, page } = splash;
+  const { app } = splash;
   await app.newSession({ agent: "glue", where: "in_place" });
   await app.composer.fill("/");
-  await expect(page.locator(".slash.popover")).toHaveCount(0);
+  await expect(app.slashMenu).toHaveCount(0);
 });
 
 test("context use and cost are shown and kept across a restart", async ({ splash }) => {
-  const { app, page } = splash;
+  const { app } = splash;
   await app.newSession({ where: "in_place" });
-  await expect(page.locator(".composer .ring")).toHaveAttribute("title", "Context usage appears after the first turn");
+  await expect(app.contextRing).toHaveAttribute("title", "Context usage appears after the first turn");
   await app.prompt("What does subtract do?");
-  await expect(page.locator(".cost")).toHaveText("$0.14");
-  await expect(page.locator(".composer .ring")).toHaveAttribute("title", "Context 26k of 1.0M tokens (3%) · $0.14");
-  await app.sideTab("Details").click();
-  await expect(app.detail("Turns")).toHaveText("1");
-  await expect(app.detail("Cost")).toHaveText("$0.1393");
+  await expect(app.cost).toHaveText("$0.14");
+  await expect(app.contextRing).toHaveAttribute("title", "Context 26k of 1.0M tokens (3%) · $0.14");
+  await app.sideTab("details").click();
+  await expect(app.detail("turns")).toHaveText("1");
+  await expect(app.detail("cost")).toHaveText("$0.1393");
 
   await splash.restart();
-  await expect(page.locator(".cost")).toHaveText("$0.14");
+  await expect(app.cost).toHaveText("$0.14");
 });
 
 test("an agent that exits mid-turn leaves an error and a recovery item", async ({ splash }) => {
   const { app, page, world } = splash;
   world.agents.flags("claude", "--exit-mid-turn", "3");
-  await app.newSession({ where: "in_place" });
+  const id = await app.newSession({ where: "in_place" });
   await app.send("What does subtract do?");
   await expect(app.entries("error").last()).toHaveText("Claude Code exited: exit status: 1 fake-acp: lost connection to the model provider");
-  await expect(app.entries("turn_end")).toContainText("error");
+  await expect(app.turnEnds()).toHaveAttribute("data-stop-reason", "error");
   await app.expectStatus("exited");
-  await expect(page.getByText("Viewing saved history. Continue to reconnect the agent.")).toBeVisible();
+  await expect(app.resumeNote).toContainText("Viewing saved history. Continue to reconnect the agent.");
 
-  await app.openNav("Needs attention");
-  const recovery = page.getByRole("region", { name: "Needs recovery" });
-  await expect(recovery).toContainText("What does subtract do?");
-  await expect(recovery.getByRole("button", { name: "Reconnect agent" })).toBeVisible();
+  await app.openNav("attention");
+  const attention = new Attention(page);
+  const item = attention.item(id, "failed");
+  await expect(attention.reconnect(item)).toBeVisible();
 
   world.agents.flags("claude");
-  await recovery.getByRole("button", { name: "Reconnect agent" }).click();
+  await attention.reconnect(item).click();
   await app.expectStatus("idle");
-  await expect(page.getByRole("region", { name: "Needs recovery" })).toHaveCount(0);
+  await expect(attention.group("failed")).toHaveCount(0);
 });
 
 test("an agent's notice before the first turn is shown folded", async ({ splash }) => {
@@ -184,34 +192,33 @@ test("an agent's notice before the first turn is shown folded", async ({ splash 
   // Pool reports a broken MCP server while creating the session.
   splash.world.agents.fixture("claude", "pool/read.jsonl");
   await app.newSession({ where: "in_place" });
-  const notice = app.entries("notice");
-  await expect(notice).toContainText("Agent notice");
-  await expect(notice).toContainText("MCP server failed to initialize:");
-  await expect(notice.locator(".notice-text")).toHaveCount(0);
-  await notice.getByRole("button").click();
-  await expect(notice.locator(".notice-text")).toContainText("docs (configured in ~/.config/poolside/settings.yaml)");
-  await expect(app.transcript.getByText("What should we work on?")).toBeVisible();
+  const notice = app.notice(app.entries("notice"));
+  await expect(notice.toggle).toContainText("MCP server failed to initialize:");
+  await expect(notice.text).toHaveCount(0);
+  await notice.toggle.click();
+  await expect(notice.text).toContainText("docs (configured in ~/.config/poolside/settings.yaml)");
+  await expect(app.transcriptEmpty).toBeVisible();
 });
 
 test.describe("Amp", () => {
   test.use({ agents: ["amp"] });
 
   test("runs through its adapter, with its modes and permissions as pickers", async ({ splash }) => {
-    const { app, page, world } = splash;
+    const { app, world } = splash;
     await app.newSession({ agent: "amp", where: "in_place" });
     expect(world.agents.launches("amp").map((l) => l.argv)).toEqual([["-y", "amp-acp@0.9.0"]]);
-    await expect(app.picker("Amp Mode")).toHaveText("Medium");
-    await expect(app.picker("Permissions")).toHaveText("Default");
+    await expect(app.picker("amp-mode")).toHaveText("Medium");
+    await expect(app.picker("permission")).toHaveText("Default");
 
     // Amp runs tools without asking unless permissions are configured.
     await app.prompt("What bug does calc.py have?");
-    await expect(app.entries("tool")).toContainText("cat -n calc.py");
-    await expect(app.entries("permission")).toHaveCount(0);
+    await expect(app.tools()).toContainText("cat -n calc.py");
+    await expect(app.permissions()).toHaveCount(0);
     await expect(app.entries("agent").last()).toContainText("subtracts 1 from the true mean");
 
-    await app.picker("Amp Mode").click();
-    await page.getByRole("listbox", { name: "Amp Mode" }).getByRole("option", { name: /^Low/ }).click();
-    await expect(app.picker("Amp Mode")).toHaveText("Low");
+    await app.picker("amp-mode").click();
+    await app.pickerChoice("low").click();
+    await expect(app.picker("amp-mode")).toHaveText("Low");
     await expect.poll(() => world.agents.requests("amp", "session/set_config_option").map((r) => r.params)).toEqual([
       expect.objectContaining({ configId: "amp-mode", value: "low" }),
     ]);

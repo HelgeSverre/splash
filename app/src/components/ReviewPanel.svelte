@@ -50,31 +50,31 @@
   }
 </script>
 
-<div class="review">
+<div class="review" data-testid="review">
   <section>
     <h2>Review work</h2>
     <p class="meta">{git?.branch ?? session.branch ?? "Current folder"}{session.base_sha ? ` · base ${session.base_sha.slice(0, 8)}` : ""}</p>
     <div class="actions">
-      <button class="btn sm" disabled={!changes.length} onclick={() => { for (const c of [...changes].reverse()) openTab({ kind: "diff", path: c.path }); }}>Review all changes</button>
-      {#if git?.pr}<button class="btn sm" onclick={() => git?.pr && openExternal(git.pr.url)}>Open PR #{git.pr.number}</button>{/if}
-      {#if session.attention?.kind === "review"}<button class="btn sm" onclick={reviewed}>Mark reviewed</button>{/if}
+      <button class="btn sm" data-testid="review-all-changes" disabled={!changes.length} onclick={() => { for (const c of [...changes].reverse()) openTab({ kind: "diff", path: c.path }); }}>Review all changes</button>
+      {#if git?.pr}<button class="btn sm" data-testid="review-open-pr" onclick={() => git?.pr && openExternal(git.pr.url)}>Open PR #{git.pr.number}</button>{/if}
+      {#if session.attention?.kind === "review"}<button class="btn sm" data-testid="review-mark-reviewed" onclick={reviewed}>Mark reviewed</button>{/if}
     </div>
   </section>
   <div class="changes"><ChangesList {session} /></div>
-  <section>
+  <section data-testid="review-latest">
     <h2>Latest response</h2>
     {#if answer?.kind === "agent"}<Markdown text={answer.text} />{:else}<p class="meta">No agent response yet.</p>{/if}
   </section>
   {#if failures.length}
-    <section><h2>Errors and failed tools · {failures.length}</h2>{#each failures as e}<p class="failure">{e.kind === "error" ? e.text : e.kind === "tool" ? e.title : ""}</p>{/each}</section>
+    <section data-testid="review-failures" data-count={failures.length}><h2>Errors and failed tools · {failures.length}</h2>{#each failures as e}<p class="failure" data-testid="review-failure">{e.kind === "error" ? e.text : e.kind === "tool" ? e.title : ""}</p>{/each}</section>
   {/if}
   <section>
     <form onsubmit={(e) => { e.preventDefault(); send(`Review feedback for this conversation:\n\n${feedback.trim()}`); }}>
       <label for="review-feedback">Feedback for the agent</label>
-      <textarea id="review-feedback" class="field" bind:value={feedback} required rows="4" placeholder="Describe what to change, including file names or line numbers." disabled={session.archived || session.source?.deleted}></textarea>
-      <div class="actions"><button class="btn primary sm" type="submit" disabled={!available || busy}>{busy ? "Connecting…" : "Send feedback"}</button><button class="btn sm" type="button" disabled={!available || busy} onclick={() => send("Review the changes you made in this conversation. Check for correctness, regressions, and missing validation. Report concrete findings with file locations, and explain what you verified before making further changes.")}>Ask agent to review</button></div>
+      <textarea id="review-feedback" data-testid="review-feedback" class="field" bind:value={feedback} required rows="4" placeholder="Describe what to change, including file names or line numbers." disabled={session.archived || session.source?.deleted}></textarea>
+      <div class="actions"><button class="btn primary sm" data-testid="review-send-feedback" type="submit" disabled={!available || busy}>{busy ? "Connecting…" : "Send feedback"}</button><button class="btn sm" data-testid="review-ask" type="button" disabled={!available || busy} onclick={() => send("Review the changes you made in this conversation. Check for correctness, regressions, and missing validation. Report concrete findings with file locations, and explain what you verified before making further changes.")}>Ask agent to review</button></div>
     </form>
-    {#if error}<p class="err failure" role="alert">{error}</p>{/if}
+    {#if error}<p class="err failure" role="alert" data-testid="review-error">{error}</p>{/if}
   </section>
 </div>
 

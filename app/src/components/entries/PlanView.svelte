@@ -5,10 +5,10 @@
   const done = $derived(items.filter((i) => i.status === "completed").length);
 </script>
 
-<div class="plan card">
+<div class="plan card" data-testid="plan" data-done={done} data-total={items.length}>
   <div class="head">Plan <span class="count t-count">{done}/{items.length}</span></div>
   {#each items as item, i (i)}
-    <div class="item {item.status}">
+    <div class="item {item.status}" data-testid="plan-item" data-status={item.status}>
       <span class="box"><StepIcon status={item.status} /></span>
       <span class="text">{item.content}</span>
     </div>

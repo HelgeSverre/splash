@@ -87,34 +87,34 @@
 
 <svelte:window onkeydown={onKey} />
 
-<Modal label="New session" width="620px" top onclose={close}>
+<Modal data-testid="new-session" label="New session" width="620px" top onclose={close}>
   <ModalHeader title="New session" onclose={close} />
   <div class="dialog" bind:this={dialogEl}>
     {#if context}<p class="desc">{context.repository} #{context.number}: {context.title}</p><p class="desc">The description and GitHub link will be ready in the composer for you to review and send.</p>{/if}
     <div class="label t-group first" id="ns-project">Project</div>
-    <ChoiceGroup items={app.projects} value={projectId} key={(p) => p.id} title={(p) => p.path} labelledby="ns-project"
+    <ChoiceGroup data-testid="new-session-project" items={app.projects} value={projectId} key={(p) => p.id} title={(p) => p.path} labelledby="ns-project"
       variant="stack" onchange={(p) => (projectId = p.id)}>
       {#snippet item(p)}<span class="name">{p.name}</span><PathLabel path={p.path} muted start />{/snippet}
     </ChoiceGroup>
-    <span class="add"><AddButton label="Add folder…" onclick={addFolder} /></span>
+    <span class="add"><AddButton data-testid="new-session-add-folder" label="Add folder…" onclick={addFolder} /></span>
 
     <div class="label t-group" id="ns-agent">Agent</div>
-    <ChoiceGroup items={app.agents} value={agentId} key={(a) => a.id} disabled={agentOff} labelledby="ns-agent"
+    <ChoiceGroup data-testid="new-session-agent" items={app.agents} value={agentId} key={(a) => a.id} disabled={agentOff} labelledby="ns-agent"
       layout="grid" onchange={(a) => (agentId = a.id)}>
       {#snippet item(a)}
         {@const st = readiness(a)}
         <AgentIcon id={a.id} size={16} />
         <span class="name">{a.name}</span>
         {#if a.experimental}<Tag tone="warn">experimental</Tag>{/if}
-        <span class="astate {st.tone}">{st.label}</span>
+        <span class="astate {st.tone}" data-testid="new-session-agent-state" data-tone={st.tone}>{st.label}</span>
       {/snippet}
       {#snippet empty()}<EmptyState inline loading title="Detecting agents…" />{/snippet}
     </ChoiceGroup>
 
-    {#if context?.kind === "pull_request"}<label class="desc"><input type="checkbox" bind:checked={prHead} disabled={busy} /> Start a new worktree from PR #{context.number} ({context.branch})</label>{/if}
+    {#if context?.kind === "pull_request"}<label class="desc"><input type="checkbox" data-testid="new-session-pr-head" bind:checked={prHead} disabled={busy} /> Start a new worktree from PR #{context.number} ({context.branch})</label>{/if}
     {#if !prHead}
     <div class="label t-group" id="ns-where">Where it works</div>
-    <ChoiceGroup items={isolations} value={effectiveIsolation} key={(x) => x.id} disabled={(x) => x.id === "worktree" && !canWorktree}
+    <ChoiceGroup data-testid="new-session-where" items={isolations} value={effectiveIsolation} key={(x) => x.id} disabled={(x) => x.id === "worktree" && !canWorktree}
       labelledby="ns-where" layout="grid" variant="stack" onchange={(x) => (isolation = x.id)}>
       {#snippet item(x)}<span class="name">{x.title}</span><span class="desc">{isolationDesc(x.id)}</span>{/snippet}
     </ChoiceGroup>
@@ -122,13 +122,13 @@
     {/if}
     {#if !prHead}
       <label class="label t-group" for="ns-extra-folders">Additional workspace folders</label>
-      <textarea id="ns-extra-folders" class="field extra-folders" rows="2" bind:value={additionalFolders} placeholder="Optional absolute paths, one per line" disabled={busy}></textarea>
+      <textarea id="ns-extra-folders" data-testid="new-session-folders" class="field extra-folders" rows="2" bind:value={additionalFolders} placeholder="Optional absolute paths, one per line" disabled={busy}></textarea>
       <p class="desc">These folders are restored when you reconnect. The selected agent must support additional workspace folders.</p>
     {/if}
     <div class="actions">
       <span class="hint">{agent?.transport === "adapter" ? "First start may download the ACP adapter via npx." : ""}</span>
-      <button class="btn ghost" onclick={close}>Cancel</button>
-      <button class="btn primary" disabled={!canStart} onclick={create}>
+      <button class="btn ghost" data-testid="new-session-cancel" onclick={close}>Cancel</button>
+      <button class="btn primary" data-testid="new-session-start" disabled={!canStart} onclick={create}>
         {#if busy}<span class="spinner"></span>{/if}
         Start session <Kbd keys="⏎" inline />
       </button>

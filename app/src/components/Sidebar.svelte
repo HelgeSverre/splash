@@ -82,22 +82,22 @@
   };
 </script>
 
-<aside>
+<aside data-testid="sidebar">
   <div class="brand">
     <SplashMark size={18} />
     <span>splash</span>
     <span class="spacer"></span>
-    <IconButton title={withKey("Settings", "app.settings")} label="Settings" icon="gear" onclick={() => openSettings()} />
+    <IconButton data-testid="sidebar-settings" title={withKey("Settings", "app.settings")} label="Settings" icon="gear" onclick={() => openSettings()} />
   </div>
 
-  <div class="global-nav"><NavItem label="Sessions" active={app.view.kind === "library"} onclick={openLibrary}>{#snippet lead()}<Icon name="search" size={14} />{/snippet}</NavItem>
-    <NavItem label="Needs attention" active={app.view.kind === "attention"} onclick={openAttention}>{#snippet lead()}<Icon name="alert" size={14} />{/snippet}{#snippet trail()}<span class="t-count">{app.sessions.filter((s) => !s.archived && s.attention).length || ""}</span>{/snippet}</NavItem><NavItem label="GitHub" active={app.view.kind === "github"} onclick={openGithub}>
+  <div class="global-nav"><NavItem data-testid="sidebar-library" label="Sessions" active={app.view.kind === "library"} onclick={openLibrary}>{#snippet lead()}<Icon name="search" size={14} />{/snippet}</NavItem>
+    <NavItem data-testid="sidebar-attention" label="Needs attention" active={app.view.kind === "attention"} onclick={openAttention}>{#snippet lead()}<Icon name="alert" size={14} />{/snippet}{#snippet trail()}<span class="t-count" data-testid="sidebar-attention-count">{app.sessions.filter((s) => !s.archived && s.attention).length || ""}</span>{/snippet}</NavItem><NavItem data-testid="sidebar-github" label="GitHub" active={app.view.kind === "github"} onclick={openGithub}>
     {#snippet lead()}<Icon name="github" size={14} />{/snippet}
-  </NavItem><NavItem label="Actions" active={app.view.kind === "actions"} onclick={openActions}>{#snippet lead()}<Icon name="activity" size={14}/>{/snippet}</NavItem></div>
+  </NavItem><NavItem data-testid="sidebar-actions" label="Actions" active={app.view.kind === "actions"} onclick={openActions}>{#snippet lead()}<Icon name="activity" size={14}/>{/snippet}</NavItem></div>
 
   <div class="section t-section">
     <span>Projects</span>
-    <IconButton title="Add a project folder" size="sm" icon="plus" onclick={addFolder} />
+    <IconButton data-testid="sidebar-add-project" title="Add a project folder" size="sm" icon="plus" onclick={addFolder} />
   </div>
 
   <nav>
@@ -105,8 +105,9 @@
       {@const sessions = sessionsFor(p.id)}
       {@const archived = sessionsFor(p.id, true)}
       <div class="project">
-        <div class="project-row" oncontextmenu={(e) => projectMenu(e, p.id, p.name)} role="presentation">
+        <div class="project-row" data-testid="sidebar-project" data-project-id={p.id} data-path={p.path} oncontextmenu={(e) => projectMenu(e, p.id, p.name)} role="presentation">
           <button
+            data-testid="sidebar-project-toggle"
             class="plain project-toggle focus-inset"
             aria-expanded={!app.collapsed[p.id]}
             onclick={() => (app.collapsed[p.id] = !app.collapsed[p.id])}
@@ -115,12 +116,13 @@
             <Chevron open={!app.collapsed[p.id]} />
             <span class="name truncate">{p.name}</span>
           </button>
-          <IconButton class="add reveal-on-hover" title="New session in {p.name}" size="sm" icon="plus"
+          <IconButton data-testid="sidebar-project-new-session" class="add reveal-on-hover" title="New session in {p.name}" size="sm" icon="plus"
             onclick={() => (app.newSession = { projectId: p.id })} />
         </div>
         {#if !app.collapsed[p.id]}
           {#each sessions as s (s.id)}
-            <NavItem label={s.title} indent={24} active={s.id === currentId()} onclick={() => openSession(s.id)}
+            <NavItem data-testid="sidebar-session" data-session-id={s.id} data-status={s.status} data-unread={!!app.unread[s.id] && s.status === "idle"}
+              label={s.title} indent={24} active={s.id === currentId()} onclick={() => openSession(s.id)}
               oncontextmenu={(e) => sessionMenu(e, s.id, s.title, false)}
               title={`${s.title}\n${statusLabel(s.status)}${s.branch ? ` · ${s.branch}` : ""}`}>
               {#snippet lead()}
@@ -128,22 +130,22 @@
                 <AgentIcon id={s.agent_id} size={12} />
               {/snippet}
               {#snippet trail()}
-                {#if s.status === "awaiting_permission"}<span class="needs" title="Needs you"><Icon name="alert" size={12} /></span>{/if}
+                {#if s.status === "awaiting_permission"}<span class="needs" data-testid="sidebar-session-needs" title="Needs you"><Icon name="alert" size={12} /></span>{/if}
                 {#if s.isolation === "worktree"}<span class="wt" title="worktree"><Icon name="branch" size={12} /></span>{/if}
-                <span class="key">{hotkey(s.id)}</span>
+                <span class="key" data-testid="sidebar-session-key">{hotkey(s.id)}</span>
               {/snippet}
             </NavItem>
           {:else}
-            <NavItem label="No sessions yet" indent={24} dense muted onclick={() => (app.newSession = { projectId: p.id })} />
+            <NavItem data-testid="sidebar-no-sessions" label="No sessions yet" indent={24} dense muted onclick={() => (app.newSession = { projectId: p.id })} />
           {/each}
           {#if archived.length}
-            <NavItem label="Archived" indent={24} dense muted expanded={!!showArchived[p.id]} onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
+            <NavItem data-testid="sidebar-archived" label="Archived" indent={24} dense muted expanded={!!showArchived[p.id]} onclick={() => (showArchived[p.id] = !showArchived[p.id])}>
               {#snippet lead()}<Chevron open={!!showArchived[p.id]} />{/snippet}
-              {#snippet trail()}<span class="t-count">{archived.length}</span>{/snippet}
+              {#snippet trail()}<span class="t-count" data-testid="sidebar-archived-count">{archived.length}</span>{/snippet}
             </NavItem>
             {#if showArchived[p.id]}
               {#each archived as s (s.id)}
-                <NavItem label={s.title} indent={24} muted active={s.id === currentId()} onclick={() => openSession(s.id)}
+                <NavItem data-testid="sidebar-session" data-session-id={s.id} data-status={s.status} data-archived label={s.title} indent={24} muted active={s.id === currentId()} onclick={() => openSession(s.id)}
                   oncontextmenu={(e) => sessionMenu(e, s.id, s.title, true)}>
                   {#snippet lead()}<AgentIcon id={s.agent_id} size={12} />{/snippet}
                 </NavItem>
@@ -153,12 +155,12 @@
         {/if}
       </div>
     {:else}
-      <div class="empty-projects"><AddButton label="Add a project folder" onclick={addFolder} /></div>
+      <div class="empty-projects"><AddButton data-testid="sidebar-add-project-empty" label="Add a project folder" onclick={addFolder} /></div>
     {/each}
   </nav>
 
   <div class="footer">
-    <NavItem label="New session" onclick={() => (app.newSession = {})}>
+    <NavItem data-testid="sidebar-new-session" label="New session" onclick={() => (app.newSession = {})}>
       {#snippet lead()}<Icon name="plus" size={12} />{/snippet}
       {#snippet trail()}{#if shortcut("session.new")}<Kbd keys={shortcut("session.new")} />{/if}{/snippet}
     </NavItem>

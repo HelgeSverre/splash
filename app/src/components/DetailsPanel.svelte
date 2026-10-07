@@ -39,10 +39,11 @@
 </script>
 
 <!-- Values are Inter by default; `mono` is for ids, shas, paths, commands and numbers. -->
-{#snippet row(label: string, value: string | null | undefined, display?: string, mono = false)}
+<!-- `key` names the row for the tests (data-key), whatever its label says. -->
+{#snippet row(key: string, label: string, value: string | null | undefined, display?: string, mono = false)}
   {#if value}
     <span class="kv-k">{label}</span>
-    <button class="plain v" class:mono class:copied={copied === value} onclick={() => copy(value)} title="Copy">{copied === value ? "copied" : (display ?? value)}</button>
+    <button class="plain v" data-testid="detail" data-key={key} class:mono class:copied={copied === value} onclick={() => copy(value)} title="Copy">{copied === value ? "copied" : (display ?? value)}</button>
   {/if}
 {/snippet}
 
@@ -50,22 +51,22 @@
   <section>
     <h3 class="t-section">Session</h3>
     <div class="kv">
-    {@render row("Title", session.title)}
-    {@render row("Status", statusLabel(session.status))}
-    {@render row("Project", project?.name)}
-    {@render row("Isolation", session.isolation === "worktree" ? "worktree" : "in place")}
-    {@render row("Branch", session.branch, undefined, true)}
-    {@render row("Base", session.base_sha, session.base_sha?.slice(0, 10), true)}
-    {@render row("Folder", session.cwd, home(session.cwd), true)}
-    {#each (session.additional_directories ?? []) as path, i}{@render row(`Extra folder ${i + 1}`, path, home(path), true)}{/each}
-    {@render row("Added to Splash", when(session.created_at))}
-    {@render row("Agent activity", session.source?.updated_at)}
-    {@render row("Last synced", session.source?.last_synced_at ? when(session.source?.last_synced_at) : null)}
-    {@render row("Forked from", session.parent_id, undefined, true)}
-    {@render row("Splash id", session.id, undefined, true)}
+    {@render row("title", "Title", session.title)}
+    {@render row("status", "Status", statusLabel(session.status))}
+    {@render row("project", "Project", project?.name)}
+    {@render row("isolation", "Isolation", session.isolation === "worktree" ? "worktree" : "in place")}
+    {@render row("branch", "Branch", session.branch, undefined, true)}
+    {@render row("base", "Base", session.base_sha, session.base_sha?.slice(0, 10), true)}
+    {@render row("folder", "Folder", session.cwd, home(session.cwd), true)}
+    {#each (session.additional_directories ?? []) as path, i}{@render row(`extra-folder-${i + 1}`, `Extra folder ${i + 1}`, path, home(path), true)}{/each}
+    {@render row("added-to-splash", "Added to Splash", when(session.created_at))}
+    {@render row("agent-activity", "Agent activity", session.source?.updated_at)}
+    {@render row("last-synced", "Last synced", session.source?.last_synced_at ? when(session.source?.last_synced_at) : null)}
+    {@render row("forked-from", "Forked from", session.parent_id, undefined, true)}
+    {@render row("splash-id", "Splash id", session.id, undefined, true)}
     <div class="actions kv-full">
       <RevealButton path={session.cwd} />
-      <IconButton title="Open the terminal here" size="md" icon="terminal" onclick={openTerminal} />
+      <IconButton data-testid="detail-open-terminal" title="Open the terminal here" size="md" icon="terminal" onclick={openTerminal} />
     </div>
     </div>
   </section>
@@ -74,11 +75,11 @@
     <h3 class="t-section">Agent</h3>
     <div class="kv">
     <span class="kv-k">Agent</span><span class="v static"><AgentIcon id={session.agent_id} size={12} /> {agent?.name ?? session.agent_id}</span>
-    {@render row("Version", probe?.agent_version ?? agent?.version, undefined, true)}
-    {@render row("Transport", agent ? transportLabel(agent) : null)}
-    {@render row("Launch", agent ? [agent.extra_args, agent.launch].filter(Boolean).join(" ") : null, undefined, true)}
-    {@render row("Agent session", session.agent_session_id, undefined, true)}
-    {@render row("Resume", probe ? (probe.load_session ? "supported" : "not supported") : null)}
+    {@render row("version", "Version", probe?.agent_version ?? agent?.version, undefined, true)}
+    {@render row("transport", "Transport", agent ? transportLabel(agent) : null)}
+    {@render row("launch", "Launch", agent ? [agent.extra_args, agent.launch].filter(Boolean).join(" ") : null, undefined, true)}
+    {@render row("agent-session", "Agent session", session.agent_session_id, undefined, true)}
+    {@render row("resume", "Resume", probe ? (probe.load_session ? "supported" : "not supported") : null)}
     </div>
   </section>
 
@@ -90,14 +91,14 @@
       <span class="v static mono">{num(usage.used)} / {num(usage.size)}</span>
       <div class="bar kv-full"><span style:width="{Math.min(100, (usage.used / usage.size) * 100)}%"></span></div>
     {/if}
-    {@render row("Cost", usage?.cost_usd ? usd(usage.cost_usd, 4) : null, undefined, true)}
+    {@render row("cost", "Cost", usage?.cost_usd ? usd(usage.cost_usd, 4) : null, undefined, true)}
     {#each usage?.extra ?? [] as x (x.label)}
-      {@render row(x.label, num(x.value), undefined, true)}
+      {@render row(x.label, x.label, num(x.value), undefined, true)}
     {/each}
-    {@render row("Turns", String(stats.turns))}
-    {@render row("Agent time", stats.time ? dur(stats.time) : null)}
-    {@render row("Tool calls", stats.ok + stats.failed ? `${stats.ok + stats.failed}${stats.failed ? ` (${stats.failed} failed)` : ""}` : null)}
-    {@render row("Files changed", changes ? String(changes) : null)}
+    {@render row("turns", "Turns", String(stats.turns))}
+    {@render row("agent-time", "Agent time", stats.time ? dur(stats.time) : null)}
+    {@render row("tool-calls", "Tool calls", stats.ok + stats.failed ? `${stats.ok + stats.failed}${stats.failed ? ` (${stats.failed} failed)` : ""}` : null)}
+    {@render row("files-changed", "Files changed", changes ? String(changes) : null)}
     </div>
     {#if !usage}<p class="note t-meta">Usage appears once the agent reports it.</p>{/if}
   </section>
@@ -107,7 +108,7 @@
       <h3 class="t-section">Options</h3>
       <div class="kv">
       {#each session.meta.options as o (o.id)}
-        {@render row(o.name, o.choices.find((c) => c.value === o.current)?.name ?? o.current)}
+        {@render row(`option-${o.id}`, o.name, o.choices.find((c) => c.value === o.current)?.name ?? o.current)}
       {/each}
       </div>
     </section>

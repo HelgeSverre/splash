@@ -58,10 +58,10 @@
 
 <!-- A scroll pane: tabindex so the keyboard reaches it in WebKit too. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div class="scroller scroll-region" bind:this={scroller} {onscroll} tabindex="0" role="region" aria-label="Transcript">
+<div class="scroller scroll-region" bind:this={scroller} {onscroll} tabindex="0" role="region" aria-label="Transcript" data-testid="transcript">
   <div class="column">
     {#if loading || quiet}
-      <div class="empty">
+      <div class="empty" data-testid="transcript-empty">
         <EmptyState {loading} mono
           title={loading ? undefined : session.status === "starting" ? `Starting ${agentName}…` : "What should we work on?"}
           detail={loading ? undefined : `${home(session.cwd)}${session.branch ? ` · ${session.branch}` : ""}`}>
@@ -71,17 +71,17 @@
     {/if}
 
     {#each entries as e, i (i)}
-      <div id={`entry-${session.id}-${i}`} class:matched={app.focusEntry === i} data-kind={e.kind}><EntryView entry={e} {session} /></div>
+      <div id={`entry-${session.id}-${i}`} class:matched={app.focusEntry === i} data-testid="entry" data-kind={e.kind} data-index={i} data-matched={app.focusEntry === i || undefined}><EntryView entry={e} {session} /></div>
     {/each}
 
     {#if quiet}
       <!-- the centred empty state covers it -->
     {:else if session.status === "starting"}
-      <div class="hint"><span class="spinner"></span> Starting {agentName}…</div>
+      <div class="hint" data-testid="transcript-hint"><span class="spinner"></span> Starting {agentName}…</div>
     {:else if session.status === "running" && !lastIsStreaming}
-      <div class="hint"><span class="spinner"></span> Working…</div>
+      <div class="hint" data-testid="transcript-hint"><span class="spinner"></span> Working…</div>
     {:else if session.status === "awaiting_permission"}
-      <div class="hint waiting">Waiting for you: press 1 to {Math.max(1, pendingPermission(entries)?.options.length ?? 1)} or click an option.</div>
+      <div class="hint waiting" data-testid="transcript-hint">Waiting for you: press 1 to {Math.max(1, pendingPermission(entries)?.options.length ?? 1)} or click an option.</div>
     {/if}
   </div>
 </div>

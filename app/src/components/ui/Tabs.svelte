@@ -8,10 +8,13 @@
     /** A short glyph before the label (± for a diff). */
     prefix?: string;
     title?: string;
+    /** `data-*` attributes for the tab, such as what it shows (for the tests). */
+    data?: Record<string, string>;
   };
 </script>
 
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // A tab bar: one Tab stop, the arrow keys move and select, Delete closes a
   // closable tab. Tab `id`s become element ids `${prefix}-tab-${id}`, and each
   // tab controls `${prefix}-panel-${id}`: give the panel that id.
@@ -29,6 +32,7 @@
     onclose,
     actions,
     size = "tabbar",
+    ...rest
   }: {
     items: TabItem[];
     active: string;
@@ -41,7 +45,7 @@
     /** "header" makes it --h-header tall, for a bar that tops a column and
         should line up with the session header next to it. */
     size?: "tabbar" | "header";
-  } = $props();
+  } & DataAttrs = $props();
 
   let list: HTMLDivElement | undefined = $state();
 
@@ -61,20 +65,22 @@
       focusAt(Math.max(0, Math.min(i, items.length - 2)));
     }
   }
+
+  const dataOf = (t: TabItem) => Object.fromEntries(Object.entries(t.data ?? {}).map(([k, v]) => [`data-${k}`, v]));
 </script>
 
 <div class="tabs" class:header={size === "header"}>
-  <div class="tablist" role="tablist" aria-label={label} bind:this={list}>
+  <div {...rest} class="tablist" role="tablist" aria-label={label} bind:this={list}>
     {#each items as t, i (t.id)}
       <div class="tab" class:active={t.id === active}>
-        <button class="plain tab-btn" role="tab" id="{prefix}-tab-{t.id}" aria-selected={t.id === active} aria-controls="{prefix}-panel-{t.id}"
+        <button {...dataOf(t)} data-testid="tab" data-tab={t.id} class="plain tab-btn" role="tab" id="{prefix}-tab-{t.id}" aria-selected={t.id === active} aria-controls="{prefix}-panel-{t.id}"
           tabindex={t.id === active ? 0 : -1} title={t.title} onclick={() => onselect(t.id)} onkeydown={(e) => onkeydown(e, i)}>
           {#if t.prefix}<span class="prefix">{t.prefix}</span>{/if}
           {t.label}
           {#if t.count}<Tag tone="count">{t.count}</Tag>{/if}
         </button>
         {#if t.closable && onclose}
-          <IconButton class="close" size="sm" icon="close" title="Close" label="Close {t.label}" tabindex={-1} onclick={() => onclose(t.id)} />
+          <IconButton {...dataOf(t)} data-testid="tab-close" class="close" size="sm" icon="close" title="Close" label="Close {t.label}" tabindex={-1} onclick={() => onclose(t.id)} />
         {/if}
       </div>
     {/each}

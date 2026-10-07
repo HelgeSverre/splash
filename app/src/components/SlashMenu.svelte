@@ -42,9 +42,9 @@
 </script>
 
 {#if shown.length}
-  <div class="slash popover">
+  <div class="slash popover" data-testid="slash-menu">
     {#each shown as c, i (c.name)}
-      <MenuItem name="/{c.name}" description={c.description} mono inline active={i === pick}
+      <MenuItem data-testid="slash-command" data-name={c.name} data-active={i === pick} name="/{c.name}" description={c.description} mono inline active={i === pick}
         onmousedown={(e) => { e.preventDefault(); oncomplete(c.name); }} />
     {/each}
   </div>

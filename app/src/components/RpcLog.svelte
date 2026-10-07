@@ -59,12 +59,12 @@
 
 <div class="log">
   <Toolbar>
-    <span class="search"><FilterInput bind:value={filter} placeholder="Filter (method, text…)" label="Filter the log" shown={shown.length} total={lines.length} unit="lines" /></span>
-    {#snippet end()}<Checkbox bind:checked={follow} label="Follow" />{/snippet}
+    <span class="search"><FilterInput data-testid="log-filter" bind:value={filter} placeholder="Filter (method, text…)" label="Filter the log" shown={shown.length} total={lines.length} unit="lines" /></span>
+    {#snippet end()}<Checkbox data-testid="log-follow" bind:checked={follow} label="Follow" />{/snippet}
   </Toolbar>
   <div class="lines selectable" bind:this={scroller}>
     {#each shown as { l, i, p } (i)}
-      <div class="line {p.kind}">
+      <div class="line {p.kind}" data-testid="log-line" data-method={p.method} data-dir={l.dir}>
         <Disclosure class="summary" open={!!open[i]} ontoggle={() => (open[i] = !open[i])}>
           {#snippet head()}
             <span class="t">{time(l.at)}</span>

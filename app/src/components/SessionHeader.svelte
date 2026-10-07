@@ -43,13 +43,13 @@
 </script>
 
 <header>
-  <button class="plain title t-pane-title" onclick={rename} title="Rename"><span class="title-text">{session.title}</span></button>
+  <button class="plain title t-pane-title" data-testid="session-title" onclick={rename} title="Rename"><span class="title-text">{session.title}</span></button>
   <span class="agent"><AgentIcon id={session.agent_id} size={13} /> {agent?.name ?? session.agent_id}</span>
   {#if git?.repo}
-    <button class="plain link repo" title={git.web_url} onclick={() => open(git?.web_url)}>{git.repo}</button>
+    <button class="plain link repo" data-testid="session-repo" title={git.web_url} onclick={() => open(git?.web_url)}>{git.repo}</button>
   {/if}
   {#if branch}
-    <button class="plain link branch" disabled={!git?.branch_url}
+    <button class="plain link branch" data-testid="session-branch" disabled={!git?.branch_url}
       title={session.isolation === "worktree" ? `worktree at ${session.cwd}` : `in place · ${session.cwd}`}
       onclick={() => open(git?.branch_url)}>
       <Icon name="branch" size={12} /><span class="truncate">{branch}</span>
@@ -58,19 +58,19 @@
     <span class="link">{home(session.cwd)}</span>
   {/if}
   {#if git?.pr}
-    <button class="plain link pr" title={git.pr.title} onclick={() => open(git?.pr?.url)}>
+    <button class="plain link pr" data-testid="session-pr" data-state={git.pr.state.toLowerCase()} title={git.pr.title} onclick={() => open(git?.pr?.url)}>
       PR #{git.pr.number}<Tag tone={PR_TONE[git.pr.state.toLowerCase()] ?? "default"}>{git.pr.state.toLowerCase()}</Tag>
     </button>
   {/if}
-  <span class="status {session.status}" data-status={session.status}><span class="dot {session.status}"></span>{statusLabel(session.status)}</span>
-  {#if session.archived}<Tag tone="muted">archived</Tag>{/if}
+  <span class="status {session.status}" data-testid="session-status" data-status={session.status}><span class="dot {session.status}"></span>{statusLabel(session.status)}</span>
+  {#if session.archived}<Tag data-testid="session-archived" tone="muted">archived</Tag>{/if}
 
   <span class="spacer"></span>
 
-  {#if usage?.cost_usd}<span class="cost" title="session cost reported by the agent">{usd(usage.cost_usd)}</span>{/if}
+  {#if usage?.cost_usd}<span class="cost" data-testid="session-cost" title="session cost reported by the agent">{usd(usage.cost_usd)}</span>{/if}
   <span class="toggles">
-    <IconButton size="md" icon="panel-bottom" title={withKey("Terminal", "view.terminal")} label="Terminal" pressed={layout.bottomOpen} onclick={() => live && toggleBottom()} />
-    <IconButton size="md" icon="panel-right" title={withKey("Changes & files", "view.right")} label="Changes & files" pressed={layout.rightOpen} onclick={() => live && toggleRight()} />
+    <IconButton data-testid="session-terminal-toggle" size="md" icon="panel-bottom" title={withKey("Terminal", "view.terminal")} label="Terminal" pressed={layout.bottomOpen} onclick={() => live && toggleBottom()} />
+    <IconButton data-testid="session-panel-toggle" size="md" icon="panel-right" title={withKey("Changes & files", "view.right")} label="Changes & files" pressed={layout.rightOpen} onclick={() => live && toggleRight()} />
   </span>
 </header>
 

@@ -98,19 +98,19 @@
   const showDetails = () => showSideTab("details");
 </script>
 
-<div class="composer">
+<div class="composer" data-testid="composer">
   {#if !archived && (session.status === "exited" || session.status === "error")}
-    <div class="resume-note"><span>{session.status === "error" ? "Connection failed. Your saved conversation is preserved." : "Viewing saved history. Continue to reconnect the agent."}</span><button class="btn sm" onclick={() => api.restart_session(session.id).catch(showError)}>Continue conversation</button></div>
+    <div class="resume-note" data-testid="composer-resume-note"><span>{session.status === "error" ? "Connection failed. Your saved conversation is preserved." : "Viewing saved history. Continue to reconnect the agent."}</span><button class="btn sm" data-testid="composer-continue" onclick={() => api.restart_session(session.id).catch(showError)}>Continue conversation</button></div>
   {/if}
   <div class="chips">
-    <button class="plain chip" onclick={showDetails} title={session.cwd}>
+    <button class="plain chip" data-testid="composer-where" onclick={showDetails} title={session.cwd}>
       {#if session.isolation === "worktree"}
         <Icon name="branch" size={12} /><span class="truncate">{session.branch ?? "worktree"}</span>
       {:else}
         <Icon name="monitor" size={12} /><span class="truncate">In place{session.branch ? ` · ${session.branch}` : ""}</span>
       {/if}
     </button>
-    <button class="plain chip" onclick={showDetails} title={project?.path ?? session.cwd}>
+    <button class="plain chip" data-testid="composer-project" onclick={showDetails} title={project?.path ?? session.cwd}>
       <Icon name="folder" size={12} /><span class="truncate">{project?.name ?? "folder"}</span>
     </button>
     <span class="spacer"></span>
@@ -123,6 +123,7 @@
     <textarea
       class="bare-input"
       aria-label="Message"
+      data-testid="composer-input"
       bind:this={input}
       bind:value={text}
       {onkeydown}
@@ -131,13 +132,13 @@
       placeholder={archived ? (session.source?.deleted ? "Agent history was deleted. This local copy is read-only." : "This session is archived.") : busy ? "The agent is working…" : "Describe a task or ask a question"}
     ></textarea>
     {#if busy}
-      <IconButton class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" onclick={stop} />
+      <IconButton data-testid="composer-stop" class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" onclick={stop} />
     {:else}
-      <IconButton size="sm" icon="send" title="Send (⏎)" label="Send" disabled={disconnected || !text.trim() || archived || sending[session.id] || session.status === "starting"} onclick={send} />
+      <IconButton data-testid="composer-send" size="sm" icon="send" title="Send (⏎)" label="Send" disabled={disconnected || !text.trim() || archived || sending[session.id] || session.status === "starting"} onclick={send} />
     {/if}
   </div>
 
-  <div class="controls">
+  <div class="controls" data-testid="composer-options">
     {#each left as o (o.id)}
       <Picker option={o} disabled={archived} onchange={(v) => setOption(o.id, v)} />
     {/each}

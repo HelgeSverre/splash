@@ -33,13 +33,13 @@
 <div class="tab">
   <Toolbar>
     <PathLabel {path} />
-    {#if diff && diff.old === null && diff.new !== null}<Tag tone="ok">new file</Tag>{/if}
-    {#if diff && diff.new === null && !diff.binary && !diff.too_large}<Tag tone="err">deleted</Tag>{/if}
+    {#if diff && diff.old === null && diff.new !== null}<Tag data-testid="diff-new-file" tone="ok">new file</Tag>{/if}
+    {#if diff && diff.new === null && !diff.binary && !diff.too_large}<Tag data-testid="diff-deleted" tone="err">deleted</Tag>{/if}
     {#snippet end()}
-      <SegmentedControl label="Diff layout" value={mode} onchange={setMode}
+      <SegmentedControl data-testid="diff-layout" label="Diff layout" value={mode} onchange={setMode}
         options={[{ value: "unified", label: "Unified" }, { value: "split", label: "Split" }]} />
-      <Checkbox bind:checked={full} label="Whole file" />
-      {#if diff?.new !== null}<button class="btn sm ghost" onclick={() => openTab({ kind: "file", path })}>Open file</button>{/if}
+      <Checkbox data-testid="diff-whole-file" bind:checked={full} label="Whole file" />
+      {#if diff?.new !== null}<button class="btn sm ghost" data-testid="diff-open-file" onclick={() => openTab({ kind: "file", path })}>Open file</button>{/if}
     {/snippet}
   </Toolbar>
   <div class="content">

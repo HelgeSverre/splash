@@ -61,7 +61,7 @@
   }
 </script>
 
-<Modal label="Settings" width="1000px" height="720px" onclose={close}>
+<Modal data-testid="settings" label="Settings" width="1000px" height="720px" onclose={close}>
   <div class="settings" onkeydowncapture={onkeydown} role="presentation">
     <nav class="rail">
       <div class="search"><FilterInput bind:value={query} bind:ref={searchEl} placeholder="Search" label="Search settings" /></div>
@@ -69,7 +69,7 @@
         {#if appItems.some((i) => hit(i.title, i.keywords))}
           <div class="group-title t-section">App</div>
           {#each appItems.filter((i) => hit(i.title, i.keywords)) as item (item.id)}
-            <NavItem label={item.title} active={app.settings === item.id} onclick={() => (app.settings = item.id)}>
+            <NavItem data-testid="settings-nav" data-page={item.id} label={item.title} active={app.settings === item.id} onclick={() => (app.settings = item.id)}>
               {#snippet lead()}<Icon name={item.icon} size={15} />{/snippet}
             </NavItem>
           {/each}

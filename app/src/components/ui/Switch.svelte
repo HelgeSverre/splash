@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // An on/off switch. Name it with `label`, or point `labelledby` at the
   // visible text it sits next to.
   let {
@@ -7,10 +8,11 @@
     label,
     labelledby,
     disabled = false,
-  }: { checked: boolean; onchange: (checked: boolean) => void; label?: string; labelledby?: string; disabled?: boolean } = $props();
+    ...rest
+  }: { checked: boolean; onchange: (checked: boolean) => void; label?: string; labelledby?: string; disabled?: boolean } & DataAttrs = $props();
 </script>
 
-<button class="plain switch" class:on={checked} role="switch" aria-checked={checked} aria-label={labelledby ? undefined : label}
+<button {...rest} class="plain switch" class:on={checked} role="switch" aria-checked={checked} aria-label={labelledby ? undefined : label}
   aria-labelledby={labelledby} {disabled} onclick={() => onchange(!checked)}></button>
 
 <style>

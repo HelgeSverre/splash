@@ -15,6 +15,7 @@ import type { AgentId } from "./support/agents.ts";
 import { App } from "./support/app.ts";
 import { Backend, type Harness } from "./support/backend.ts";
 import { Db } from "./support/db.ts";
+import { FolderPicker } from "./support/server.ts";
 import { World } from "./support/world.ts";
 
 declare global {
@@ -85,26 +86,18 @@ export const test = base.extend<Options & { world: World; splash: Splash }>({
         await page.goto(backend.url + "/");
         await app.waitReady();
         // Startup folders are added in the background.
-        if (folders === "repo") await expect(app.projectRow("repo")).toBeVisible();
+        if (folders === "repo") await expect(app.projectRow(world.repo)).toBeVisible();
       },
       async addProject(path: string) {
-        const add = app.sidebar.getByRole("button", { name: "Add a project folder" }).first();
-        if (harness === "desktop") {
-          writeFileSync(join(world.control, "dialog.json"), JSON.stringify([path]));
-          await add.click();
-          return;
-        }
-        await add.click();
-        const picker = page.getByRole("dialog", { name: "Add a folder on the server" });
-        const input = picker.getByLabel("Server folder path");
-        await expect(input).toHaveValue(world.home);
-        await input.fill(path);
-        await picker.getByRole("button", { name: "Go" }).click();
-        // The listing must be the typed folder before it can be added.
-        await expect(picker.locator(".folders")).toHaveAttribute("aria-busy", "false");
-        await expect(input).toHaveValue(path);
-        await picker.getByRole("button", { name: "Add this folder" }).click();
-        await expect(picker).toBeHidden();
+        if (harness === "desktop") writeFileSync(join(world.control, "dialog.json"), JSON.stringify([path]));
+        await app.addProjectButton.click();
+        if (harness === "desktop") return;
+        const picker = new FolderPicker(page);
+        await expect(picker.list).toHaveAttribute("data-path", world.home);
+        // Only a folder that has been listed can be added.
+        await picker.open(path);
+        await picker.add.click();
+        await expect(picker.dialog).toBeHidden();
       },
       async restart({ reload = harness === "desktop" } = {}) {
         await backend.restart();
@@ -120,7 +113,7 @@ export const test = base.extend<Options & { world: World; splash: Splash }>({
           await page.waitForFunction(
             (i) =>
               globalThis.__SPLASH_SERVER__?.instance === i &&
-              !!document.querySelector(".server-connection [role=status]")?.textContent?.startsWith("Connected"),
+              document.querySelector("[data-testid=server-connection]")?.getAttribute("data-status") === "online",
             instance,
             { timeout: 15_000 },
           );

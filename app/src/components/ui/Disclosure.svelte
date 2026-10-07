@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // A button that shows or hides what's under it: a thought or an agent
   // notice in the transcript, a line in the RPC log. `head` fills the button
   // (it lays out as a row), `children` shows while `open`. The owner keeps
@@ -12,10 +13,11 @@
     class: cls = "",
     head,
     children,
-  }: { open: boolean; ontoggle: () => void; title?: string; class?: string; head: Snippet; children: Snippet } = $props();
+    ...rest
+  }: { open: boolean; ontoggle: () => void; title?: string; class?: string; head: Snippet; children: Snippet } & DataAttrs = $props();
 </script>
 
-<button class="plain disclosure focus-inset {cls}" aria-expanded={open} {title} onclick={ontoggle}>{@render head()}</button>
+<button {...rest} class="plain disclosure focus-inset {cls}" aria-expanded={open} {title} onclick={ontoggle}>{@render head()}</button>
 {#if open}{@render children()}{/if}
 
 <style>

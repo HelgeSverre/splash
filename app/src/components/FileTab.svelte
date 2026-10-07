@@ -24,10 +24,10 @@
 <div class="tab">
   <Toolbar>
     <PathLabel {path} cwd={session.cwd} />
-    {#if file}<span class="meta t-mono-meta">{lineCount} lines · {bytes(file.size)}</span>{/if}
-    {#snippet end()}<span class="meta t-mono-meta">read-only</span>{/snippet}
+    {#if file}<span class="meta t-mono-meta" data-testid="file-meta" data-lines={lineCount}>{lineCount} lines · {bytes(file.size)}</span>{/if}
+    {#snippet end()}<span class="meta t-mono-meta" data-testid="file-readonly">read-only</span>{/snippet}
   </Toolbar>
-  <div class="content">
+  <div class="content" data-testid="file-content">
     <FilePane {res} binary={file?.binary} tooLarge={file?.too_large && { title: "Too large to show", detail: bytes(file.size), mono: true }}>
       {#snippet children(file)}<CodeView text={file.text ?? ""} path={file.path} {line} />{/snippet}
     </FilePane>

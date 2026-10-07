@@ -5,6 +5,7 @@
 </script>
 
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // A square, chrome-less icon button with a tooltip: a glyph from lib/icons,
   // sized to the button. Pass `pressed` when it toggles something (a pane, a
   // mode): it's announced as a toggle button. `loading` swaps the glyph for a
@@ -23,6 +24,7 @@
     size = "lg",
     tabindex,
     class: cls = "",
+    ...rest
   }: {
     title: string;
     /** The accessible name, when the tooltip carries extra text (a shortcut). */
@@ -36,10 +38,10 @@
     size?: IconButtonSize;
     tabindex?: number;
     class?: string;
-  } = $props();
+  } & DataAttrs = $props();
 </script>
 
-<button class="plain icon-btn {size} {cls}" class:active={active || pressed} {title} aria-label={label ?? title} aria-pressed={pressed}
+<button {...rest} class="plain icon-btn {size} {cls}" class:active={active || pressed} {title} aria-label={label ?? title} aria-pressed={pressed}
   disabled={disabled || loading} aria-busy={loading || undefined} {onclick} {tabindex}>
   {#if loading}<span class="spinner"></span>{:else}<Icon name={icon} size={GLYPH[size]} />{/if}
 </button>

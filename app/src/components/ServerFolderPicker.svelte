@@ -24,25 +24,25 @@
   void browse(null);
   function close() { generation++; finishFolderPicker(null); }
 </script>
-<Modal label="Add a folder on the server" onclose={close} width="680px">
+<Modal data-testid="folder-picker" label="Add a folder on the server" onclose={close} width="680px">
   <ModalHeader title="Add a folder on the server" onclose={close} />
   <div class="body">
     <p>Choose a project on <strong>{connection.name || 'the Splash server'}</strong>. These folders are on the server, not this browser’s device.</p>
     <form onsubmit={(e) => { e.preventDefault(); void browse(path); }}>
       <label for="server-folder-path">Server folder path</label>
-      <div class="path-row"><input id="server-folder-path" bind:value={path} placeholder="/home/you/code" autocomplete="off" spellcheck="false" /><button class="btn" disabled={busy}>Go</button></div>
+      <div class="path-row"><input id="server-folder-path" data-testid="folder-picker-path" bind:value={path} placeholder="/home/you/code" autocomplete="off" spellcheck="false" /><button class="btn" data-testid="folder-picker-go" disabled={busy}>Go</button></div>
     </form>
-    <div class="navigation"><button class="btn sm" disabled={busy} onclick={() => browse(null)}>Home</button><button class="btn sm" disabled={busy || !result?.parent} onclick={() => browse(result?.parent ?? null)}>Up one folder</button></div>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
-    <div class="folders" aria-busy={busy}>
+    <div class="navigation"><button class="btn sm" data-testid="folder-picker-home" disabled={busy} onclick={() => browse(null)}>Home</button><button class="btn sm" data-testid="folder-picker-up" disabled={busy || !result?.parent} onclick={() => browse(result?.parent ?? null)}>Up one folder</button></div>
+    {#if error}<p class="error" role="alert" data-testid="folder-picker-error">{error}</p>{/if}
+    <div class="folders" data-testid="folder-picker-list" data-path={result?.path} aria-busy={busy}>
       {#if busy}<p role="status">Loading folders…</p>
       {:else if result}
-        {#each result.folders as folder}<button class="folder" onclick={() => browse(folder)}><span>{basename(folder)}</span><span aria-hidden="true">›</span></button>{/each}
+        {#each result.folders as folder}<button class="folder" data-testid="folder-picker-folder" data-path={folder} onclick={() => browse(folder)}><span>{basename(folder)}</span><span aria-hidden="true">›</span></button>{/each}
         {#if !result.folders.length}<p>No visible subfolders. You can select this folder or enter another path.</p>{/if}
         {#if result.truncated}<p>Showing the first 1,000 folders. Enter a path to open another folder.</p>{/if}
       {/if}
     </div>
-    <div class="footer"><button class="btn" onclick={close}>Cancel</button><button class="btn primary" disabled={busy || !result || !!error || path !== result.path} onclick={() => finishFolderPicker(result!.path)}>Add this folder</button></div>
+    <div class="footer"><button class="btn" data-testid="folder-picker-cancel" onclick={close}>Cancel</button><button class="btn primary" data-testid="folder-picker-add" disabled={busy || !result || !!error || path !== result.path} onclick={() => finishFolderPicker(result!.path)}>Add this folder</button></div>
   </div>
 </Modal>
 <style>

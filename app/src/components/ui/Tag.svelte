@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // A small mono label. `count` is the filled variant for tab and list counts;
   // `off` strikes a capability or option that isn't there.
   import type { Snippet } from "svelte";
@@ -7,10 +8,11 @@
     off = false,
     title,
     children,
-  }: { tone?: "default" | "muted" | "ok" | "warn" | "err" | "accent" | "purple" | "count"; off?: boolean; title?: string; children: Snippet } = $props();
+    ...rest
+  }: { tone?: "default" | "muted" | "ok" | "warn" | "err" | "accent" | "purple" | "count"; off?: boolean; title?: string; children: Snippet } & DataAttrs = $props();
 </script>
 
-<span class="tag {tone}" class:off {title}>{@render children()}</span>
+<span {...rest} class="tag {tone}" class:off {title}>{@render children()}</span>
 
 <style>
   .tag {

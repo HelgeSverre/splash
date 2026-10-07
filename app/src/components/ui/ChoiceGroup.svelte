@@ -1,4 +1,5 @@
 <script lang="ts" generics="T">
+  import type { DataAttrs } from "../../lib/attrs";
   // One-of-n, drawn as cards (the .choice look): a project, an agent, where a
   // session works. A radio group: one Tab stop, the arrow keys move and pick.
   // `layout` lays the cards out; `variant` shapes each one ("stack" puts a
@@ -19,6 +20,7 @@
     variant = "row",
     item,
     empty,
+    ...rest
   }: {
     items: T[];
     /** The key of the picked item. */
@@ -35,7 +37,7 @@
     item: Snippet<[T]>;
     /** Shown while there's nothing to pick. */
     empty?: Snippet;
-  } = $props();
+  } & DataAttrs = $props();
 
   let root: HTMLDivElement | undefined = $state();
   const picked = $derived(items.findIndex((x) => key(x) === value));
@@ -47,9 +49,9 @@
     radioKeydown(e, i, items.length, (j) => disabled(items[j]), (j) => onchange(items[j]), root);
 </script>
 
-<div class="choices is-{layout}" role="radiogroup" aria-label={label} aria-labelledby={labelledby} bind:this={root}>
+<div {...rest} class="choices is-{layout}" role="radiogroup" aria-label={label} aria-labelledby={labelledby} bind:this={root}>
   {#each items as it, i (key(it))}
-    <button class="plain choice {variant}" class:on={i === picked} role="radio" aria-checked={i === picked}
+    <button data-testid="choice" data-value={key(it)} class="plain choice {variant}" class:on={i === picked} role="radio" aria-checked={i === picked}
       title={title?.(it)} aria-label={variant === "icon" ? title?.(it) : undefined}
       disabled={disabled(it)} tabindex={i === stop ? 0 : -1}
       onclick={() => onchange(it)} onkeydown={(e) => onkeydown(e, i)}>{@render item(it)}</button>

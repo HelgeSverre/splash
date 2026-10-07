@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { DataAttrs } from "../../lib/attrs";
   // A row in a navigation list (the sidebar, the settings rail): icons in
   // `lead`, a label that truncates, quiet extras in `trail`. `active` marks
   // where you are; `indent` (px) nests it under a parent row; `dense` is the
@@ -20,6 +21,7 @@
     lead,
     trail,
     action,
+    ...rest
   }: {
     label: string;
     active?: boolean;
@@ -33,11 +35,11 @@
     lead?: Snippet;
     trail?: Snippet;
     action?: Snippet;
-  } = $props();
+  } & DataAttrs = $props();
 </script>
 
 {#snippet row()}
-  <button class="plain nav-item focus-inset" class:active class:dense class:muted {title} aria-current={active ? "page" : undefined} aria-expanded={expanded}
+  <button {...rest} class="plain nav-item focus-inset" class:active class:dense class:muted {title} aria-current={active ? "page" : undefined} aria-expanded={expanded}
     style:padding-left={indent ? `${indent}px` : undefined} {onclick} {oncontextmenu}>
     {#if lead}{@render lead()}{/if}
     <span class="label">{label}</span>

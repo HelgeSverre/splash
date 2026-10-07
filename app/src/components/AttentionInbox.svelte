@@ -36,25 +36,25 @@
 
 <div class="inbox">
   <header><h1>Needs attention</h1><p>Permissions, interrupted work, and completed conversations stay here until resolved.</p></header>
-  {#if error}<p class="err error" role="alert">{error}</p>{/if}
-  {#if checked}<p class="error" role="status">{checked}</p>{/if}
+  {#if error}<p class="err error" role="alert" data-testid="attention-error">{error}</p>{/if}
+  {#if checked}<p class="error" role="status" data-testid="attention-checked">{checked}</p>{/if}
   <div class="content">
-    {#if !attention.length}<EmptyState icon="check" title="Nothing needs attention" detail="You can keep working. Sessions that need you will appear here." />{/if}
+    {#if !attention.length}<EmptyState data-testid="attention-empty" icon="check" title="Nothing needs attention" detail="You can keep working. Sessions that need you will appear here." />{/if}
     {#each groups as group}
       {@const sessions = attention.filter((s) => s.attention?.kind === group.kind)}
       {#if sessions.length}
-        <section aria-label={group.title}>
+        <section aria-label={group.title} data-testid="attention-group" data-kind={group.kind}>
           <h2>{group.title} <span>{sessions.length}</span></h2>
           {#each sessions as s (s.id)}
-            <article>
-              <div class="heading"><AgentIcon id={s.agent_id} size={18} /><button class="plain title" onclick={() => open(s)}>{s.title}</button></div>
+            <article data-testid="attention-item" data-session-id={s.id} data-status={s.status}>
+              <div class="heading"><AgentIcon id={s.agent_id} size={18} /><button class="plain title" data-testid="attention-title" onclick={() => open(s)}>{s.title}</button></div>
               <p class="meta">{projectById(s.project_id)?.name} · {agentById(s.agent_id)?.name ?? s.agent_id} · {new Date((s.attention?.at ?? 0) * 1000).toLocaleString()}</p>
-              <p class="detail">{group.kind === "permission" && s.status !== "awaiting_permission" ? "The agent stopped while waiting for permission. Reconnect to continue; the old request can no longer be answered." : s.attention?.detail}</p>
+              <p class="detail" data-testid="attention-detail">{group.kind === "permission" && s.status !== "awaiting_permission" ? "The agent stopped while waiting for permission. Reconnect to continue; the old request can no longer be answered." : s.attention?.detail}</p>
               <div class="actions">
-                <button class="btn primary" onclick={() => open(s)}>{group.kind === "permission" && s.status === "awaiting_permission" ? "Answer permission" : group.kind === "review" ? "Review response & changes" : "Open conversation"}</button>
-                {#if s.status === "error" || s.status === "exited"}<button class="btn" disabled={!!busy} onclick={() => run(s, "retry")}>{busy === s.id ? "Working…" : "Reconnect agent"}</button>{/if}
-                {#if group.kind !== "review"}<button class="btn" disabled={!!busy} onclick={() => run(s, "check")}>Recheck agent</button>{/if}
-                {#if s.status !== "awaiting_permission"}<button class="btn ghost" disabled={!!busy} onclick={() => run(s, "dismiss")}>{group.kind === "review" ? "Mark reviewed" : "Dismiss"}</button>{/if}
+                <button class="btn primary" data-testid="attention-open" onclick={() => open(s)}>{group.kind === "permission" && s.status === "awaiting_permission" ? "Answer permission" : group.kind === "review" ? "Review response & changes" : "Open conversation"}</button>
+                {#if s.status === "error" || s.status === "exited"}<button class="btn" data-testid="attention-reconnect" disabled={!!busy} onclick={() => run(s, "retry")}>{busy === s.id ? "Working…" : "Reconnect agent"}</button>{/if}
+                {#if group.kind !== "review"}<button class="btn" data-testid="attention-recheck" disabled={!!busy} onclick={() => run(s, "check")}>Recheck agent</button>{/if}
+                {#if s.status !== "awaiting_permission"}<button class="btn ghost" data-testid="attention-dismiss" disabled={!!busy} onclick={() => run(s, "dismiss")}>{group.kind === "review" ? "Mark reviewed" : "Dismiss"}</button>{/if}
               </div>
             </article>
           {/each}

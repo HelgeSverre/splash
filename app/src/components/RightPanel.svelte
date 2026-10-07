@@ -33,7 +33,7 @@
 </script>
 
 <div class="panel">
-  <Tabs items={tabs} active={layout.rightTab} prefix="rp" label="Side panel" size="header" onselect={setTab}>
+  <Tabs data-testid="side-tabs" items={tabs} active={layout.rightTab} prefix="rp" label="Side panel" size="header" onselect={setTab}>
     {#snippet actions()}
       <IconButton title="Refresh" size="sm" icon="refresh" onclick={() => { refreshStatus(session.id); loadDir(session.id, ""); }} />
     {/snippet}

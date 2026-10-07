@@ -5,10 +5,10 @@ test.use({ agents: ["claude", "pool"] });
 test.beforeEach(({ world }) => world.signInPool());
 
 test("an agent signed in before startup is offered as ready", async ({ splash }) => {
-  const { app, page } = splash;
+  const { app } = splash;
   await app.newSessionButton.click();
-  const agents = page.getByRole("dialog", { name: "New session" }).getByRole("radiogroup", { name: "Agent" });
-  await expect(agents.getByRole("radio", { name: /^Pool/ })).toContainText("v1.4.2");
-  await expect(agents.getByRole("radio", { name: /^Pool/ })).toBeEnabled();
-  await expect(agents.getByRole("radio", { name: /^Codex/ })).toContainText("not installed");
+  await expect(app.agentState("pool")).toHaveText("v1.4.2");
+  await expect(app.dialogChoice("agent", "pool")).toBeEnabled();
+  await expect(app.agentState("codex")).toHaveAttribute("data-tone", "err");
+  await expect(app.agentState("codex")).toHaveText("not installed");
 });

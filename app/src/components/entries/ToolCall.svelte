@@ -39,16 +39,16 @@
       <CodeBlock code={seg.code} lang={seg.lang} maxHeight="360px" />
     {:else}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <pre class="out selectable scroll-region" tabindex="0" role="region" aria-label="Tool output">{seg.text}</pre>
+      <pre class="out selectable scroll-region" tabindex="0" role="region" aria-label="Tool output" data-testid="tool-output">{seg.text}</pre>
     {/if}
   {/each}
 {/snippet}
 
-<div class="tool {entry.status}">
+<div class="tool {entry.status}" data-testid="tool" data-status={entry.status} data-tool-kind={entry.tool_kind}>
   <!-- The head button's hit area covers the whole row (the locations sit on
        top of it), so the hover, the focus ring and the click all match. -->
   <div class="row" class:clickable={hasBody}>
-    <button class="plain head" onclick={() => (open = !open)} disabled={!hasBody}
+    <button class="plain head" data-testid="tool-head" onclick={() => (open = !open)} disabled={!hasBody}
       aria-expanded={hasBody ? open : undefined} aria-controls={hasBody ? bodyId : undefined}>
       <StepIcon status={entry.status} live />
       <span class="kind">{kind}</span>
@@ -56,7 +56,7 @@
       {#if showInput}<span class="input">{input}</span>{/if}
     </button>
     {#each entry.locations.slice(0, 3) as loc (loc.path + loc.line)}
-      <button class="plain loc" onclick={() => openTab({ kind: "file", path: loc.path, line: loc.line ?? undefined })}
+      <button class="plain loc" data-testid="tool-location" data-path={loc.path} data-line={loc.line} onclick={() => openTab({ kind: "file", path: loc.path, line: loc.line ?? undefined })}
         >{rel(loc.path, cwd)}{loc.line ? `:${loc.line}` : ""}</button>
     {/each}
     {#if hasBody}<span class="twist" aria-hidden="true"><Chevron {open} /></span>{/if}
@@ -65,8 +65,8 @@
     <div class="body" id={bodyId}>
       {#each diffs as d, i (i)}
         {#if d.type === "diff"}
-          <div class="diff-head">
-            <button class="plain loc" onclick={() => openTab({ kind: "diff", path: d.path })}>{rel(d.path, cwd)}</button>
+          <div class="diff-head" data-testid="tool-diff" data-path={d.path} data-new={!d.old || undefined}>
+            <button class="plain loc" data-testid="tool-diff-path" onclick={() => openTab({ kind: "diff", path: d.path })}>{rel(d.path, cwd)}</button>
             {#if !d.old}<Tag tone="ok">new file</Tag>{/if}
           </div>
           <DiffView oldText={d.old ?? ""} newText={d.new} path={d.path} maxHeight="360px" />
