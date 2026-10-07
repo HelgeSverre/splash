@@ -9,7 +9,7 @@
 	import { SHOTS } from '#lib/shots.ts';
 </script>
 
-<PageHeader slug="review" title="Review the work, not the scrollback.">
+<PageHeader slug="review">
 	<p>When an agent says it's done, you don't want 300 lines of transcript. You want <strong>the diff, anything that failed, and the final answer</strong>, next to each other, with a box to tell the agent what to fix.</p>
 </PageHeader>
 

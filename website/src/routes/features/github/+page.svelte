@@ -9,7 +9,7 @@
 	import { SHOTS } from '#lib/shots.ts';
 </script>
 
-<PageHeader slug="github" title="From issue to worktree in one click.">
+<PageHeader slug="github">
 	<p>Triage issues, pull requests, branches and failing runs across every repository your GitHub CLI login can see. When something needs doing, <strong>Work on this</strong> starts a session with the issue in the composer, or a fresh worktree from a pull request's head.</p>
 </PageHeader>
 

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import CodeBlock from '#lib/components/CodeBlock.svelte';
 	import SplashMark from '$splash/components/SplashMark.svelte';
+	import Seo from '#lib/components/Seo.svelte';
 	import { OS_NAMES, PLATFORMS, RELEASES, SERVER, VERSION, detect, primaryFor, type Os } from '#lib/releases.ts';
 	import { available, latest, loadLatest, resolve } from '#lib/latest.svelte.ts';
 	import { REPO, RELEASES_URL } from '#lib/site.ts';
@@ -30,10 +31,7 @@
 	};
 </script>
 
-<svelte:head>
-	<title>Download Splash · Changelog</title>
-	<meta name="description" content="Download Splash v{VERSION} for macOS, Windows and Linux, or the headless server, and read the changelog." />
-</svelte:head>
+<Seo title="Download Splash · Changelog" description="Download Splash v{VERSION} for macOS, Windows and Linux, or the headless server, and read the changelog." card="download" />
 
 <section class="top">
 	<div class="glow" aria-hidden="true"></div>

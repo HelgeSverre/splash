@@ -72,3 +72,24 @@ build.
 The changelog renders every `../.github/release-notes-<version>.md`, the same
 files the release workflow publishes, newest first. Add the release date to
 `DATES` in `releases.ts`.
+
+## Search and share cards
+
+The site lives at `https://splash.computer` (`SITE_URL` in `src/lib/site.ts`).
+Every page renders `Seo.svelte`: title, description, canonical URL, and Open
+Graph and Twitter tags pointing at its share card. Feature pages take their H1
+and description from `FEATURES` in `site.ts`. The home page adds JSON-LD
+(`WebSite` and `SoftwareApplication`), and `src/routes/sitemap.xml` lists every
+page; `static/robots.txt` points to it.
+
+Each page has a 1200 × 630 share card in `static/og/<slug>.png`, defined in
+`src/lib/og.ts`: the page's headline over its real app window (a live scene, or
+a capture from `SHOTS`), in the site's own tokens. `/og-card/<slug>` renders a
+card on the dev server only; the static build has no page for it.
+
+```bash
+just site-og       # recapture every card (uses Google Chrome, or CHROME_PATH)
+```
+
+Recapture after changing a headline, `og.ts`, or a scene the cards show, and
+commit the PNGs.

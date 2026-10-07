@@ -7,7 +7,7 @@
 	import Live from '#lib/components/Live.svelte';
 </script>
 
-<PageHeader slug="attention" title="Stop checking every tab.">
+<PageHeader slug="attention">
 	<p>With four agents running, one is always waiting on you, and it's never the one on screen. <strong>Needs attention</strong> collects every permission prompt, crashed agent and finished turn in one queue that survives restarts, until you deal with it.</p>
 </PageHeader>
 

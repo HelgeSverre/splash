@@ -124,6 +124,12 @@ site-build:
     @[ -d website/node_modules ] || (cd website && bun install --frozen-lockfile)
     cd website && bun run check && bun run build
 
+# Recapture the site's share cards into website/static/og (needs Google Chrome or CHROME_PATH)
+[group('website')]
+site-og:
+    @[ -d website/node_modules ] || (cd website && bun install --frozen-lockfile)
+    cd website && bun run og
+
 [private]
 _deps:
     @[ -d app/node_modules ] || (cd app && npm ci)

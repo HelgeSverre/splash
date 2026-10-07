@@ -9,7 +9,7 @@
 	import { ACP_URL } from '#lib/site.ts';
 </script>
 
-<PageHeader slug="agents" title="Bring the agent you already use.">
+<PageHeader slug="agents">
 	<p>Splash speaks the <a class="prose-link" href={ACP_URL}>Agent Client Protocol</a>, the JSON-RPC protocol editors use to talk to coding agents. <strong>Splash never installs them or signs in for you</strong>: install and authenticate each CLI yourself, and Splash finds it.</p>
 </PageHeader>
 

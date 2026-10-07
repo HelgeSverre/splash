@@ -18,7 +18,7 @@
 	] as const;
 </script>
 
-<PageHeader slug="history" title="Your conversations, wherever they started.">
+<PageHeader slug="history">
 	<p>You started that fix in Claude Code's terminal last week. Splash asks every installed agent for its sessions over ACP, lets you <strong>preview them without sending a prompt</strong>, and continues them here. Search covers every transcript you've saved, archived ones included.</p>
 </PageHeader>
 

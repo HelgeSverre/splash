@@ -8,7 +8,37 @@
 	import SshDiagram from '#lib/components/SshDiagram.svelte';
 	import CodeBlock from '#lib/components/CodeBlock.svelte';
 	import AcpTrace from '#lib/components/AcpTrace.svelte';
-	import { ACP_URL } from '#lib/site.ts';
+	import Seo from '#lib/components/Seo.svelte';
+	import { ACP_URL, SITE_NAME, SITE_URL } from '#lib/site.ts';
+	import { VERSION } from '#lib/releases.ts';
+
+	const description =
+		'A desktop app for running Claude Code, Codex, Gemini and other ACP coding agents side by side: a worktree per agent, one queue for what needs you.';
+
+	// Structured data for search engines: the site, and the app it offers.
+	const ld = {
+		'@context': 'https://schema.org',
+		'@graph': [
+			{ '@type': 'WebSite', name: SITE_NAME, url: `${SITE_URL}/` },
+			{
+				'@type': 'SoftwareApplication',
+				name: SITE_NAME,
+				description,
+				url: `${SITE_URL}/`,
+				downloadUrl: `${SITE_URL}/download`,
+				image: `${SITE_URL}/og/home.png`,
+				applicationCategory: 'DeveloperApplication',
+				operatingSystem: 'macOS 14+, Windows 11, Ubuntu 24.04',
+				softwareVersion: VERSION,
+				license: 'https://opensource.org/licenses/MIT',
+				isAccessibleForFree: true,
+				offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+				author: { '@type': 'Person', name: 'Helge Sverre', url: 'https://helgesver.re' }
+			}
+		]
+	};
+	// `<` is escaped so the JSON can never close the script element early.
+	const jsonLd = `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}<\/script>`;
 
 	const principles = [
 		{ title: 'No accounts', text: 'Splash never installs agents or signs in to them. Each CLI keeps its own login, on your machine.' },
@@ -18,10 +48,8 @@
 	];
 </script>
 
-<svelte:head>
-	<title>Splash · Run coding agents side by side</title>
-	<meta name="description" content="A desktop app for running Claude Code, Codex, Gemini and other ACP coding agents in your git projects: one session and worktree per agent, one queue for everything that needs you." />
-</svelte:head>
+<Seo title="Splash · Run coding agents side by side" {description} card="home" />
+<svelte:head>{@html jsonLd}</svelte:head>
 
 <Hero />
 

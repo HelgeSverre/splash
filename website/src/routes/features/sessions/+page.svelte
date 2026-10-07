@@ -10,7 +10,7 @@
 	import { SHOTS } from '#lib/shots.ts';
 </script>
 
-<PageHeader slug="sessions" title="Every agent gets its own checkout.">
+<PageHeader slug="sessions">
 	<p>Two agents editing the same files is how you lose an afternoon. A Splash session is <strong>one agent working in one folder</strong>: the project itself, or a git worktree on its own <code class="inline-code">splash/…</code> branch. Run as many as you like, side by side.</p>
 </PageHeader>
 

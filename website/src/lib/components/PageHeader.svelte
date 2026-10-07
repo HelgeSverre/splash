@@ -1,16 +1,14 @@
 <script lang="ts">
 	// The top of a feature page.
 	import type { Snippet } from 'svelte';
+	import Seo from './Seo.svelte';
 	import { FEATURES } from '../site';
 
-	let { slug, title, children }: { slug: string; title: string; children: Snippet } = $props();
+	let { slug, children }: { slug: string; children: Snippet } = $props();
 	const feature = FEATURES.find((f) => f.slug === slug)!;
 </script>
 
-<svelte:head>
-	<title>{feature.name} · Splash</title>
-	<meta name="description" content={feature.summary} />
-</svelte:head>
+<Seo title="{feature.name} · Splash" description={feature.description} card={slug} />
 
 <header class="head">
 	<div class="glow" aria-hidden="true"></div>
@@ -18,7 +16,7 @@
 		<p class="eyebrow">
 			<a href="/">Splash</a><span aria-hidden="true">/</span><span class="n">{feature.name}</span>
 		</p>
-		<h1 class="display">{title}</h1>
+		<h1 class="display">{feature.title}</h1>
 		<div class="lede">{@render children()}</div>
 	</div>
 </header>

@@ -9,7 +9,7 @@
 	import { REPO } from '#lib/site.ts';
 </script>
 
-<PageHeader slug="server" title="Agents on your workstation. Splash in any browser.">
+<PageHeader slug="server">
 	<p>Run <code class="inline-code">splash-server</code> on the machine that has your repositories and agent logins, then open it through an SSH tunnel. Files, git, terminals and agents stay together on that machine. <strong>Close the laptop; the agents keep working.</strong></p>
 </PageHeader>
 
