@@ -41,6 +41,11 @@ build: frontend
 codegen: _rata
     {{ rata }} codegen
 
+# Re-render every app icon from app/public/icon.svg (needs resvg, Pillow and macOS iconutil)
+[group('build')]
+icons:
+    python3 scripts/generate-icons.py
+
 # Remove build output (keeps app/dist, which rust-embed needs to exist)
 [group('build')]
 clean:

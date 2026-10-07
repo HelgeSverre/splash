@@ -37,7 +37,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev pkg-config squashfs-tools
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev pkg-config squashfs-tools appstream desktop-file-utils
       - name: Windows installer tool
         if: runner.os == 'Windows'
         run: choco install nsis --no-progress -y
@@ -58,6 +58,9 @@ jobs:
           python scripts/package-platform.py --appimagetool target/appimage-tools/appimagetool --runtime target/appimage-tools/runtime
           python scripts/verify-appimage.py target/distrib/*.AppImage
           dpkg-deb --info target/distrib/*.deb
+          dpkg-deb -x target/distrib/*.deb target/deb-payload
+          desktop-file-validate target/deb-payload/usr/share/applications/no.helgesverre.splash.desktop
+          appstreamcli validate-tree --no-net target/deb-payload
       - name: Smoke Linux packages as an ordinary user in a fresh runtime
         if: runner.os == 'Linux'
         run: |

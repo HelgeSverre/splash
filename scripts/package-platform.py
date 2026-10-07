@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Package already-built native binaries. No cross-compilation or signing claims."""
 import argparse
+import datetime
 import hashlib
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import sys
 import subprocess
@@ -15,6 +17,9 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = tomllib.loads((ROOT / 'Cargo.toml').read_text())['package']['version']
+# Windows version resources take four numbers; prerelease suffixes are dropped.
+VERSION_NUMERIC = '.'.join(re.match(r'(\d+)\.(\d+)\.(\d+)', VERSION).groups()) + '.0'
+APP_ID = 'no.helgesverre.splash'
 
 def run(*args, **kwargs):
     subprocess.run([str(arg) for arg in args], check=True, **kwargs)
@@ -26,6 +31,22 @@ def copy(source, target, mode=0o755):
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, target)
     target.chmod(mode)
+
+def install_linux_metadata(root):
+    """Desktop entry, theme icons and AppStream metadata under a /usr prefix."""
+    copy(ROOT / f'packaging/{APP_ID}.desktop', root / f'share/applications/{APP_ID}.desktop', 0o644)
+    shutil.copytree(ROOT / 'packaging/icons/hicolor', root / 'share/icons/hicolor', dirs_exist_ok=True)
+    copy(ROOT / 'app/public/icon.svg', root / f'share/icons/hicolor/scalable/apps/{APP_ID}.svg', 0o644)
+    for icon in (root / 'share/icons').rglob('*'):
+        icon.chmod(0o755 if icon.is_dir() else 0o644)
+    stamp = int(os.environ.get('SOURCE_DATE_EPOCH') or datetime.datetime.now().timestamp())
+    date = datetime.datetime.fromtimestamp(stamp, datetime.timezone.utc).date()
+    metainfo = (ROOT / f'packaging/{APP_ID}.metainfo.xml').read_text().replace(
+        '</component>', f'  <releases>\n    <release version="{VERSION}" date="{date}"/>\n  </releases>\n</component>')
+    target = root / f'share/metainfo/{APP_ID}.metainfo.xml'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(metainfo)
+    target.chmod(0o644)
 
 def archive(source, output):
     if output.suffix == '.zip':
@@ -67,15 +88,19 @@ def main():
             (portable / 'README.txt').write_text('Windows 11 x64. Requires Microsoft Edge WebView2 Evergreen Runtime.\nDownload runtime: https://developer.microsoft.com/microsoft-edge/webview2/\nThis build is unsigned.\n')
             archive(portable, output / (portable.name + '.zip'))
             makensis = shutil.which('makensis') or str(Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'NSIS/makensis.exe')
-            run(makensis, f'/DVERSION={VERSION}', f'/DSOURCE={portable}', f'/DOUTPUT={output / (portable.name + "-setup.exe")}', ROOT / 'packaging/windows.nsi')
+            run(makensis, f'/DVERSION={VERSION}', f'/DVERSION_NUMERIC={VERSION_NUMERIC}', f'/DSOURCE={portable}', f'/DOUTPUT={output / (portable.name + "-setup.exe")}', ROOT / 'packaging/windows.nsi')
             checksum(output / (portable.name + '-setup.exe'))
         elif system == 'linux':
             stage = temp / 'deb'
             copy(desktop, stage / 'usr/bin/splash')
-            copy(ROOT / 'packaging/splash.desktop', stage / 'usr/share/applications/no.helgesverre.splash.desktop', 0o644)
-            copy(ROOT / 'app/public/icon.png', stage / 'usr/share/icons/hicolor/256x256/apps/splash.png', 0o644)
+            install_linux_metadata(stage / 'usr')
             control = stage / 'DEBIAN/control'; control.parent.mkdir()
-            control.write_text(f'Package: splash\nVersion: {VERSION}\nArchitecture: amd64\nMaintainer: Helge Sverre\nDepends: libgtk-3-0t64, libwebkit2gtk-4.1-0, libxdo3, libssl3t64\nDescription: Workspace for ACP coding agents\n')
+            control.write_text(f'Package: splash\nVersion: {VERSION}\nArchitecture: amd64\nMaintainer: Helge Sverre\nSection: devel\nPriority: optional\n'
+                               f'Homepage: https://github.com/HelgeSverre/splash\nDepends: libgtk-3-0t64, libwebkit2gtk-4.1-0, libxdo3, libssl3t64\n'
+                               'Description: Run coding agents in your git projects\n'
+                               ' Splash runs coding agents such as Claude Code, Codex and Gemini CLI over the\n'
+                               ' Agent Client Protocol, each session in a project folder or its own git\n'
+                               ' worktree. Agents are installed separately.\n')
             deb = output / f'Splash-{VERSION}-linux-{arch}.deb'
             run('dpkg-deb', '--root-owner-group', '--build', stage, deb); checksum(deb)
             portable = temp / f'Splash-{VERSION}-linux-{arch}'
@@ -87,8 +112,10 @@ def main():
             appdir = temp / 'Splash.AppDir'
             copy(desktop, appdir / 'usr/bin/splash')
             copy(ROOT / 'packaging/AppRun', appdir / 'AppRun')
-            copy(ROOT / 'packaging/splash.desktop', appdir / 'splash.desktop', 0o644)
-            copy(ROOT / 'app/public/icon.png', appdir / 'splash.png', 0o644)
+            install_linux_metadata(appdir / 'usr')
+            # appimagetool takes the entry and icon named by its Icon= key from the AppDir root.
+            copy(ROOT / f'packaging/{APP_ID}.desktop', appdir / f'{APP_ID}.desktop', 0o644)
+            copy(ROOT / f'packaging/icons/hicolor/256x256/apps/{APP_ID}.png', appdir / f'{APP_ID}.png', 0o644)
             copy(ROOT / 'packaging/linux-runtime.txt', appdir / 'README.txt', 0o644)
             image = output / f'Splash-{VERSION}-linux-{arch}.AppImage'
             run(args.appimagetool.resolve(), '--runtime-file', args.runtime.resolve(), appdir, image,

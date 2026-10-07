@@ -3,6 +3,8 @@
 
 use std::path::PathBuf;
 
+#[cfg(any(windows, target_os = "linux"))]
+use elyra::WindowIcon;
 use elyra::{command, commands, AboutInfo, App, Ctx};
 
 use crate::acp::map::TranscriptSnapshot;
@@ -546,6 +548,14 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
                 .author(env!("CARGO_PKG_AUTHORS"), "https://github.com/HelgeSverre")
                 .icon("/icon.png"),
         );
+    // Title bar and task switcher; macOS uses the bundle icon. The Windows
+    // resource is embedded by build.rs.
+    #[cfg(windows)]
+    let app = app.window_icon(WindowIcon::Resource(1));
+    #[cfg(target_os = "linux")]
+    let app = app.window_icon(WindowIcon::Png(include_bytes!(
+        "../packaging/icons/hicolor/256x256/apps/no.helgesverre.splash.png"
+    )));
     let hub = Hub::new(data_dir, app.events());
     app.bind_as::<Sessions>(hub.sessions)
         .bind_as::<Github>(hub.github)

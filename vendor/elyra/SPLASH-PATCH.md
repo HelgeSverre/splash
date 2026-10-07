@@ -22,3 +22,9 @@ On Windows, the initialization script translates the 0.8 runtime's exact
 `elyra://localhost/` fetch prefix to Wry's `http://elyra.localhost/` WebView2
 origin. Token/client headers and router authorization are unchanged. Remove
 this bridge when the frontend runtime supports the platform origin itself.
+
+`App::window_icon(WindowIcon)` sets each window's title-bar and task-switcher
+icon on Windows and Linux; upstream sets none. `WindowIcon::Png` decodes with the `png` crate already in
+the desktop dependency graph; `WindowIcon::Resource` loads an icon embedded in
+the Windows executable at the window's 16px and 32px logical sizes. macOS keeps
+using the bundle icon.

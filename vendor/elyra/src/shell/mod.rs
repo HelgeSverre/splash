@@ -75,6 +75,9 @@ struct Runner {
     /// The app-provided menu (installed per window outside macOS).
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     menu: Option<crate::menu::Menu>,
+    /// Title-bar/task-switcher icon applied to each window outside macOS.
+    #[cfg_attr(any(target_os = "macos", not(feature = "desktop")), allow(dead_code))]
+    window_icon: Option<crate::window::WindowIcon>,
     /// Abort handles for in-flight commands that carried a request id, so the
     /// frontend can cancel a slow/long-running command.
     cancellations: parking_lot::Mutex<std::collections::HashMap<String, tokio::task::AbortHandle>>,
@@ -106,6 +109,7 @@ impl TestShell {
                 csp: prepared.csp,
                 policy: prepared.policy,
                 menu: prepared.menu.clone(),
+                window_icon: prepared.window_icon,
                 cancellations: parking_lot::Mutex::new(std::collections::HashMap::new()),
             }),
         }

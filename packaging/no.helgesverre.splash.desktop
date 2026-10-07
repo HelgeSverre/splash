@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Splash
+GenericName=Coding Agent Workspace
+Comment=Run coding agents in your git projects
+Exec=splash
+Icon=no.helgesverre.splash
+Terminal=false
+Categories=Development;
+Keywords=ACP;agent;AI;git;worktree;
+StartupWMClass=splash

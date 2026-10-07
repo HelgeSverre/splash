@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for Linux software centres. scripts/package-platform.py
+     adds the <releases> entry for the version being packaged. -->
+<component type="desktop-application">
+  <id>no.helgesverre.splash</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Splash</name>
+  <summary>Run coding agents in your git projects</summary>
+  <description>
+    <p>
+      Splash is a desktop app for running coding agents such as Claude Code, Codex and Gemini CLI.
+      It talks to them over the Agent Client Protocol (ACP) and shows what they stream back:
+      messages, tool calls, diffs, plans and permission requests.
+    </p>
+    <p>
+      Each session is one agent working in one project folder. In a git repository it can run in a
+      separate worktree on its own branch. Agents are installed separately.
+    </p>
+  </description>
+  <developer id="no.helgesverre">
+    <name>Helge Sverre</name>
+  </developer>
+  <launchable type="desktop-id">no.helgesverre.splash.desktop</launchable>
+  <icon type="stock">no.helgesverre.splash</icon>
+  <url type="homepage">https://github.com/HelgeSverre/splash</url>
+  <url type="bugtracker">https://github.com/HelgeSverre/splash/issues</url>
+  <url type="vcs-browser">https://github.com/HelgeSverre/splash</url>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <provides>
+    <binary>splash</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+</component>

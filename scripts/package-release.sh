@@ -36,6 +36,10 @@ signing_args=(--force --options runtime --timestamp --sign "$APPLE_APPLICATION_S
 if [[ -n "${APPLE_SIGNING_KEYCHAIN:-}" ]]; then
   signing_args+=(--keychain "$APPLE_SIGNING_KEYCHAIN")
 fi
+# rata scales one PNG to every size; this icns has hand-simplified 16 and 32px entries.
+icon="$app_path/Contents/Resources/AppIcon.icns"
+[[ -f "$icon" ]] || { echo "rata bundle produced no AppIcon.icns" >&2; exit 1; }
+cp "$(dirname "$0")/../packaging/icons/AppIcon.icns" "$icon"
 # rata defaults to macOS 11; the UI targets Safari 17 (macOS Sonoma).
 plutil -replace LSMinimumSystemVersion -string "14.0" "$app_path/Contents/Info.plist"
 plutil -replace LSApplicationCategoryType -string "public.app-category.developer-tools" "$app_path/Contents/Info.plist"

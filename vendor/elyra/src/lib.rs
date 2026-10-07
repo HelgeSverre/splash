@@ -90,7 +90,7 @@ pub use store::Store;
 pub use substrate_core as substrate;
 pub use tray::{TrayConfig, TrayItem};
 pub use validation::{ValidationErrors, Validator};
-pub use window::{WindowConfig, Windows};
+pub use window::{WindowConfig, WindowIcon, Windows};
 pub use wire::WireError;
 
 #[cfg(feature = "system")]
@@ -157,7 +157,7 @@ pub mod prelude {
     pub use crate::event::EventBus;
     pub use crate::middleware::{CommandRequest, Middleware, Next};
     pub use crate::provider::Provider;
-    pub use crate::window::{WindowConfig, Windows};
+    pub use crate::window::{WindowConfig, WindowIcon, Windows};
     pub use crate::{command, commands};
 
     #[cfg(feature = "database")]

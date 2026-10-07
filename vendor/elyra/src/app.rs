@@ -14,9 +14,9 @@ use crate::middleware::Middleware;
 use crate::provider::Provider;
 #[cfg(feature = "desktop")]
 use crate::shell;
-use crate::window::WindowConfig;
 #[cfg(feature = "desktop")]
 use crate::window::{UserEvent, Windows};
+use crate::window::{WindowConfig, WindowIcon};
 #[cfg(feature = "desktop")]
 use tao::event_loop::EventLoopBuilder;
 
@@ -44,6 +44,7 @@ pub struct App {
     #[allow(clippy::type_complexity)]
     swaps: Vec<Box<dyn FnOnce(&mut Container)>>,
     windows: Vec<WindowConfig>,
+    window_icon: Option<WindowIcon>,
     tray: Option<crate::tray::TrayConfig>,
     about: AboutInfo,
     persist_window: bool,
@@ -84,6 +85,7 @@ pub struct Prepared {
     pub bus: EventBus,
     pub assets: Option<AssetResolver>,
     pub windows: Vec<WindowConfig>,
+    pub window_icon: Option<WindowIcon>,
     pub tray: Option<crate::tray::TrayConfig>,
     pub about: AboutInfo,
     pub persist_window: bool,
@@ -111,6 +113,7 @@ impl App {
             dispatcher: Arc::new(crate::dispatcher::Dispatcher::new()),
             swaps: Vec::new(),
             windows: vec![WindowConfig::default()],
+            window_icon: None,
             tray: None,
             about: AboutInfo::default(),
             persist_window: false,
@@ -497,6 +500,13 @@ impl App {
         self
     }
 
+    /// Set the title-bar and task-switcher icon for every window on Windows and
+    /// Linux. macOS uses the bundle icon.
+    pub fn window_icon(mut self, icon: WindowIcon) -> Self {
+        self.window_icon = Some(icon);
+        self
+    }
+
     /// Add an additional window to open at startup.
     pub fn window(mut self, config: WindowConfig) -> Self {
         self.windows.push(config);
@@ -727,6 +737,7 @@ impl App {
             prepared.bus,
             prepared.assets,
             prepared.windows,
+            prepared.window_icon,
             prepared.tray,
             prepared.about,
             prepared.persist_window,
@@ -822,6 +833,7 @@ impl App {
             dispatcher,
             swaps,
             windows,
+            window_icon,
             tray,
             mut about,
             persist_window,
@@ -944,6 +956,7 @@ impl App {
             bus,
             assets,
             windows,
+            window_icon,
             tray,
             about,
             persist_window,

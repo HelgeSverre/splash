@@ -22,7 +22,7 @@ use crate::command::CommandRegistry;
 use crate::container::Ctx;
 use crate::event::EventBus;
 use crate::security::Policy;
-use crate::window::{UserEvent, WindowAction, WindowConfig};
+use crate::window::{UserEvent, WindowAction, WindowConfig, WindowIcon};
 
 use super::router::route;
 use super::{ipc_handle, Runner, ABOUT_MENU_ID, SCHEME};
@@ -41,6 +41,7 @@ pub(crate) fn run(
     bus: EventBus,
     assets: Option<AssetResolver>,
     mut window_configs: Vec<WindowConfig>,
+    window_icon: Option<WindowIcon>,
     tray: Option<crate::tray::TrayConfig>,
     about: AboutInfo,
     persist_window: bool,
@@ -95,6 +96,7 @@ pub(crate) fn run(
         csp,
         policy,
         menu,
+        window_icon,
         cancellations: parking_lot::Mutex::new(std::collections::HashMap::new()),
     });
 
@@ -443,6 +445,59 @@ fn window_menu(
     Some(menu)
 }
 
+/// Set the title-bar (small) and task-switcher (big) icons. A failure only
+/// costs the icon, so it is logged rather than raised.
+#[cfg(not(target_os = "macos"))]
+fn apply_window_icon(window: &Window, icon: WindowIcon) {
+    match icon {
+        WindowIcon::Png(png) => match png_icon(png) {
+            Ok(icon) => window.set_window_icon(Some(icon)),
+            Err(e) => crate::warn!(target: "elyra::window", "could not load the window icon: {e}"),
+        },
+        // Ask for the exact pixel sizes so Windows picks the matching .ico
+        // entries instead of scaling one down.
+        #[cfg(windows)]
+        WindowIcon::Resource(id) => {
+            use tao::dpi::PhysicalSize;
+            use tao::platform::windows::{IconExtWindows, WindowExtWindows};
+            use tao::window::Icon;
+            let scale = window.scale_factor();
+            let load = |logical: f64| {
+                let px = (logical * scale).round() as u32;
+                Icon::from_resource(id, Some(PhysicalSize::new(px, px)))
+            };
+            match (load(16.0), load(32.0)) {
+                (Ok(small), Ok(big)) => {
+                    window.set_window_icon(Some(small));
+                    window.set_taskbar_icon(Some(big));
+                }
+                (Err(e), _) | (_, Err(e)) => {
+                    crate::warn!(target: "elyra::window", "could not load icon resource {id}: {e}")
+                }
+            }
+        }
+        #[cfg(not(windows))]
+        WindowIcon::Resource(_) => {}
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn png_icon(png: &[u8]) -> Result<tao::window::Icon, String> {
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::ALPHA);
+    let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+    let mut rgba = vec![0; reader.output_buffer_size().ok_or("the PNG is too large")?];
+    let frame = reader.next_frame(&mut rgba).map_err(|e| e.to_string())?;
+    if (frame.color_type, frame.bit_depth) != (png::ColorType::Rgba, png::BitDepth::Eight) {
+        return Err(format!(
+            "expected 8-bit RGBA, got {:?} at {:?}",
+            frame.color_type, frame.bit_depth
+        ));
+    }
+    rgba.truncate(frame.buffer_size());
+    tao::window::Icon::from_rgba(rgba, frame.width, frame.height).map_err(|e| e.to_string())
+}
+
 /// Build a window + its webview, wired to the shared protocol handler.
 fn build_window(
     target: &EventLoopWindowTarget<UserEvent>,
@@ -459,6 +514,10 @@ fn build_window(
         builder = builder.with_min_inner_size(LogicalSize::new(min_w, min_h));
     }
     let window = builder.build(target).expect("failed to build window");
+    #[cfg(not(target_os = "macos"))]
+    if let Some(icon) = runner.window_icon {
+        apply_window_icon(&window, icon);
+    }
 
     // Windows/Linux: the menu bar belongs to the window, so install it here.
     #[cfg(not(target_os = "macos"))]

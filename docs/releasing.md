@@ -199,3 +199,22 @@ signed macOS desktop ZIPs, then one publishing job verifies and publishes the
 complete release automatically. A branch workflow run only uploads Actions
 artifacts. These gates are startup/install smoke tests, not exhaustive agent or
 operating-system certification; see the artifact smoke-test report for coverage.
+
+## App icon
+
+`app/public/icon.svg` is the single source; the website favicon and the in-app
+`SplashMark` use the same drop. After changing it, run `just icons` on macOS
+(needs `resvg` and Pillow) and commit the outputs. Releases do not render icons.
+
+| Output | Used by |
+|---|---|
+| `app/public/icon.png` | 1024px on Apple's grid: `rata bundle` source, About dialog, README |
+| `packaging/icons/AppIcon.icns` | Replaces rata's scaled `.icns` in `scripts/package-release.sh` before signing |
+| `packaging/icons/splash.ico` | `splash.exe` resource (`build.rs`), title bar and taskbar, NSIS installer and uninstaller |
+| `packaging/icons/hicolor/` | DEB and AppImage theme icons, Linux window icon; `icon.svg` installs as the scalable size |
+
+Sizes whose tile is under 40px show the drop alone, without the spray dots.
+`splash.exe` and the installer also carry Windows version details. Linux
+packages install `no.helgesverre.splash.desktop` and AppStream metadata
+(`no.helgesverre.splash.metainfo.xml`) under the same ID as the icon; CI
+checks both with `desktop-file-validate` and `appstreamcli validate-tree`.

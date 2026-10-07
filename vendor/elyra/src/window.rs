@@ -95,6 +95,17 @@ impl WindowConfig {
     }
 }
 
+/// The icon every window shows in its title bar and the task switcher on
+/// Windows and Linux. macOS takes the app icon from the bundle instead.
+#[derive(Clone, Copy, Debug)]
+pub enum WindowIcon {
+    /// 8-bit RGBA PNG bytes, decoded when a window opens.
+    Png(&'static [u8]),
+    /// An icon resource compiled into the Windows executable, loaded at the
+    /// sizes the window's scale factor calls for. Ignored on other platforms.
+    Resource(u16),
+}
+
 /// Events the tao loop listens for at runtime.
 pub(crate) enum UserEvent {
     OpenWindow(WindowConfig),
