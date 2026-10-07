@@ -1,7 +1,7 @@
 name: Release
 
-# Builds the macOS app and attaches it to a draft release. Runs on a version
-# tag (v0.1.0, ...) or by hand; nothing publishes until the draft is.
+# Tag builds publish automatically after all gates pass. Branch dispatches only
+# produce test artifacts. Publication is serialized and safe to retry.
 on:
   push:
     tags: ["v*"]
@@ -10,21 +10,30 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 scripts/release_pipeline.py
+
   check:
+    needs: validate
     uses: ./.github/workflows/ci.yml
 
   macos:
     name: macOS app
-    needs: check
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
         os: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    permissions:
-      contents: write
     env:
       APPLE_APPLICATION_SIGNING_IDENTITY: ${{ vars.APPLE_APPLICATION_SIGNING_IDENTITY }}
       APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
@@ -36,21 +45,6 @@ jobs:
         run: |
           echo "APPLE_SIGNING_KEYCHAIN=$RUNNER_TEMP/splash-signing.keychain-db" >> "$GITHUB_ENV"
           echo "APPLE_NOTARY_KEY_PATH=$RUNNER_TEMP/splash-notary.p8" >> "$GITHUB_ENV"
-
-      - name: Check release version
-        run: |
-          python3 - <<'PY'
-          import os
-          import tomllib
-          from pathlib import Path
-          version = tomllib.loads(Path("Cargo.toml").read_text())["package"]["version"]
-          bundle = tomllib.loads(Path("elyra.toml").read_text())["bundle"]
-          assert bundle["version"] == version, "Cargo and bundle versions must match"
-          assert bundle["identifier"] == "no.helgesverre.splash", "Unexpected bundle identifier"
-          assert Path(f".github/release-notes-{version}.md").is_file(), "Missing release notes"
-          if os.environ["GITHUB_REF_TYPE"] == "tag":
-              assert os.environ["GITHUB_REF_NAME"] == f"v{version}", "Tag must match app version"
-          PY
 
       - name: Import signing credentials
         env:
@@ -107,7 +101,7 @@ jobs:
           rm -f "$RUNNER_TEMP/splash-notary.p8" "$RUNNER_TEMP/splash-signing.p12"
 
   publish:
-    name: Assemble draft release
+    name: Publish complete release
     needs: [check, macos]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
@@ -120,9 +114,8 @@ jobs:
           pattern: splash-*
           merge-multiple: true
           path: release-assets
-      - name: Create draft with every platform artifact
+      - name: Verify assets and publish (or resume a draft)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" release-assets/* \
-            --verify-tag --draft --notes-file ".github/release-notes-${GITHUB_REF_NAME#v}.md" --title "Splash $GITHUB_REF_NAME"
+          RELEASE_OPERATION: publish
+        run: python3 scripts/release_pipeline.py

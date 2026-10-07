@@ -276,8 +276,11 @@ CI artifacts are test builds, not signed public releases.
 
 All archives/installers have adjacent SHA-256 files. Verify with `sha256sum -c`
 on Linux, `shasum -a 256` on macOS, or `Get-FileHash -Algorithm SHA256` on Windows.
-Tagged releases assemble all platform artifacts into one **draft**, after native
-checks and package smoke tests pass. macOS signing/notarization keeps using the
+Tagged releases publish automatically after native checks, package smoke tests,
+macOS notarization and a complete checksum-verified asset inventory pass. A new
+app version on `main` is tagged automatically after CI succeeds. The historical
+`v0.1.0` release contains only the original Apple silicon macOS build; the full
+platform matrix applies to subsequent releases. macOS signing/notarization keeps using the
 configured Apple secrets for desktop app ZIPs; Windows packages and standalone
 server archives are unsigned.
 
@@ -741,7 +744,7 @@ For substantial UI changes, capture most major affected screens in an isolated
 demo workspace, inspect the images, show them during the work, and update the
 gallery above. See [AGENTS.md](AGENTS.md) for the screenshot policy.
 
-CI runs `just check` on pushes to main, pull requests and before every release build. Pushing a `v*` tag builds, signs and notarizes the app, then collects the macOS ZIPs, Windows/Linux packages and headless archives with checksums into one draft release. The tag must match the Cargo and bundle versions. See [Releasing](docs/releasing.md) for signing configuration and local verification.
+CI runs `just check` on pushes to main, pull requests and before every release build. A new app version on `main` is tagged after green CI; pushing a matching `v*` tag also triggers a release. The release workflow builds, signs and notarizes the macOS app, collects every platform package with checksums, generates release notes, and publishes automatically. Tags must match the Cargo, lockfile and bundle versions. Published assets are never overwritten by retries. See [Releasing](docs/releasing.md) for signing configuration and local verification.
 
 ## License
 

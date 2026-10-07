@@ -68,24 +68,72 @@ The workflow imports credentials into a temporary runner keychain and removes
 them even if the build fails. Missing credentials fail the release; there is no
 unsigned fallback. No Installer certificate is needed for the app ZIP.
 
-## Create a release
+## Automated release lifecycle
 
-1. Set the same version in `Cargo.toml` and `elyra.toml`, and update `Cargo.lock`.
-2. Write `.github/release-notes-VERSION.md`, commit the changes and push a
-   matching tag, for example `v0.1.0`.
-3. The Release workflow runs the reusable CI gate on that exact commit before
-   building the app. It then signs with hardened runtime and a secure timestamp,
-   submits to Apple, requires an accepted notarization result, and staples the app.
-4. The workflow packages the stapled app, extracts the ZIP, checks its signature,
-   ticket and Gatekeeper assessment, and creates a SHA-256 checksum.
-5. Download and launch the app on a clean Mac, exercise an agent session, cancel,
-   restart/resume and the dirty-worktree deletion confirmation, then publish the
-   draft release manually.
+1. Set the same new version in `Cargo.toml` and `elyra.toml`, and update
+   `Cargo.lock`. Commit or merge that version bump to `main`. The version bump is
+   the release decision; ordinary commits with an already-tagged version do not
+   create another release.
+2. CI runs native checks, frontend tests, real webview/IPC smoke tests and package
+   checks on macOS arm64/x64, Linux x64 and Windows x64. It also checks the Linux
+   server without GUI dependencies. Candidate packages remain available as
+   Actions artifacts on ordinary pushes and pull requests.
+3. After successful CI on a same-repository `main` push, **Tag checked version**
+   creates `vVERSION` at that exact tested commit and dispatches **Release** on
+   the tag. It never moves an existing tag. It uses the built-in `GITHUB_TOKEN`;
+   no personal access token or additional secret is needed. Explicit dispatch is
+   necessary because token-created tag pushes do not trigger workflows.
+4. Release validates all version files before starting expensive jobs. It runs
+   the CI/package gate and both macOS signing jobs concurrently. macOS bundles
+   use hardened runtime, an Apple-accepted notarization submission, a stapled
+   ticket and verification of the extracted distribution ZIP.
+5. One publishing job requires all 11 packages and their 11 SHA-256 sidecars,
+   verifies their names and hashes, creates a hidden draft, uploads the complete
+   set, checks the remote inventory, then publishes automatically. A failed build
+   cannot publish a partial release.
+6. GitHub generates release notes. Optional `.github/release-notes-VERSION.md`
+   text is prepended for curated highlights. Versions such as `1.2.3-rc.1` become
+   prereleases and do not become Latest; stable releases use GitHub's automatic
+   version/date selection for Latest.
 
-Manual workflow runs also require signing and notarization. They upload Actions
-artifacts; runs on branches do not create a GitHub release. The ZIP name records
-the build host architecture. The `macos-15` runner builds for Apple Silicon and `macos-15-intel` builds for Intel. The frontend targets
-Safari 17, and packaging sets macOS 14 as the minimum supported version.
+You can still push a matching `v*` tag yourself. The release checks the exact
+commit behind that tag. Tags are serialized so overlapping runs cannot upload
+at the same time. A retry resumes an incomplete draft; an already-published
+release is left unchanged, including its binaries and notes.
+
+To retry a failed release, rerun its failed Actions jobs or dispatch the workflow
+on its tag:
+
+```sh
+gh workflow run release.yml --ref vVERSION
+```
+
+A manual workflow run on a branch builds signed artifacts but does not publish.
+No manual approval, draft publication, release-note file or tag creation is
+required in the normal version-bump flow. Signing credentials still need initial
+setup and renewal when they expire. We intentionally do not infer version bumps
+from arbitrary commit messages or publish every commit as a stable version.
+
+The CI gate is rerun on the tag to keep direct tag pushes and retries equally
+verified; package jobs are not duplicated inside that release run. Build caches
+reduce repeated compilation. macOS runners build Apple silicon (`macos-15`) and
+Intel (`macos-15-intel`) ZIPs. The frontend targets Safari 17 and the minimum
+macOS version is 14.
+
+### Historical release backfill
+
+`v0.1.0` already had a successful release workflow and a draft containing the
+original signed/notarized Apple silicon ZIP and checksum. Those original assets
+were downloaded and their checksum, signature, stapled ticket and Gatekeeper
+assessment verified before publishing the draft. Its tag remains at
+`be6738e8fb78aae4340503acf9c2d2546ee6d083`. It does not contain the later Windows,
+Linux, Intel macOS or headless packages. Newer CI binaries must never be attached
+to an older tag. Other historical tags should only be backfilled from successful
+builds of their exact commit, not current `main`.
+
+References: [GitHub workflow triggering and token behavior](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow),
+[generated release notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes),
+and [release API / Latest selection](https://docs.github.com/en/rest/releases/releases).
 
 ## Local verification
 
@@ -142,6 +190,7 @@ sandbox remains enabled. Xvfb covers X11; Wayland still needs a native manual
 check. See the README for runtime packages and FUSE-free extraction.
 
 On a version tag, the Release workflow waits for these packages and both
-signed macOS desktop ZIPs, then one publishing job collects them into a single
-draft release. Do not publish a draft until platform checks and manual launch
-checks pass. A branch workflow run only uploads Actions artifacts.
+signed macOS desktop ZIPs, then one publishing job verifies and publishes the
+complete release automatically. A branch workflow run only uploads Actions
+artifacts. These gates are startup/install smoke tests, not exhaustive agent or
+operating-system certification; see the artifact smoke-test report for coverage.

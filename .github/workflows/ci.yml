@@ -76,6 +76,7 @@ jobs:
           actionlint
           shellcheck scripts/import-signing-assets.sh scripts/package-release.sh scripts/fetch-appimagetool.sh packaging/AppRun
           python -B scripts/test_release.py
+          python -B scripts/test_release_pipeline.py
   headless-linux:
     name: Linux server without GUI libraries
     runs-on: ubuntu-24.04
