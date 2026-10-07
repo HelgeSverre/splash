@@ -49,10 +49,17 @@ export function orderedSessions() {
 
 // ── loading ──────────────────────────────────────────────────────────────────
 
+// Projects announced while loadAll is in flight (folders passed at startup):
+// the list it fetched may predate them.
+let arriving: Project[] | null = null;
+
 export async function loadAll() {
-  const [projects, sessions, settings, info] = await Promise.all([api.list_projects(), api.list_sessions(), api.get_settings(), api.app_info()]);
+  const arrived: Project[] = (arriving = []);
+  const [projects, sessions, settings, info] = await Promise.all([api.list_projects(), api.list_sessions(), api.get_settings(), api.app_info()])
+    .finally(() => { if (arriving === arrived) arriving = null; });
   configurePaths(info);
   app.projects = projects;
+  for (const p of arrived) if (!projects.some((x) => x.id === p.id)) addSorted(p);
   app.sessions = sessions;
   Object.assign(prefs, settings);
   await refreshAgents(false);
@@ -191,6 +198,7 @@ export function applyAgent(a: AgentStatus | undefined) {
 
 /** A project added elsewhere (the command line, another window). */
 export function applyProject(p: Project | undefined) {
+  if (p) arriving?.push(p);
   if (!p || app.projects.some((x) => x.id === p.id)) return;
   addSorted(p);
 }
