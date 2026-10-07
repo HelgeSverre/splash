@@ -6,7 +6,9 @@ with `just codegen` after changing exposed Rust types or commands.
 
 ## Validation
 
-Run `just check` and `just frontend` for significant changes. Use an isolated
+Run `just check` and `just frontend` for significant changes. Run `just e2e`
+for UI or backend flow changes; it drives the desktop UI and the web version
+with fixture agents only. New or changed UI flows need a test in `e2e/tests`. Use an isolated
 `SPLASH_DATA_DIR` for app testing and screenshots; do not use personal agent
 conversations or modify the user's normal Splash database as test data.
 

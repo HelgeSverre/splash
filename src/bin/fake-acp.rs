@@ -6,6 +6,10 @@
 //! results, and each `session/prompt` with the recorded turn: its updates (with
 //! the recorded gaps), its permission requests (waiting for our answer), and
 //! finally the recorded stop reason. `session/cancel` cuts the turn short.
+//!
+//! Test flags: `--apply-diffs` writes each completed edit's new text to disk,
+//! `--exit-mid-turn N` dies after N steps of the first turn, `--fail-prompt`
+//! answers every prompt with an error.
 
 use std::io::Write;
 use std::time::Duration;
@@ -53,6 +57,9 @@ async fn main() {
         return;
     }
     let audit = option("--audit");
+    let apply_diffs = args.iter().any(|s| s == "--apply-diffs");
+    let exit_mid_turn: Option<usize> = option("--exit-mid-turn").and_then(|n| n.parse().ok());
+    let mut first_turn = true;
     let required_root = option("--require-root");
     let state = option("--state");
     let path = std::env::args()
@@ -236,14 +243,22 @@ async fn main() {
                 send(json!({"jsonrpc": "2.0", "id": id, "result": {"configOptions": opts}}));
             }
             "session/set_mode" => send(json!({"jsonrpc": "2.0", "id": id, "result": {}})),
+            "session/prompt" if args.iter().any(|s| s == "--fail-prompt") => send(
+                json!({"jsonrpc":"2.0", "id":id, "error":{"code":-32603,"message":"Internal error: the model is unavailable"}}),
+            ),
             "session/prompt" => {
                 let sid = msg["params"]["sessionId"].clone();
+                let exit_after = exit_mid_turn.filter(|_| std::mem::take(&mut first_turn));
                 let Some(turn) = turns.next() else {
                     send(json!({"jsonrpc": "2.0", "id": id, "result": {"stopReason": "end_turn"}}));
                     continue;
                 };
                 let mut cancelled = false;
-                'steps: for (delay, mut step) in turn.steps {
+                'steps: for (n, (delay, mut step)) in turn.steps.into_iter().enumerate() {
+                    if exit_after == Some(n) {
+                        eprintln!("fake-acp: lost connection to the model provider");
+                        std::process::exit(1);
+                    }
                     if speed > 0.0 {
                         let wait = Duration::from_millis((delay as f64 / speed) as u64);
                         // Watch for a cancel while waiting.
@@ -274,6 +289,9 @@ async fn main() {
                             }
                         }
                     } else {
+                        if apply_diffs {
+                            write_diffs(&step);
+                        }
                         send(step);
                     }
                 }
@@ -328,6 +346,23 @@ fn extract_turns(rows: &[Value]) -> Vec<Turn> {
         i += 1;
     }
     turns
+}
+
+/// A completed tool call's diff content, written to disk like a real edit.
+fn write_diffs(step: &Value) {
+    let update = &step["params"]["update"];
+    if update["status"] != "completed" {
+        return;
+    }
+    for item in update["content"].as_array().into_iter().flatten() {
+        if let (Some("diff"), Some(path), Some(text)) = (
+            item["type"].as_str(),
+            item["path"].as_str(),
+            item["newText"].as_str(),
+        ) {
+            let _ = std::fs::write(path, text);
+        }
+    }
 }
 
 fn send(v: Value) {

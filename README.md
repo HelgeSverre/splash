@@ -689,6 +689,7 @@ app/src/
   components/       UI; ui/ holds shared primitives, playground/ a component gallery
 fixtures/           ACP traffic recorded from Claude Code, Codex, Glue, Pi and Pool
 tests/              mapper, actor, hub and store tests
+e2e/                browser tests of the app's flows (Playwright), fake agents and gh
 ```
 
 ### Platform boundaries
@@ -699,6 +700,8 @@ shortcut labels and Linux paths. Browser mode avoids reserved navigation keys;
 explicit saved shortcut overrides retain their meaning.
 
 Agents use native PATH/PATHEXT resolution, including Windows npm `.cmd` launchers.
+On Unix the search path comes from a login shell; `SPLASH_PATH` replaces it
+verbatim (the end-to-end tests use it so only their fake agents are found).
 Arguments are passed separately through Rust's process API. Terminals choose
 `pwsh`, Windows PowerShell, then `COMSPEC` on Windows, and a login shell on Unix;
 `SPLASH_SHELL` overrides the executable. Windows processes and ConPTY shells
@@ -725,6 +728,7 @@ build modes.
 just dev        # hot reload for frontend changes (Rust changes need a restart)
 just check      # formatting, clippy, svelte-check, style scripts, all Rust tests
 just test       # Rust tests only
+just e2e        # browser tests of every flow, desktop UI and web version
 just codegen    # regenerate app/src/bindings.ts after changing a command or event
 just site       # the marketing site in website/, built from the app's own components
 ```
@@ -737,6 +741,7 @@ just site       # the marketing site in website/, built from the app's own compo
 - `tests/hub.rs` runs the sessions service: worktrees, titles, archive, delete, concurrent opens, history discovery/import, directory ownership, and persistent attention.
 - `tests/store.rs` covers persistence, transcript search, indexing updates, and import identity; there are also unit tests in `src/`.
 - `node --experimental-strip-types --test app/tests/*.test.ts` runs the frontend model tests; `just check` also type-checks the Svelte UI.
+- `just e2e` drives the real UI in headless Chromium, against both the desktop UI (`splash-web`) and the web version (`splash-server`). Each test gets its own data folder, home, git repository and fake agents; no real agent, account or GitHub login is used. See [e2e/README.md](e2e/README.md).
 
 To record a fixture: `just spike claude ./some/repo "a prompt" --record name`.
 

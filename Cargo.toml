@@ -12,9 +12,9 @@ authors = ["Helge Sverre"]
 repository = "https://github.com/HelgeSverre/splash"
 homepage = "https://github.com/HelgeSverre/splash"
 readme = "README.md"
-# Documentation images and the marketing site are tracked in Git, but never
-# shipped in the crate.
-exclude = ["/screenshots/**", "/website/**", "/signing/**"]
+# Documentation images, the marketing site and the browser tests are tracked in
+# Git, but never shipped in the crate.
+exclude = ["/screenshots/**", "/website/**", "/e2e/**", "/signing/**"]
 keywords = ["acp", "coding-agents", "desktop", "cross-platform"]
 categories = ["development-tools", "gui"]
 default-run = "splash"

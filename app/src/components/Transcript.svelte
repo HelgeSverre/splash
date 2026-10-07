@@ -71,7 +71,7 @@
     {/if}
 
     {#each entries as e, i (i)}
-      <div id={`entry-${session.id}-${i}`} class:matched={app.focusEntry === i}><EntryView entry={e} {session} /></div>
+      <div id={`entry-${session.id}-${i}`} class:matched={app.focusEntry === i} data-kind={e.kind}><EntryView entry={e} {session} /></div>
     {/each}
 
     {#if quiet}

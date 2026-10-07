@@ -62,7 +62,7 @@
       PR #{git.pr.number}<Tag tone={PR_TONE[git.pr.state.toLowerCase()] ?? "default"}>{git.pr.state.toLowerCase()}</Tag>
     </button>
   {/if}
-  <span class="status {session.status}"><span class="dot {session.status}"></span>{statusLabel(session.status)}</span>
+  <span class="status {session.status}" data-status={session.status}><span class="dot {session.status}"></span>{statusLabel(session.status)}</span>
   {#if session.archived}<Tag tone="muted">archived</Tag>{/if}
 
   <span class="spacer"></span>

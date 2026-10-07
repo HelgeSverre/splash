@@ -57,6 +57,22 @@ clean:
 test:
     cargo test --no-fail-fast
 
+# Browser tests of the app's flows: desktop UI (splash-web) and web version (splash-server), fake agents only
+[group('qa')]
+e2e *ARGS: frontend
+    cargo build --bin splash-web --bin fake-acp
+    cargo build --no-default-features --bin splash-server
+    @[ -d e2e/node_modules ] || (cd e2e && npm ci && npx playwright install chromium)
+    cd e2e && npx playwright test {{ ARGS }}
+
+# The browser tests in Playwright's UI mode: pick tests, watch them, read traces
+[group('qa')]
+e2e-ui: frontend
+    cargo build --bin splash-web --bin fake-acp
+    cargo build --no-default-features --bin splash-server
+    @[ -d e2e/node_modules ] || (cd e2e && npm ci && npx playwright install chromium)
+    cd e2e && npx playwright test --ui
+
 # Format the Rust code
 [group('qa')]
 fmt:

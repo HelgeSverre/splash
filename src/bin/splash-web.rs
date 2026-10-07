@@ -3,6 +3,10 @@
 //!
 //! SPLASH_DATA_DIR=/tmp/splash-dev cargo run --bin splash-web -- [--port 4780] [folder…]
 //!
+//! `--port 0` binds a free port; the URL line on stderr names it.
+//! `SPLASH_WEB_DIALOG_FILE` names a JSON array of paths that the stubbed native
+//! file dialog answers with (for tests of "Add a project folder").
+//!
 //! Requests go through Elyra's own protocol handler (`TestShell`), so commands,
 //! the event long-poll and asset serving are exactly what the app runs. The
 //! page gets a small shim: the IPC token, and `fetch` rewritten from
@@ -51,6 +55,10 @@ fn main() {
     };
     let token = shell.token().to_string();
     let server = tiny_http::Server::http(("127.0.0.1", port)).expect("bind");
+    let port = server
+        .server_addr()
+        .to_ip()
+        .map_or(port, |addr| addr.port());
     eprintln!(
         "splash-web on http://127.0.0.1:{port}  (data: {})",
         splash::app::data_dir().display()
@@ -127,22 +135,36 @@ fn main() {
     }
 }
 
-/// Native desktop routes answered with inert values: an empty file dialog, no
-/// notification, no external open.
-fn native_stub(path: &str) -> Option<&'static [u8]> {
+/// Native desktop routes answered with inert values: an empty file dialog (or
+/// the paths in SPLASH_WEB_DIALOG_FILE), no notification, no external open.
+fn native_stub(path: &str) -> Option<Vec<u8>> {
     if !path.starts_with("/__sys/") {
         return None;
     }
-    // msgpack: 0x90 = [], 0xc0 = nil
-    Some(if path.contains("dialog") {
-        &[0x90]
-    } else {
-        &[0xc0]
-    })
+    if !path.contains("dialog") {
+        return Some(vec![0xc0]); // msgpack nil
+    }
+    let answer: Vec<String> = std::env::var_os("SPLASH_WEB_DIALOG_FILE")
+        .and_then(|file| std::fs::read(file).ok())
+        .and_then(|json| serde_json::from_slice(&json).ok())
+        .unwrap_or_default();
+    Some(msgpack_strings(&answer))
 }
 
-fn msgpack(bytes: &'static [u8]) -> tiny_http::Response<std::io::Cursor<Vec<u8>>> {
-    let mut r = tiny_http::Response::from_data(bytes.to_vec());
+/// A msgpack array of strings (the dialog's reply shape).
+fn msgpack_strings(items: &[String]) -> Vec<u8> {
+    let mut out = vec![0xdc];
+    out.extend((items.len() as u16).to_be_bytes());
+    for item in items {
+        out.push(0xda);
+        out.extend((item.len() as u16).to_be_bytes());
+        out.extend(item.as_bytes());
+    }
+    out
+}
+
+fn msgpack(bytes: Vec<u8>) -> tiny_http::Response<std::io::Cursor<Vec<u8>>> {
+    let mut r = tiny_http::Response::from_data(bytes);
     r.add_header(tiny_http::Header::from_bytes("content-type", "application/msgpack").unwrap());
     r.add_header(tiny_http::Header::from_bytes("x-elyra-status", "ok").unwrap());
     r

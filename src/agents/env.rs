@@ -5,9 +5,15 @@ use std::sync::OnceLock;
 
 static PATH: OnceLock<OsString> = OnceLock::new();
 
+/// SPLASH_PATH, when set, is used verbatim: no login shell, no extra folders.
+/// Tests use it so only their fake agents can be found.
 pub fn path() -> &'static OsStr {
-    PATH.get_or_init(|| login_shell_path().unwrap_or_else(fallback_path))
-        .as_os_str()
+    PATH.get_or_init(|| {
+        std::env::var_os("SPLASH_PATH")
+            .or_else(login_shell_path)
+            .unwrap_or_else(fallback_path)
+    })
+    .as_os_str()
 }
 
 #[cfg(unix)]
