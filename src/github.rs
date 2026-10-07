@@ -904,12 +904,10 @@ mod tests {
             let hub = crate::hub::Hub::new(dir.clone(), elyra::EventBus::new());
             let mut github = Github::new(hub.core.clone());
             github.executable = Some(dir.join(if cfg!(windows) { "gh.cmd" } else { "gh" }));
-            Self { dir, github }
-        }
-        fn response(&self, json: &str, success: bool) {
-            std::fs::write(self.dir.join("response.json"), json).unwrap();
-            std::fs::write(self.dir.join("status"), if success { "0" } else { "1" }).unwrap();
-            std::fs::write(self.dir.join("fixture.py"), r#"import pathlib, sys
+            // The fake gh is written once, before anything runs it: rewriting an
+            // executable while other tests spawn processes can fail its next
+            // exec with "Text file busy" on Linux. Responses are plain data.
+            std::fs::write(dir.join("fixture.py"), r#"import pathlib, sys
 root = pathlib.Path(__file__).parent
 (root / 'args').write_text('\n'.join(sys.argv[1:]), encoding='utf-8')
 if '--input' in sys.argv:
@@ -920,14 +918,14 @@ sys.exit(status)
 "#).unwrap();
             #[cfg(windows)]
             std::fs::write(
-                self.dir.join("gh.cmd"),
+                dir.join("gh.cmd"),
                 "@echo off\r\npython \"%~dp0fixture.py\" %*\r\n",
             )
             .unwrap();
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let path = self.dir.join("gh");
+                let path = dir.join("gh");
                 std::fs::write(
                     &path,
                     "#!/bin/sh\nexec python3 \"$(dirname \"$0\")/fixture.py\" \"$@\"\n",
@@ -935,6 +933,11 @@ sys.exit(status)
                 .unwrap();
                 std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
             }
+            Self { dir, github }
+        }
+        fn response(&self, json: &str, success: bool) {
+            std::fs::write(self.dir.join("response.json"), json).unwrap();
+            std::fs::write(self.dir.join("status"), if success { "0" } else { "1" }).unwrap();
         }
     }
     impl Drop for Fixture {
