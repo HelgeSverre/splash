@@ -142,6 +142,17 @@ export class App {
     await expect(this.entries("turn_end")).toHaveCount(ends + 1);
   }
 
+  /** Allow the next `count` permission requests with their first option,
+   * one at a time: each is answered before the next is clicked. */
+  async allowPermissions(count: number) {
+    const answered = this.entries("permission").locator(".answer");
+    const done = await answered.count();
+    for (let i = 1; i <= count; i++) {
+      await this.entries("permission").locator(".perm.pending").getByRole("button").first().click();
+      await expect(answered).toHaveCount(done + i);
+    }
+  }
+
   async openNav(name: "Sessions" | "Needs attention" | "GitHub" | "Actions") {
     await this.sidebar.getByRole("button", { name: new RegExp(`^${name}`) }).click();
   }

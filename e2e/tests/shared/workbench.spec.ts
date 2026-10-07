@@ -134,8 +134,9 @@ test("the log shows the agent's JSON-RPC traffic and filters it", async ({ splas
 
   const filter = page.getByRole("searchbox", { name: "Filter the log" }).or(page.getByRole("textbox", { name: "Filter the log" }));
   const lines = page.locator(".log .line");
+  // The finished turn's traffic loads with the tab.
+  await expect.poll(() => lines.count()).toBeGreaterThan(10);
   const total = await lines.count();
-  expect(total).toBeGreaterThan(10);
   await filter.fill("session/prompt");
   await expect(lines).toHaveCount(1);
   await expect(page.getByText(`1 of ${total} lines`)).toBeVisible();

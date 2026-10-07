@@ -36,10 +36,7 @@ test("thinking folds into a Thought once it finishes", async ({ splash }) => {
   await app.newSession({ where: "in_place" });
   await app.send("Find calc.py");
   // Two permission requests on the way.
-  for (let i = 0; i < 2; i++) {
-    await expect(app.entries("permission").locator(".perm.pending")).toHaveCount(1);
-    await app.entries("permission").locator(".perm.pending").getByRole("button").first().click();
-  }
+  await app.allowPermissions(2);
   await expect(app.entries("turn_end")).toBeVisible();
   const thought = app.entries("thought").first();
   await expect(thought).toContainText("Thought");

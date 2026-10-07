@@ -36,7 +36,7 @@ test("an agent that can only load replays into the same transcript", async ({ sp
   world.agents.fixture("claude", "pool/read.jsonl");
   await app.newSession({ where: "in_place" });
   await app.send("Find calc.py");
-  for (let i = 0; i < 2; i++) await app.entries("permission").locator(".perm.pending").getByRole("button").first().click();
+  await app.allowPermissions(2);
   await expect(app.entries("turn_end")).toBeVisible();
   const entries = await app.transcript.locator("[data-kind]").count();
 

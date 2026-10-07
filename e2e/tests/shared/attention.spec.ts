@@ -17,8 +17,7 @@ test("a pending permission waits in the inbox until answered", async ({ splash }
   await waiting.getByRole("button", { name: "Answer permission" }).click();
 
   await expect(app.entries("permission").locator(".perm.pending")).toHaveCount(1);
-  await app.entries("permission").locator(".perm.pending").getByRole("button").first().click();
-  await app.entries("permission").locator(".perm.pending").getByRole("button").first().click();
+  await app.allowPermissions(2);
   await expect(app.entries("turn_end")).toBeVisible();
   await app.openNav("Needs attention");
   await expect(page.getByRole("region", { name: "Waiting for permission" })).toHaveCount(0);

@@ -7,7 +7,7 @@ test("the review shows the response and the tools that failed", async ({ splash 
   world.agents.fixture("claude", "pool/read.jsonl");
   await app.newSession({ where: "in_place" });
   await app.send("Find calc.py");
-  for (let i = 0; i < 2; i++) await app.entries("permission").locator(".perm.pending").getByRole("button").first().click();
+  await app.allowPermissions(2);
   await expect(app.entries("turn_end")).toBeVisible();
 
   // Finishing selects the Review tab.
