@@ -64,7 +64,7 @@ export const OS_NAMES: Record<Os, string> = { macos: 'macOS', windows: 'Windows'
 export type Release = { version: string; date: string; notes: string };
 
 const notes = import.meta.glob('$repo/.github/release-notes-*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-const DATES: Record<string, string> = { '0.1.0': '2026-10-05', '0.2.0': '2026-10-07' };
+const DATES: Record<string, string> = { '0.1.0': '2026-10-05', '0.2.0': '2026-10-07', '0.2.1': '2026-10-07' };
 
 /** Every release with notes, newest first. */
 export const RELEASES: Release[] = Object.entries(notes)
