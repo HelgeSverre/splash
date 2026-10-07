@@ -71,6 +71,29 @@ for edits on disk and failures.
 `--announce-commands` sends the recording's slash commands right after
 `session/new`, as adapters do, so a Settings refresh (the handshake) lists them.
 
+## Fake GitHub
+
+`test.use({ gh: true })` puts `fakes/gh` on the PATH. It hands every call to
+`fakes/gh-router/router.py` (Python standard library only), which answers the
+`gh api` and `gh pr view` requests Splash makes from a scenario
+(`fakes/gh-router/scenarios/triage.json`: the login `octocat`, repositories
+under `e2e/` and `e2e-labs/`, their issues, pull requests, branches, events and
+Actions runs). Anything else fails with `HTTP 404`; nothing reaches the network.
+Tests steer it through `support/github.ts`:
+
+```ts
+bareRemote(world, "e2e/demo");                   // the repo's origin, served offline
+const gh = new FakeGithub(world);
+gh.update((s) => { /* edit this test's scenario */ });
+gh.fail(/^graphql pullRequests e2e\/demo$/, "gh: Not Found (HTTP 404)");
+gh.graphql(/search\(/)[0].variables.q;            // what Splash asked
+await pinClock(page);                             // the scenario's "now"
+```
+
+`bareRemote` keeps `origin` at `https://github.com/e2e/demo.git`; the test's git
+config rewrites it to `git@github.com:` and `fakes/github-ssh` serves the bare
+repository, so fetching a pull request's head works without a network.
+
 ## Writing tests
 
 ```ts

@@ -139,6 +139,7 @@ export const test = base.extend<Options & { world: World; splash: Splash }>({
         await attach("backend.log", backend.logFile);
         await attach("launches.jsonl", join(world.control, "launches.jsonl"));
         for (const agent of agents) await attach(`${agent}.audit.jsonl`, join(world.control, `${agent}.audit.jsonl`));
+        await attach("gh-calls.jsonl", join(world.control, "gh", "calls.jsonl"));
       }
     }
   },

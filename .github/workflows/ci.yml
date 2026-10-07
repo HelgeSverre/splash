@@ -78,7 +78,7 @@ jobs:
         run: |
           brew install actionlint shellcheck
           actionlint
-          shellcheck scripts/import-signing-assets.sh scripts/package-release.sh scripts/package-pkg.sh scripts/fetch-appimagetool.sh packaging/AppRun e2e/fakes/agent
+          shellcheck scripts/import-signing-assets.sh scripts/package-release.sh scripts/package-pkg.sh scripts/fetch-appimagetool.sh packaging/AppRun e2e/fakes/agent e2e/fakes/gh e2e/fakes/github-ssh
           python -B scripts/test_release.py
           python -B scripts/test_release_pipeline.py
   headless-linux:

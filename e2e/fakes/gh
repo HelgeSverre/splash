@@ -1,0 +1,16 @@
+#!/bin/sh
+# The GitHub CLI for the end-to-end tests, linked into a test's bin/ as `gh`
+# (test.use({ gh: true })). Every call goes to gh-router/router.py, which
+# answers from canned scenario data and never touches the network:
+#
+#   $SPLASH_E2E_DIR/gh/calls.jsonl     every call: argv, stdin and cwd
+#   $SPLASH_E2E_DIR/gh/scenario.json   this test's scenario, when it changed one
+#                                      (default: gh-router/scenarios/triage.json)
+#
+# Tests steer it through support/github.ts.
+set -eu
+self=$0
+# Follow the link in the test's bin/ back to this folder.
+if [ -L "$self" ]; then self=$(readlink "$self"); fi
+# -B: no bytecode caches (macOS writes them under $HOME); -I: ignore PYTHON* settings.
+exec python3 -B -I "$(dirname "$self")/gh-router/router.py" "$@"

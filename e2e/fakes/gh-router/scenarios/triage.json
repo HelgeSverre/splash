@@ -1,0 +1,432 @@
+{
+  "login": "octocat",
+  "now": "2026-10-07T12:00:00Z",
+  "repository_page_size": 3,
+  "page_size": 3,
+  "next_number": 42,
+  "failures": [],
+  "delays": [],
+  "repositories": [
+    {
+      "full_name": "e2e/demo",
+      "private": false,
+      "archived": false,
+      "has_issues": true,
+      "pushed_at": "2026-10-07T09:00:00Z",
+      "issues": [
+        {
+          "number": 12,
+          "title": "Subtract returns the wrong sign",
+          "body": "`subtract(2, 3)` returns `1`; it should be `-1`.\n\nSeen in **calc.py**.",
+          "state": "OPEN",
+          "updated": "2026-10-06T10:00:00Z",
+          "author": "hubot",
+          "assignees": ["octocat"],
+          "labels": ["bug"],
+          "comments": [
+            { "author": "hubot", "body": "Reproduced on `main`.", "created": "2026-10-06T10:05:00Z" },
+            { "author": "octocat", "body": "I'll take this one.", "created": "2026-10-06T11:00:00Z" }
+          ]
+        },
+        {
+          "number": 11,
+          "title": "Document the add helper",
+          "body": "The README should show `add(1, 2)`.",
+          "state": "OPEN",
+          "updated": "2026-10-05T09:00:00Z",
+          "author": "octocat",
+          "labels": ["docs"]
+        },
+        {
+          "number": 9,
+          "title": "Crash on empty input",
+          "body": "Fixed by validating the arguments.",
+          "state": "CLOSED",
+          "updated": "2026-10-03T08:00:00Z",
+          "author": "hubot"
+        },
+        {
+          "number": 3,
+          "title": "Support division",
+          "body": "A `divide` helper with a zero check.",
+          "state": "OPEN",
+          "updated": "2026-09-20T08:00:00Z",
+          "author": "hubot",
+          "labels": ["enhancement"]
+        }
+      ],
+      "pulls": [
+        {
+          "number": 7,
+          "title": "Fix subtract sign",
+          "body": "Fixes #12.",
+          "state": "OPEN",
+          "updated": "2026-10-06T16:00:00Z",
+          "author": "octocat",
+          "branch": "fix/subtract-sign",
+          "review": "CHANGES_REQUESTED",
+          "checks": "FAILURE",
+          "comments": [{ "author": "hubot", "body": "The test still fails.", "created": "2026-10-06T16:10:00Z" }]
+        },
+        {
+          "number": 5,
+          "title": "Add multiply",
+          "body": "Adds `multiply(a, b)`.",
+          "state": "MERGED",
+          "updated": "2026-10-01T12:00:00Z",
+          "author": "hubot",
+          "branch": "feat/multiply",
+          "review": "APPROVED",
+          "checks": "SUCCESS"
+        }
+      ],
+      "branches": [
+        { "name": "main", "message": "Initial commit", "committed": "2026-10-07T09:00:00Z", "author": "octocat" },
+        { "name": "fix/subtract-sign", "message": "Fix the sign of subtract", "committed": "2026-10-06T15:55:00Z", "author": "octocat" },
+        { "name": "feat/a", "message": "Try feature a", "committed": "2026-10-04T10:00:00Z", "author": "hubot" }
+      ],
+      "events": [
+        {
+          "id": "5001",
+          "type": "PushEvent",
+          "actor": { "login": "octocat" },
+          "created_at": "2026-10-07T09:00:00Z",
+          "payload": { "ref": "refs/heads/main" }
+        },
+        {
+          "id": "5002",
+          "type": "IssueCommentEvent",
+          "actor": { "login": "octocat" },
+          "created_at": "2026-10-06T11:00:00Z",
+          "payload": {
+            "action": "created",
+            "issue": { "title": "Subtract returns the wrong sign", "html_url": "https://github.com/e2e/demo/issues/12" },
+            "comment": { "body": "I'll take this one.", "html_url": "https://github.com/e2e/demo/issues/12#issuecomment-1001" }
+          }
+        }
+      ],
+      "actions": {
+        "workflows": [
+          { "id": 101, "name": "CI", "path": ".github/workflows/ci.yml", "state": "active", "html_url": "https://github.com/e2e/demo/actions/workflows/ci.yml" },
+          { "id": 102, "name": "Release", "path": ".github/workflows/release.yml", "state": "disabled_manually", "html_url": "https://github.com/e2e/demo/actions/workflows/release.yml" }
+        ],
+        "runs": [
+          {
+            "id": 9003,
+            "name": "CI",
+            "display_title": "Try feature a",
+            "run_number": 43,
+            "run_attempt": 1,
+            "status": "in_progress",
+            "conclusion": null,
+            "head_branch": "feat/a",
+            "head_sha": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "event": "push",
+            "actor": { "login": "hubot" },
+            "created_at": "2026-10-07T11:50:00Z",
+            "updated_at": "2026-10-07T11:51:00Z",
+            "run_started_at": "2026-10-07T11:50:30Z",
+            "html_url": "https://github.com/e2e/demo/actions/runs/9003",
+            "workflow_id": 101
+          },
+          {
+            "id": 9002,
+            "name": "CI",
+            "display_title": "Fix subtract sign",
+            "run_number": 42,
+            "run_attempt": 2,
+            "status": "completed",
+            "conclusion": "failure",
+            "head_branch": "fix/subtract-sign",
+            "head_sha": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+            "event": "pull_request",
+            "actor": { "login": "octocat" },
+            "created_at": "2026-10-06T16:00:00Z",
+            "updated_at": "2026-10-06T16:20:00Z",
+            "run_started_at": "2026-10-06T16:12:00Z",
+            "html_url": "https://github.com/e2e/demo/actions/runs/9002",
+            "workflow_id": 101
+          },
+          {
+            "id": 9001,
+            "name": "CI",
+            "display_title": "Initial commit",
+            "run_number": 41,
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "success",
+            "head_branch": "main",
+            "head_sha": "e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0",
+            "event": "push",
+            "actor": { "login": "octocat" },
+            "created_at": "2026-10-05T09:00:00Z",
+            "updated_at": "2026-10-05T09:04:00Z",
+            "run_started_at": "2026-10-05T09:00:10Z",
+            "html_url": "https://github.com/e2e/demo/actions/runs/9001",
+            "workflow_id": 101
+          },
+          {
+            "id": 8001,
+            "name": "Release",
+            "display_title": "Release v0.1.0",
+            "run_number": 3,
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "success",
+            "head_branch": "main",
+            "head_sha": "d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0",
+            "event": "workflow_dispatch",
+            "actor": { "login": "octocat" },
+            "created_at": "2026-06-01T10:00:00Z",
+            "updated_at": "2026-06-01T10:06:00Z",
+            "run_started_at": "2026-06-01T10:00:05Z",
+            "html_url": "https://github.com/e2e/demo/actions/runs/8001",
+            "workflow_id": 102
+          }
+        ],
+        "jobs": {
+          "9003/1": [
+            {
+              "id": 7005,
+              "name": "test",
+              "status": "in_progress",
+              "conclusion": null,
+              "started_at": "2026-10-07T11:50:40Z",
+              "completed_at": null,
+              "runner_name": "ubuntu-24.04",
+              "html_url": "https://github.com/e2e/demo/actions/runs/9003/job/7005",
+              "steps": [
+                { "number": 1, "name": "Set up job", "status": "completed", "conclusion": "success", "started_at": "2026-10-07T11:50:40Z", "completed_at": "2026-10-07T11:50:45Z" },
+                { "number": 2, "name": "Run tests", "status": "in_progress", "conclusion": null, "started_at": "2026-10-07T11:50:45Z", "completed_at": null }
+              ]
+            }
+          ],
+          "9002/2": [
+            {
+              "id": 7002,
+              "name": "test",
+              "status": "completed",
+              "conclusion": "failure",
+              "started_at": "2026-10-06T16:12:10Z",
+              "completed_at": "2026-10-06T16:14:20Z",
+              "runner_name": "ubuntu-24.04",
+              "html_url": "https://github.com/e2e/demo/actions/runs/9002/job/7002",
+              "steps": [
+                { "number": 1, "name": "Set up job", "status": "completed", "conclusion": "success", "started_at": "2026-10-06T16:12:10Z", "completed_at": "2026-10-06T16:12:15Z" },
+                { "number": 2, "name": "Run tests", "status": "completed", "conclusion": "failure", "started_at": "2026-10-06T16:12:15Z", "completed_at": "2026-10-06T16:14:20Z" }
+              ]
+            },
+            {
+              "id": 7003,
+              "name": "lint",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-06T16:12:10Z",
+              "completed_at": "2026-10-06T16:12:50Z",
+              "runner_name": "ubuntu-24.04",
+              "html_url": "https://github.com/e2e/demo/actions/runs/9002/job/7003",
+              "steps": [{ "number": 1, "name": "Run ruff", "status": "completed", "conclusion": "success", "started_at": "2026-10-06T16:12:15Z", "completed_at": "2026-10-06T16:12:50Z" }]
+            },
+            {
+              "id": 7004,
+              "name": "build",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-06T16:12:10Z",
+              "completed_at": "2026-10-06T16:16:10Z",
+              "runner_name": "ubuntu-24.04",
+              "html_url": "https://github.com/e2e/demo/actions/runs/9002/job/7004",
+              "steps": [{ "number": 1, "name": "Build wheels", "status": "completed", "conclusion": "success", "started_at": "2026-10-06T16:12:15Z", "completed_at": "2026-10-06T16:16:10Z" }]
+            }
+          ],
+          "9002/1": [
+            {
+              "id": 7001,
+              "name": "test",
+              "status": "completed",
+              "conclusion": "failure",
+              "started_at": "2026-10-06T16:01:00Z",
+              "completed_at": "2026-10-06T16:02:00Z",
+              "runner_name": "ubuntu-24.04",
+              "html_url": "https://github.com/e2e/demo/actions/runs/9002/job/7001",
+              "steps": [
+                { "number": 1, "name": "Set up job", "status": "completed", "conclusion": "success", "started_at": "2026-10-06T16:01:00Z", "completed_at": "2026-10-06T16:01:05Z" },
+                { "number": 2, "name": "Install dependencies", "status": "completed", "conclusion": "failure", "started_at": "2026-10-06T16:01:05Z", "completed_at": "2026-10-06T16:02:00Z" }
+              ]
+            }
+          ],
+          "9001/1": [
+            {
+              "id": 7000,
+              "name": "test",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T09:00:20Z",
+              "completed_at": "2026-10-05T09:03:50Z",
+              "runner_name": "ubuntu-24.04",
+              "html_url": "https://github.com/e2e/demo/actions/runs/9001/job/7000",
+              "steps": [{ "number": 1, "name": "Run tests", "status": "completed", "conclusion": "success", "started_at": "2026-10-05T09:00:25Z", "completed_at": "2026-10-05T09:03:50Z" }]
+            }
+          ],
+          "8001/1": [
+            {
+              "id": 6000,
+              "name": "publish",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-06-01T10:00:10Z",
+              "completed_at": "2026-06-01T10:06:00Z",
+              "runner_name": "ubuntu-24.04",
+              "html_url": "https://github.com/e2e/demo/actions/runs/8001/job/6000",
+              "steps": [{ "number": 1, "name": "Publish", "status": "completed", "conclusion": "success", "started_at": "2026-06-01T10:00:15Z", "completed_at": "2026-06-01T10:06:00Z" }]
+            }
+          ]
+        },
+        "logs": {
+          "7002": "2026-10-06T16:12:15.0000000Z \u001b[36;1mpython -m pytest\u001b[0m\n2026-10-06T16:14:18.0000000Z FAILED test_calc.py::test_subtract - assert 1 == -1\n2026-10-06T16:14:19.0000000Z <script>document.title = \"e2e-injected\"</script>\n2026-10-06T16:14:20.0000000Z \u001b[31;1mError: Process completed with exit code 1.\u001b[0m\n",
+          "7003": "2026-10-06T16:12:50.0000000Z All checks passed!\n",
+          "7004": { "generate": { "line": "2026-10-06T16:13:00.0000000Z building wheel for calc\n", "bytes": 600000 } },
+          "7001": { "error": "gh: Gone: logs expired for this job (HTTP 410)" },
+          "7000": "2026-10-05T09:03:50.0000000Z 2 passed\n",
+          "6000": "2026-06-01T10:06:00.0000000Z Published v0.1.0\n"
+        }
+      }
+    },
+    {
+      "full_name": "e2e-labs/widgets",
+      "private": false,
+      "archived": false,
+      "has_issues": true,
+      "pushed_at": "2026-10-06T15:00:00Z",
+      "issues": [
+        {
+          "number": 4,
+          "title": "Widget renders twice",
+          "body": "The widget mounts two times on load.",
+          "state": "OPEN",
+          "updated": "2026-10-04T14:00:00Z",
+          "author": "hubot",
+          "labels": ["bug"]
+        }
+      ],
+      "pulls": [
+        {
+          "number": 8,
+          "title": "Bump widget styles",
+          "body": "Refreshes the widget stylesheet.",
+          "state": "OPEN",
+          "updated": "2026-10-06T14:00:00Z",
+          "author": "hubot",
+          "branch": "bump-styles",
+          "reviewers": ["octocat"],
+          "checks": "SUCCESS"
+        }
+      ],
+      "branches": [
+        { "name": "main", "message": "Widget scaffold", "committed": "2026-10-02T09:00:00Z", "author": "hubot" },
+        { "name": "bump-styles", "message": "Bump widget styles", "committed": "2026-10-06T13:55:00Z", "author": "hubot" }
+      ],
+      "events": [
+        {
+          "id": "6001",
+          "type": "PullRequestEvent",
+          "actor": { "login": "hubot" },
+          "created_at": "2026-10-06T14:00:00Z",
+          "payload": {
+            "action": "opened",
+            "pull_request": { "title": "Bump widget styles", "html_url": "https://github.com/e2e-labs/widgets/pull/8", "body": "Refreshes the widget stylesheet." }
+          }
+        }
+      ],
+      "actions": {
+        "workflows": [
+          { "id": 201, "name": "Widgets CI", "path": ".github/workflows/test.yml", "state": "active", "html_url": "https://github.com/e2e-labs/widgets/actions/workflows/test.yml" }
+        ],
+        "runs": [
+          {
+            "id": 9101,
+            "name": "Widgets CI",
+            "display_title": "Bump widget styles",
+            "run_number": 8,
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "success",
+            "head_branch": "bump-styles",
+            "head_sha": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+            "event": "pull_request",
+            "actor": { "login": "hubot" },
+            "created_at": "2026-10-06T14:05:00Z",
+            "updated_at": "2026-10-06T14:09:00Z",
+            "run_started_at": "2026-10-06T14:05:10Z",
+            "html_url": "https://github.com/e2e-labs/widgets/actions/runs/9101",
+            "workflow_id": 201
+          }
+        ],
+        "jobs": {
+          "9101/1": [
+            {
+              "id": 7101,
+              "name": "test",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-06T14:05:20Z",
+              "completed_at": "2026-10-06T14:09:00Z",
+              "runner_name": "ubuntu-24.04",
+              "html_url": "https://github.com/e2e-labs/widgets/actions/runs/9101/job/7101",
+              "steps": [{ "number": 1, "name": "Run tests", "status": "completed", "conclusion": "success", "started_at": "2026-10-06T14:05:25Z", "completed_at": "2026-10-06T14:09:00Z" }]
+            }
+          ]
+        },
+        "logs": { "7101": "2026-10-06T14:09:00.0000000Z 14 passed\n" }
+      }
+    },
+    {
+      "full_name": "e2e/docs",
+      "private": false,
+      "archived": false,
+      "has_issues": false,
+      "pushed_at": "2026-10-02T10:00:00Z",
+      "branches": [{ "name": "main", "message": "Publish the docs", "committed": "2026-10-02T10:00:00Z", "author": "octocat" }]
+    },
+    {
+      "full_name": "e2e-labs/legacy",
+      "private": false,
+      "archived": true,
+      "has_issues": true,
+      "pushed_at": "2025-03-01T10:00:00Z",
+      "pulls": [
+        {
+          "number": 2,
+          "title": "Old cleanup",
+          "body": "Never merged.",
+          "state": "CLOSED",
+          "updated": "2025-03-01T10:00:00Z",
+          "author": "hubot",
+          "branch": "cleanup"
+        }
+      ],
+      "branches": [{ "name": "main", "message": "Archive the project", "committed": "2025-03-01T10:00:00Z", "author": "hubot" }]
+    }
+  ],
+  "search_decoys": [
+    {
+      "repository": "e2e-elsewhere/decoy",
+      "kind": "issue",
+      "number": 1,
+      "title": "Decoy issue outside the searched repositories",
+      "state": "OPEN",
+      "updated": "2026-10-07T11:00:00Z",
+      "author": "octocat"
+    },
+    {
+      "repository": "e2e-elsewhere/decoy",
+      "kind": "pr",
+      "number": 2,
+      "title": "Decoy pull request outside the searched repositories",
+      "state": "OPEN",
+      "updated": "2026-10-07T11:00:00Z",
+      "author": "octocat",
+      "branch": "decoy"
+    }
+  ]
+}

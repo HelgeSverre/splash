@@ -1,0 +1,39 @@
+#!/bin/sh
+# ssh for the end-to-end tests' offline github.com. The test's global git config
+# (support/github.ts) rewrites https://github.com/ to git@github.com: and sets
+#
+#   core.sshCommand = '<this file>' '<root>'    ssh.variant = simple
+#
+# so git runs `github-ssh <root> git@github.com "git-upload-pack 'owner/name.git'"`
+# and this serves the bare repository <root>/owner/name.git. Each request is
+# appended to $SPLASH_E2E_DIR/gh/ssh.log.
+set -eu
+root=$1
+host=$2
+command=$3
+if [ "$host" != git@github.com ]; then
+	echo "github-ssh (e2e fake): unexpected host $host" >&2
+	exit 255
+fi
+case "$command" in
+"git-upload-pack '"*"'" | "git-receive-pack '"*"'") ;;
+*)
+	echo "github-ssh (e2e fake): unexpected command $command" >&2
+	exit 255
+	;;
+esac
+service=${command%% *}
+path=${command#* \'}
+path=${path%\'}
+path=${path#/}
+case "$path" in
+*..* | *\'*)
+	echo "github-ssh (e2e fake): unexpected path $path" >&2
+	exit 255
+	;;
+esac
+if [ -n "${SPLASH_E2E_DIR:-}" ]; then
+	mkdir -p "$SPLASH_E2E_DIR/gh"
+	printf '%s %s\n' "$service" "$path" >>"$SPLASH_E2E_DIR/gh/ssh.log"
+fi
+exec git "${service#git-}" "$root/$path"
