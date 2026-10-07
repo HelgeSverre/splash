@@ -545,7 +545,7 @@ mod tests {
             "projects":{"/w/app":{"mcpServers":{"db":{"command":"npx","args":["db-mcp"],"env":{"DB_PASSWORD":"hunter2"}}}}}}"#,
         );
         write(h.join(".codex/config.toml"), "[mcp_servers.nightwatch]\nurl = \"https://n.example/mcp\"\nenabled = false\n\n[mcp_servers.repl]\ncommand = \"node\"\nargs = [\"repl.js\"]\n[mcp_servers.repl.env]\nTOKEN = \"x\"\n");
-        write(h.join(".config/poolside/settings.yaml"), "mcp_servers:\n  wiki:\n    transport:\n      type: http\n      url: https://wiki.example/mcp\n      headers:\n        - 'Authorization: Bearer abc'\n");
+        write(h.join(".config/poolside/settings.yaml"), "mcp_servers:\n  wiki:\n    transport:\n      type: http\n      url: https://wiki.example/mcp\n      headers:\n        - 'Authorization: Bearer wiki-secret-token'\n");
         write(h.join(".pi/agent/mcp.json"), "{ not json");
 
         let list = mcp_servers(&h);
@@ -570,7 +570,9 @@ mod tests {
         assert_eq!(list.errors.len(), 1);
         assert_eq!(list.errors[0].agent, "pi");
         let dump = serde_json::to_string(&list).unwrap();
-        for secret in ["SECRET", "hunter2", "abc", "\"x\""] {
+        // Distinctive values: the dump includes temp paths, whose random
+        // characters can contain a short marker such as "abc".
+        for secret in ["SECRET", "hunter2", "wiki-secret-token", "\"x\""] {
             assert!(!dump.contains(secret), "leaked {secret}");
         }
         let _ = std::fs::remove_dir_all(h);
