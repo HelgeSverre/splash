@@ -2,7 +2,7 @@
   import { onDestroy } from "svelte";
   import { api, type ExternalSession, type SessionPreview } from "../bindings";
   import { app, agentById, applySession, openSession } from "../lib/sessions.svelte";
-  import { historySources, sourceKey, loadSource } from "../lib/agent-history.svelte";
+  import { historySources, sourceKey, loadSource, retrySource } from "../lib/agent-history.svelte";
   import { foldersFromText, sourceIsNewer } from "../lib/session-history";
   import { errorMessage } from "../lib/format";
   import { home } from "../lib/paths";
@@ -95,7 +95,7 @@
         <span class="meta" role="status">{state.loading ? "Finding sessions…" : state.error ? "Could not finish" : state.page?.capabilities.list ? `${state.sessions.length} loaded` : "Listing unavailable"}</span>
         {#if state.fetchedAt}<span class="meta">Checked {new Date(state.fetchedAt).toLocaleTimeString()}</span>{/if}
         {#if state.page && !state.page.capabilities.load}<Tag tone="muted">Preview unavailable</Tag>{/if}
-        {#if state.error}<button class="btn sm" disabled={state.loading} onclick={() => loadSource(s.key, s.agent.id, directory, !!state.page?.next_cursor, !state.page)}>Retry</button>{/if}
+        {#if state.error}<button class="btn sm" disabled={state.loading} onclick={() => retrySource(s.key)}>Retry</button>{/if}
         {#if state.page?.next_cursor}<button class="btn sm" disabled={state.loading} onclick={() => loadSource(s.key, s.agent.id, directory, true)}>Load more from {s.agent.name}</button>{/if}
         {#if state.error}<p class="error" role="alert">{state.error}</p>{/if}
       </div>
