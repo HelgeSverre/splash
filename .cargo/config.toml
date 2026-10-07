@@ -1,0 +1,3 @@
+[target.x86_64-pc-windows-msvc]
+# Installers and portable/server archives must not require the VC++ redistributable.
+rustflags = ["-C", "target-feature=+crt-static"]

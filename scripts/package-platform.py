@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import sys
 import subprocess
 import tarfile
 import tempfile
@@ -59,6 +60,7 @@ def main():
         (standalone / 'README.txt').write_text('Run splash-server --help. Binds localhost only. For remote access use an SSH tunnel.\nLogin token is stored in the server data directory.\nhttps://github.com/HelgeSverre/splash#run-as-a-web-app-over-ssh\n')
         archive(standalone, output / (standalone.name + suffix))
         if system == 'windows':
+            run(sys.executable, ROOT / 'scripts/verify-windows.py', desktop, server)
             portable = temp / f'Splash-{VERSION}-windows-{arch}'
             copy(desktop, portable / 'splash.exe')
             copy(ROOT / 'LICENSE', portable / 'LICENSE', 0o644)

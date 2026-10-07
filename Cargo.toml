@@ -33,7 +33,7 @@ desktop = ["elyra/desktop", "elyra/system"]
 [dependencies]
 elyra = { path = "vendor/elyra", default-features = false, features = ["database"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
 rust-embed = "8"
 # ACP. The SDK's API moved a lot between majors — pin exactly.

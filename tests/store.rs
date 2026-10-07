@@ -48,7 +48,9 @@ async fn projects_sessions_and_entries_round_trip() {
         p.id
     );
 
-    let s = record(&p.id);
+    let mut s = record(&p.id);
+    // Regression: default JSON float parsing rounded this source timestamp.
+    s.source.last_synced_at = Some(1791375214.5815647);
     store.insert_session(&s).await.unwrap();
     store.queue_entries(
         &s.id,
@@ -100,6 +102,7 @@ async fn projects_sessions_and_entries_round_trip() {
     let back = store.session(&s.id).await.unwrap();
     assert_eq!(back.agent_session_id.as_deref(), Some("acp-123"));
     assert_eq!(back.isolation, Isolation::Worktree);
+    assert_eq!(back.source, s.source);
     assert_eq!(back.usage.map(|u| u.cost_usd), Some(Some(0.5)));
 
     // Deleting a project cascades to its sessions and entries.
