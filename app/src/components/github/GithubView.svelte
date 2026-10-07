@@ -151,7 +151,7 @@
           {#each items.slice(0, limit) as item (itemKey(item))}
             <button class="plain item focus-inset" class:active={selected && itemKey(item) === itemKey(selected)} aria-pressed={selected && itemKey(item) === itemKey(selected)} onclick={() => github.selected = itemKey(item)}>
               <span class="item-icon" class:failing={itemStatus(item) === "Checks failing"} class:merged={item.state === "MERGED"}><Icon name={itemIcon(item.kind)} size={15} /></span>
-              <span class="item-content"><span class="item-title">{#if unread(item)}<span class="unread" title="New or updated since last read">● </span>{/if}{item.title}</span><span class="item-meta"><span class="repo-name">{item.repository}</span>{#if item.number}<span>#{item.number}</span>{/if}<span>{itemStatus(item)}</span>{#if repoByName.get(item.repository)?.project_ids.length}<span title="Linked to a Splash project"><Icon name="folder" size={11} /></span>{/if}</span></span>
+              <span class="item-content"><span class="item-title">{#if unread(item)}<span class="unread" role="img" aria-label="Unread" title="New or updated since last read"></span>{/if}{item.title}</span><span class="item-meta"><span class="repo-name">{item.repository}</span>{#if item.number}<span>#{item.number}</span>{/if}<span>{itemStatus(item)}</span>{#if repoByName.get(item.repository)?.project_ids.length}<span title="Linked to a Splash project"><Icon name="folder" size={11} /></span>{/if}</span></span>
               <time class="t-mono-meta" datetime={item.updated_at} title={item.updated_at}>{ago(item.updated_at)}</time>
             </button>
           {:else}<EmptyState inline loading={busy} title={busy ? "Loading activity…" : "No matching items loaded"} detail={scoped.length ? "Try another filter, refresh, or load older items." : "Choose repositories or clear your scope filters."} />{/each}
@@ -192,7 +192,8 @@
   .search-tools input { width: 140px; flex: 1; min-width: 90px; }
   .save-form { padding: 18px; display: grid; gap: 12px; }
   .save-form label { display: grid; gap: 6px; }
-  .unread { color: var(--accent); }
+  /* A status-dot-sized mark before the title; its own margin, since a trailing space in markup is trimmed. */
+  .unread { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--accent); vertical-align: 0.1em; }
   .github-view { height: 100%; display: flex; flex-direction: column; min-height: 0; }
   header { display: flex; align-items: center; gap: 10px; height: var(--h-header); flex: none; padding: 0 12px; border-bottom: 1px solid var(--border); }
   h1 { margin: 0; }

@@ -1,0 +1,10 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"framework": null,
+	"installCommand": "bun install --frozen-lockfile",
+	"buildCommand": "bun run build",
+	"outputDirectory": "build",
+	"cleanUrls": true,
+	"trailingSlash": false,
+	"ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ../app/src ../screenshots ../fixtures ../src/agents/registry.rs ../.github ../Cargo.toml"
+}

@@ -725,6 +725,7 @@ just dev        # hot reload for frontend changes (Rust changes need a restart)
 just check      # formatting, clippy, svelte-check, style scripts, all Rust tests
 just test       # Rust tests only
 just codegen    # regenerate app/src/bindings.ts after changing a command or event
+just site       # the marketing site in website/, built from the app's own components
 ```
 
 `just check` includes three scripts in `scripts/`: no colour literals outside the CSS tokens, no `:hover` rule without a focus state, and no em dashes in the UI source.
@@ -737,6 +738,8 @@ just codegen    # regenerate app/src/bindings.ts after changing a command or eve
 - `node --experimental-strip-types --test app/tests/*.test.ts` runs the frontend model tests; `just check` also type-checks the Svelte UI.
 
 To record a fixture: `just spike claude ./some/repo "a prompt" --record name`.
+
+**Website.** `website/` is a static SvelteKit site that renders the app's real components on demo data in the browser. It is not part of the app bundle; see [website/README.md](website/README.md).
 
 **Headless UI.** `just web` serves the real backend and UI on port 4780 with its own data folder, so a headless browser can drive the app. Native dialogs and notifications are stubbed. `#/playground` shows the UI components and design tokens with sample data.
 

@@ -107,6 +107,18 @@ spike agent dir prompt *FLAGS:
 detect:
     cargo run --bin spike -- --detect
 
+# Marketing site with hot reload; renders the app's components on demo data (website/)
+[group('website')]
+site:
+    @[ -d website/node_modules ] || (cd website && bun install --frozen-lockfile)
+    cd website && bun run dev
+
+# Type-check and build the static marketing site into website/build
+[group('website')]
+site-build:
+    @[ -d website/node_modules ] || (cd website && bun install --frozen-lockfile)
+    cd website && bun run check && bun run build
+
 [private]
 _deps:
     @[ -d app/node_modules ] || (cd app && npm ci)

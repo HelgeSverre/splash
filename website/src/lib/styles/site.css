@@ -1,0 +1,194 @@
+/* The marketing layer over the desktop app's tokens (app/src/app.css :root).
+   Every colour the site adds lives here as a token; components use var(--…). */
+:root {
+	--site-max: 1200px;
+	--site-narrow: 760px;
+	--site-gutter: clamp(16px, 4vw, 40px);
+
+	--site-fs-hero: clamp(40px, 6.4vw, 78px);
+	--site-fs-h2: clamp(30px, 3.8vw, 46px);
+	--site-fs-h3: 19px;
+	--site-fs-lede: clamp(17px, 1.5vw, 20px);
+	--site-fs-body: 16px;
+	--site-fs-small: 14px;
+	--site-tracking-display: -0.035em;
+
+	--site-glow: radial-gradient(60% 50% at 50% 0%, rgba(250, 204, 21, 0.13), transparent 70%);
+	--site-glow-soft: radial-gradient(50% 60% at 50% 50%, rgba(250, 204, 21, 0.06), transparent 70%);
+	--site-grid-line: rgba(255, 255, 255, 0.035);
+	--site-window-shadow: 0 50px 120px -20px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.025);
+	--site-card-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.6);
+	--site-hairline: rgba(255, 255, 255, 0.06);
+	/* Text selection on yellow surfaces: a darker yellow under black text. */
+	--site-select-on-accent: #a67c00;
+}
+
+/* The app locks the page (full-height panes, no text selection). A website scrolls. */
+html,
+body {
+	height: auto;
+	min-height: 100%;
+}
+html {
+	scroll-behavior: smooth;
+	scroll-padding-top: 80px;
+}
+body {
+	overflow: visible;
+	overflow-x: clip;
+	user-select: auto;
+	font-size: var(--site-fs-body);
+	line-height: 1.6;
+	color: var(--text-2);
+}
+
+/* Selection: yellow under black text on the dark page, darker yellow on
+   yellow surfaces. Live scenes keep the app's own quieter selection. */
+::selection {
+	background: var(--accent);
+	color: var(--on-accent);
+}
+:is(.cta.primary, .cta-bar)::selection,
+:is(.cta.primary, .cta-bar) ::selection {
+	background: var(--site-select-on-accent);
+	color: var(--on-accent);
+}
+.cta.dark::selection,
+.cta.dark ::selection {
+	background: var(--accent);
+	color: var(--on-accent);
+}
+.splash-ui ::selection {
+	background: var(--accent-soft);
+	color: var(--text);
+}
+
+/* Live scenes get the app's own body rules back. */
+.splash-ui {
+	font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font-ui);
+	color: var(--text);
+	user-select: none;
+	text-align: left;
+	letter-spacing: normal;
+}
+
+/* ─── Site primitives ──────────────────────────────────────────────────── */
+.wrap {
+	width: 100%;
+	max-width: calc(var(--site-max) + 2 * var(--site-gutter));
+	margin: 0 auto;
+	padding: 0 var(--site-gutter);
+}
+.wrap.narrow {
+	max-width: calc(var(--site-narrow) + 2 * var(--site-gutter));
+}
+
+.eyebrow {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font: var(--fw-medium) 12px / 1 var(--font-mono);
+	color: var(--muted);
+}
+.eyebrow .n {
+	color: var(--accent);
+}
+
+.display {
+	margin: 0;
+	font-size: var(--site-fs-hero);
+	font-weight: var(--fw-semibold);
+	line-height: 1.02;
+	letter-spacing: var(--site-tracking-display);
+	color: var(--text);
+	text-wrap: balance;
+}
+.h2 {
+	margin: 0;
+	font-size: var(--site-fs-h2);
+	font-weight: var(--fw-semibold);
+	line-height: 1.08;
+	letter-spacing: var(--site-tracking-display);
+	color: var(--text);
+	text-wrap: balance;
+}
+.h3 {
+	margin: 0;
+	font-size: var(--site-fs-h3);
+	font-weight: var(--fw-semibold);
+	line-height: 1.3;
+	letter-spacing: -0.015em;
+	color: var(--text);
+}
+.lede {
+	margin: 0;
+	font-size: var(--site-fs-lede);
+	line-height: 1.55;
+	color: var(--text-2);
+	text-wrap: pretty;
+}
+.accent {
+	color: var(--accent);
+}
+.prose-link {
+	color: var(--text);
+	text-decoration: underline;
+	text-decoration-color: var(--border-focus);
+	text-underline-offset: 3px;
+}
+.prose-link:is(:hover, :focus-visible) {
+	text-decoration-color: var(--accent);
+}
+
+/* Big buttons, the app's .btn grown for the page. */
+.cta {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	height: 44px;
+	padding: 0 18px;
+	border-radius: var(--radius-lg);
+	border: 1px solid var(--border-strong);
+	background: var(--soft);
+	color: var(--text);
+	font: var(--fw-medium) 15px / 1 var(--font-ui);
+	text-decoration: none;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: background 0.15s, border-color 0.15s;
+}
+.cta:is(:hover, :focus-visible) {
+	background: var(--hover);
+	border-color: var(--border-focus);
+}
+.cta.primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--on-accent);
+}
+.cta.primary:is(:hover, :focus-visible) {
+	background: var(--accent-hover);
+	border-color: var(--accent-hover);
+}
+.cta.dark {
+	background: var(--bg);
+	border-color: var(--bg);
+	color: var(--text);
+}
+.cta.dark:is(:hover, :focus-visible) {
+	background: var(--raised);
+	border-color: var(--raised);
+}
+.cta .sub {
+	font: var(--fw-regular) 12px / 1 var(--font-mono);
+	opacity: 0.7;
+}
+
+.inline-code {
+	font: var(--fs-sm) var(--font-mono);
+	padding: 1px 5px;
+	border-radius: var(--radius-sm);
+	background: var(--soft);
+	border: 1px solid var(--border);
+	color: var(--text);
+}

@@ -1,0 +1,13 @@
+{
+	"extends": "$app/tsconfig",
+	"compilerOptions": {
+		"strict": true,
+		// Mirrors resolve.alias in vite.config.ts.
+		"paths": {
+			"$splash/*": ["../app/src/*"],
+			"$repo/*": ["../*"],
+			"@elyra/runtime": ["./src/lib/demo/runtime.ts"]
+		}
+	},
+	"include": ["src", "vite.config.ts", "../app/src/env.d.ts"]
+}
