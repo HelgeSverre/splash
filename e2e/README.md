@@ -27,6 +27,10 @@ just e2e-ui                                # Playwright's UI mode
 `splash-web`, `fake-acp` and the headless `splash-server`. To test a release
 build instead, set `SPLASH_E2E_BIN_DIR=target/release`.
 
+CI runs the suite on Ubuntu for every push and pull request, and releases wait
+for it. To check for flakes, run the CI workflow by hand with `e2e_repeat` set
+(`gh workflow run CI -f e2e_repeat=10`).
+
 Failures keep a trace, a screenshot, the backend log, the agents' launch log and
 every ACP request they received (`npx playwright show-report`). Set
 `SPLASH_E2E_KEEP=1` to keep each test's temporary folder; its path is printed.
