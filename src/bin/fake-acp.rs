@@ -12,6 +12,11 @@
 //! answers every prompt with an error, `--announce-commands` sends the
 //! recording's slash commands right after `session/new`, as adapters do (so a
 //! handshake probe sees them).
+//!
+//! History: `session/list` answers with the recorded page whose request had
+//! the same `cursor` (an unrecorded `page-2` is empty), and `session/load`
+//! replays the updates recorded before that session's load result (an
+//! unrecorded session ID replays the first recorded load).
 
 use std::io::Write;
 use std::time::Duration;
@@ -98,18 +103,27 @@ async fn main() {
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
 
+    let is_response = |r: &Value, id: &Value| {
+        r["dir"] == "in" && r["line"]["id"] == *id && r["line"].get("method").is_none()
+    };
+    let response_to = |id: &Value| -> Value {
+        rows.iter()
+            .find(|r| is_response(r, id))
+            .map(|r| r["line"]["result"].clone())
+            .unwrap_or(json!({}))
+    };
+    let requests = |method: &str| -> Vec<(usize, &Value)> {
+        rows.iter()
+            .enumerate()
+            .filter(|(_, r)| r["dir"] == "out" && r["line"]["method"] == method)
+            .map(|(i, r)| (i, &r["line"]))
+            .collect()
+    };
     let result_of = |method: &str| -> Value {
-        let id = rows
-            .iter()
-            .find(|r| r["dir"] == "out" && r["line"]["method"] == method)
-            .map(|r| r["line"]["id"].clone());
-        id.and_then(|id| {
-            rows.iter().find(|r| {
-                r["dir"] == "in" && r["line"]["id"] == id && r["line"].get("method").is_none()
-            })
-        })
-        .map(|r| r["line"]["result"].clone())
-        .unwrap_or(json!({}))
+        requests(method)
+            .first()
+            .map(|(_, line)| response_to(&line["id"]))
+            .unwrap_or(json!({}))
     };
     let init = result_of("initialize");
     let new_session = result_of("session/new");
@@ -135,22 +149,35 @@ async fn main() {
         (before, after)
     };
     let listed = result_of("session/list");
-    let replay: Vec<Value> = rows
-        .iter()
-        .filter(|r| r["dir"] == "in" && r["line"]["method"] == "session/update")
-        .map(|r| r["line"].clone())
+    // Recorded list pages, by the cursor they were asked for (null: the first).
+    let pages: Vec<(Value, Value)> = requests("session/list")
+        .into_iter()
+        .map(|(_, line)| (line["params"]["cursor"].clone(), response_to(&line["id"])))
         .collect();
-    let has_load = rows.iter().any(|r| r["line"]["method"] == "session/load");
+    // Recorded loads: the session asked for and the updates sent before the result.
+    let loads: Vec<(Value, Vec<Value>)> = requests("session/load")
+        .into_iter()
+        .map(|(i, line)| {
+            let updates = rows[i + 1..]
+                .iter()
+                .take_while(|r| !is_response(r, &line["id"]))
+                .filter(|r| r["dir"] == "in" && r["line"]["method"] == "session/update")
+                .map(|r| r["line"].clone())
+                .collect();
+            (line["params"]["sessionId"].clone(), updates)
+        })
+        .collect();
     let announce = args
         .iter()
         .any(|s| s == "--announce-commands")
         .then(|| {
-            replay
-                .iter()
-                .find(|u| u["params"]["update"]["sessionUpdate"] == "available_commands_update")
+            rows.iter().find(|r| {
+                r["dir"] == "in"
+                    && r["line"]["params"]["update"]["sessionUpdate"] == "available_commands_update"
+            })
         })
         .flatten()
-        .cloned();
+        .map(|r| r["line"].clone());
     let recorded_sid = new_session["sessionId"].clone();
     let turns = extract_turns(&rows);
     let mut turns = turns.into_iter();
@@ -218,10 +245,11 @@ async fn main() {
                 }
             }
             "session/list" => {
-                let mut result = if msg["params"]["cursor"] == "page-2" {
-                    json!({"sessions":[]})
-                } else {
-                    listed.clone()
+                let cursor = &msg["params"]["cursor"];
+                let mut result = match pages.iter().find(|(c, _)| c == cursor) {
+                    Some((_, page)) => page.clone(),
+                    None if cursor == "page-2" => json!({"sessions":[]}),
+                    None => listed.clone(),
                 };
                 if let Some(sessions) = result["sessions"].as_array_mut() {
                     sessions.retain(|s| !deleted.iter().any(|id| s["sessionId"] == *id));
@@ -262,8 +290,12 @@ async fn main() {
                     );
                     continue;
                 }
-                if has_load {
-                    for notification in &replay {
+                let load = loads
+                    .iter()
+                    .find(|(sid, _)| *sid == msg["params"]["sessionId"])
+                    .or(loads.first());
+                if let Some((_, replay)) = load {
+                    for notification in replay {
                         let mut notification = notification.clone();
                         notification["params"]["sessionId"] = msg["params"]["sessionId"].clone();
                         send(notification);
