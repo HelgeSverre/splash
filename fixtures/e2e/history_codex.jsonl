@@ -1,0 +1,13 @@
+{"t":7,"dir":"out","line":{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}}
+{"t":14,"dir":"in","line":{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true,"sessionCapabilities":{"list":{},"close":{}}},"agentInfo":{"name":"codex-acp","title":"Codex","version":"0.9.0"},"authMethods":[]}}}
+{"t":21,"dir":"out","line":{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"$CWD","mcpServers":[]}}}
+{"t":28,"dir":"in","line":{"jsonrpc":"2.0","id":2,"result":{"sessionId":"codex-e2e-new"}}}
+{"t":35,"dir":"out","line":{"jsonrpc":"2.0","id":3,"method":"session/list","params":{"cwd":"$CWD"}}}
+{"t":42,"dir":"in","line":{"jsonrpc":"2.0","id":3,"result":{"sessions":[{"sessionId":"codex-1","cwd":"$CWD","title":"Tidy the imports","updatedAt":"2026-09-30T08:00:00Z"}]}}}
+{"t":49,"dir":"out","line":{"jsonrpc":"2.0","id":4,"method":"session/load","params":{"sessionId":"codex-1","cwd":"$CWD","mcpServers":[]}}}
+{"t":56,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"codex-1","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Tidy the imports in src/util.py"},"messageId":"u1"}}}}
+{"t":63,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"codex-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"There is nothing to tidy: util.py has no imports."},"messageId":"a1"}}}}
+{"t":70,"dir":"in","line":{"jsonrpc":"2.0","id":4,"result":{}}}
+{"t":77,"dir":"out","line":{"jsonrpc":"2.0","id":5,"method":"session/prompt","params":{"sessionId":"codex-e2e-new","prompt":[{"type":"text","text":"Anything else?"}]}}}
+{"t":84,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"codex-e2e-new","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"No further changes are needed."},"messageId":"a9"}}}}
+{"t":91,"dir":"in","line":{"jsonrpc":"2.0","id":5,"result":{"stopReason":"end_turn"}}}

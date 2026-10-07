@@ -1,0 +1,29 @@
+{"t":7,"dir":"out","line":{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}}
+{"t":14,"dir":"in","line":{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true,"promptCapabilities":{"image":true,"embeddedContext":true},"sessionCapabilities":{"list":{},"resume":{},"fork":{},"delete":{},"close":{},"additionalDirectories":{}}},"agentInfo":{"name":"claude-agent-acp","title":"Claude Agent","version":"0.81.1"},"authMethods":[]}}}
+{"t":21,"dir":"out","line":{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"$CWD","mcpServers":[]}}}
+{"t":28,"dir":"in","line":{"jsonrpc":"2.0","id":2,"result":{"sessionId":"claude-e2e-new"}}}
+{"t":35,"dir":"out","line":{"jsonrpc":"2.0","id":3,"method":"session/list","params":{"cwd":"$CWD"}}}
+{"t":42,"dir":"in","line":{"jsonrpc":"2.0","id":3,"result":{"sessions":[{"sessionId":"native-1","cwd":"$CWD","title":"Fix the subtract sign","updatedAt":"2026-10-01T09:30:00Z","additionalDirectories":["$CWD/src"],"_meta":{"claudeCode":{"gitBranch":"main"}}},{"sessionId":"native-2","cwd":"$CWD","title":"Document the helpers","updatedAt":"2026-09-28T15:00:00Z"}],"nextCursor":"page-2"}}}
+{"t":49,"dir":"out","line":{"jsonrpc":"2.0","id":4,"method":"session/list","params":{"cwd":"$CWD","cursor":"page-2"}}}
+{"t":56,"dir":"in","line":{"jsonrpc":"2.0","id":4,"result":{"sessions":[{"sessionId":"native-3","cwd":"$CWD","title":"Sketch a calculator CLI","updatedAt":"2026-08-14T11:00:00Z"}]}}}
+{"t":63,"dir":"out","line":{"jsonrpc":"2.0","id":5,"method":"session/load","params":{"sessionId":"native-1","cwd":"$CWD","mcpServers":[],"additionalDirectories":["$CWD/src"]}}}
+{"t":70,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-1","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Why does subtract return the wrong sign?"},"messageId":"u1"}}}}
+{"t":77,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-1","update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"Reading calc.py before answering."}}}}}
+{"t":84,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-1","update":{"sessionUpdate":"tool_call","toolCallId":"toolu_e2e_read","title":"Read calc.py","kind":"read","status":"completed","locations":[{"path":"$CWD/calc.py","line":5}],"content":[{"type":"content","content":{"type":"text","text":"def subtract(a, b):\n    return a - b"}}]}}}}
+{"t":91,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"subtract returns a - b, so the sign follows the argument order."},"messageId":"a1"}}}}
+{"t":98,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-1","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Say so in the README."},"messageId":"u2"}}}}
+{"t":105,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"The README now explains that subtract(a, b) is a minus b."},"messageId":"a2"}}}}
+{"t":112,"dir":"in","line":{"jsonrpc":"2.0","id":5,"result":{}}}
+{"t":119,"dir":"out","line":{"jsonrpc":"2.0","id":6,"method":"session/load","params":{"sessionId":"native-2","cwd":"$CWD","mcpServers":[]}}}
+{"t":126,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-2","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Add docstrings to calc.py"},"messageId":"u1"}}}}
+{"t":133,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-2","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Added docstrings to add and subtract."},"messageId":"a1"}}}}
+{"t":140,"dir":"in","line":{"jsonrpc":"2.0","id":6,"result":{}}}
+{"t":147,"dir":"out","line":{"jsonrpc":"2.0","id":7,"method":"session/load","params":{"sessionId":"native-3","cwd":"$CWD","mcpServers":[]}}}
+{"t":154,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-3","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Could calc.py grow a command line?"},"messageId":"u1"}}}}
+{"t":161,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"native-3","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Yes: an argparse entry point with add and subtract commands."},"messageId":"a1"}}}}
+{"t":168,"dir":"in","line":{"jsonrpc":"2.0","id":7,"result":{}}}
+{"t":175,"dir":"out","line":{"jsonrpc":"2.0","id":8,"method":"session/load","params":{"sessionId":"claude-e2e-new","cwd":"$CWD","mcpServers":[]}}}
+{"t":182,"dir":"in","line":{"jsonrpc":"2.0","id":8,"result":{}}}
+{"t":189,"dir":"out","line":{"jsonrpc":"2.0","id":9,"method":"session/prompt","params":{"sessionId":"claude-e2e-new","prompt":[{"type":"text","text":"Pick up where we left off."}]}}}
+{"t":196,"dir":"in","line":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"claude-e2e-new","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Picking up from the saved conversation: subtract is a - b."},"messageId":"a9"}}}}
+{"t":203,"dir":"in","line":{"jsonrpc":"2.0","id":9,"result":{"stopReason":"end_turn"}}}
