@@ -18,7 +18,9 @@ function syncInert() {
   inerted = [];
   const keep = [...layers].reverse().find((l) => l.el?.isConnected)?.el;
   if (!keep) return;
-  const root = document.getElementById("app") ?? document.body;
+  // An embedded copy of the UI (the website's app windows) marks its own
+  // boundary, so a dialog quiets that window rather than the whole page.
+  const root = keep.closest<HTMLElement>("[data-modal-root]") ?? document.getElementById("app") ?? document.body;
   let node: HTMLElement | null = keep;
   while (node && node !== root && node.parentElement) {
     for (const sib of Array.from(node.parentElement.children)) {

@@ -25,7 +25,8 @@
 			<span class="lights"><i></i><i></i><i></i></span>
 			<span class="title">{title}</span>
 		</div>
-		<div class="splash-ui body">{@render children()}</div>
+		<!-- data-modal-root: the app's dialogs make only this window inert, not the page. -->
+		<div class="splash-ui body" data-modal-root>{@render children()}</div>
 	</div>
 </div>
 
