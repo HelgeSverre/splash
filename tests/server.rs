@@ -209,7 +209,8 @@ fn cli_validation_and_server_folder_paths() {
     assert_eq!(o.folders, ["/work/my project"]);
     assert_eq!(o.port, 5000);
     assert!(splash::server::folders::browse(Some("relative/path")).is_err());
-    let missing = splash::server::folders::browse(Some("/no/such/splash/folder"))
+    let gone = std::env::temp_dir().join(format!("splash-missing-{}", std::process::id()));
+    let missing = splash::server::folders::browse(gone.to_str())
         .unwrap_err()
         .to_string();
     assert!(
