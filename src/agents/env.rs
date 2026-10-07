@@ -17,7 +17,7 @@ pub fn path() -> &'static str {
 }
 
 fn login_shell_path() -> Option<String> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     // An interactive rc file can hang (prompts, plugins): give it 5s.
     let out = run_with_timeout(
         Command::new(shell).args(["-lic", "printf '__PATH__%s' \"$PATH\""]),

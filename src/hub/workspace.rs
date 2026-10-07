@@ -25,10 +25,12 @@ pub struct WorkspaceEvent {
 /// How long upstream git info (a `gh` call) stays fresh.
 const GIT_TTL: Duration = Duration::from_secs(60);
 
+type WatchSubscribers = HashMap<String, (workspace::Watcher, HashMap<String, Instant>)>;
+
 pub struct Workspace {
     core: Arc<Core>,
     sessions: Arc<Sessions>,
-    watchers: Mutex<HashMap<String, workspace::Watcher>>,
+    watchers: Mutex<WatchSubscribers>,
     terminals: Arc<Terminals>,
     git_cache: Mutex<HashMap<String, (Instant, GitInfo)>>,
 }
@@ -78,12 +80,24 @@ impl Workspace {
     }
 
     /// Watch a session's folder while the UI shows it (one watcher per open session).
-    pub fn watch(&self, id: &str, on: bool) -> Result<()> {
+    pub fn watch(&self, id: &str, on: bool, client: &str) -> Result<()> {
+        if client.is_empty() || client.len() > 128 {
+            return Err(super::Error::Other("Invalid workspace subscriber".into()));
+        }
+        let mut watchers = self.watchers.lock();
+        watchers.retain(|_, (_, clients)| {
+            clients.retain(|_, at| at.elapsed() < Duration::from_secs(90));
+            !clients.is_empty()
+        });
         if !on {
-            self.watchers.lock().remove(id);
+            if let Some((_, clients)) = watchers.get_mut(id) {
+                clients.remove(client);
+            }
+            watchers.retain(|_, (_, clients)| !clients.is_empty());
             return Ok(());
         }
-        if self.watchers.lock().contains_key(id) {
+        if let Some((_, clients)) = watchers.get_mut(id) {
+            clients.insert(client.to_string(), Instant::now());
             return Ok(());
         }
         let (root, _) = self.folder(id)?;
@@ -93,7 +107,10 @@ impl Workspace {
         let core = self.core.clone();
         let key = id.to_string();
         let w = workspace::watch(&root, move |paths| changed(&core, &key, paths))?;
-        self.watchers.lock().insert(id.to_string(), w);
+        watchers.insert(
+            id.to_string(),
+            (w, HashMap::from([(client.to_string(), Instant::now())])),
+        );
         Ok(())
     }
 

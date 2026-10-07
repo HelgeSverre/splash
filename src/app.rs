@@ -46,6 +46,18 @@ fn app_info(_ctx: Ctx) -> AppInfo {
     }
 }
 
+#[command]
+async fn browse_folders(
+    _ctx: Ctx,
+    path: Option<String>,
+) -> elyra::Result<crate::server::folders::FolderListing> {
+    Ok(
+        tokio::task::spawn_blocking(move || crate::server::folders::browse(path.as_deref()))
+            .await
+            .map_err(crate::error::Error::from)??,
+    )
+}
+
 // ── agents ─────────────────────────────────────────────────────────────────
 
 #[command]
@@ -421,8 +433,8 @@ async fn read_file(ctx: Ctx, id: String, path: String) -> elyra::Result<FileCont
 }
 
 #[command]
-async fn watch_workspace(ctx: Ctx, id: String, on: bool) -> elyra::Result<()> {
-    Ok(ctx.get::<Workspace>().watch(&id, on)?)
+async fn watch_workspace(ctx: Ctx, id: String, on: bool, client: String) -> elyra::Result<()> {
+    Ok(ctx.get::<Workspace>().watch(&id, on, &client)?)
 }
 
 // ── terminal ───────────────────────────────────────────────────────────────
@@ -533,6 +545,7 @@ pub fn build(data_dir: PathBuf, folders: Vec<String>) -> App {
         .event::<TermEvent>("term")
         .commands(commands![
             app_info,
+            browse_folders,
             github_catalog,
             github_actions_runs,
             github_actions_workflows,

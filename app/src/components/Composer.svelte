@@ -11,6 +11,7 @@
   import { registerComposer } from "../lib/focus";
   import { app, projectById, agentById, isBusy, drafts } from "../lib/sessions.svelte";
   import { showSideTab } from "../lib/layout.svelte";
+  import { connection, serverMode } from "../lib/server.svelte";
   import { showError } from "../lib/system";
 
   let { session }: { session: SessionView } = $props();
@@ -35,6 +36,7 @@
     drafts[lastId] = text;
   });
 
+  const disconnected = $derived(serverMode && connection.status !== "online");
   const busy = $derived(isBusy(session.status));
   const archived = $derived(session.archived || session.source?.deleted);
   const project = $derived(projectById(session.project_id));
@@ -60,7 +62,7 @@
   async function send() {
     const prompt = text.trim();
     const id = session.id;
-    if (!prompt || busy || archived || sending[id] || session.status === "starting") return;
+    if (disconnected || !prompt || busy || archived || sending[id] || session.status === "starting") return;
     sending[id] = true;
     try {
       await api.send_prompt(id, prompt);
@@ -131,7 +133,7 @@
     {#if busy}
       <IconButton class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" onclick={stop} />
     {:else}
-      <IconButton size="sm" icon="send" title="Send (⏎)" label="Send" disabled={!text.trim() || archived || sending[session.id] || session.status === "starting"} onclick={send} />
+      <IconButton size="sm" icon="send" title="Send (⏎)" label="Send" disabled={disconnected || !text.trim() || archived || sending[session.id] || session.status === "starting"} onclick={send} />
     {/if}
   </div>
 

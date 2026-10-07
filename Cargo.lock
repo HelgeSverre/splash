@@ -3924,6 +3924,7 @@ dependencies = [
  "notify-debouncer-full",
  "parking_lot",
  "portable-pty",
+ "rmp-serde",
  "rust-embed",
  "serde",
  "serde_json",

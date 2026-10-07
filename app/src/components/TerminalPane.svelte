@@ -7,6 +7,7 @@
   type Instance = { term: Terminal; fit: FitAddon; el: HTMLDivElement; lastSeq: number; exited: boolean; ready: boolean };
   // One xterm per session, kept alive while you switch around.
   const instances = new Map<string, Instance>();
+  const pending = new Map<string, TermEvent[]>();
 
   const decode = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
@@ -14,7 +15,15 @@
   export function writeTerm(ev: TermEvent | undefined) {
     if (!ev) return;
     const inst = instances.get(ev.session);
-    if (!inst || !inst.ready || ev.seq <= inst.lastSeq) return;
+    if (!inst) return;
+    if (!inst.ready) {
+      const queue = pending.get(ev.session) ?? [];
+      queue.push(ev);
+      if (queue.length > 1024) queue.shift();
+      pending.set(ev.session, queue);
+      return;
+    }
+    if (ev.seq <= inst.lastSeq) return;
     inst.lastSeq = ev.seq;
     if (ev.data) inst.term.write(decode(ev.data));
     if (ev.exited) {
@@ -47,6 +56,25 @@
     inst.lastSeq = a.seq;
     inst.exited = false;
     inst.ready = true;
+    drain(id);
+  }
+
+  function drain(id: string) {
+    const queue = pending.get(id) ?? [];
+    pending.delete(id);
+    queue.forEach(writeTerm);
+  }
+
+  export async function reconnectTerminals(ids: Set<string>) {
+    await Promise.all([...instances].filter(([id, inst]) => ids.has(id) && inst.term.element && !inst.exited).map(async ([id, inst]) => {
+      inst.ready = false;
+      const snapshot = await api.term_open(id, inst.term.cols, inst.term.rows);
+      inst.term.reset();
+      if (snapshot.scrollback) inst.term.write(decode(snapshot.scrollback));
+      inst.lastSeq = snapshot.seq;
+      inst.ready = true;
+      drain(id);
+    }));
   }
 
   function create(id: string): Instance {

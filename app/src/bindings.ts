@@ -244,6 +244,13 @@ export type FileDiff = {
 	too_large: boolean,
 };
 
+export type FolderListing = {
+	path: string,
+	parent: string | null,
+	folders: string[],
+	truncated: boolean,
+};
+
 export type GitInfo = {
 	/**  `github.com/owner/repo`, for display. */
 	repo: string | null,
@@ -574,6 +581,9 @@ export const api = {
   archive_session(id: string, force: boolean): Promise<null> {
     return invoke("archive_session", id, force);
   },
+  browse_folders(path: string | null): Promise<FolderListing> {
+    return invoke("browse_folders", path);
+  },
   cancel(id: string): Promise<null> {
     return invoke("cancel", id);
   },
@@ -730,8 +740,8 @@ export const api = {
   watch_rpc(id: string, on: boolean): Promise<null> {
     return invoke("watch_rpc", id, on);
   },
-  watch_workspace(id: string, on: boolean): Promise<null> {
-    return invoke("watch_workspace", id, on);
+  watch_workspace(id: string, on: boolean, client: string): Promise<null> {
+    return invoke("watch_workspace", id, on, client);
   },
   workspace_status(id: string): Promise<FileChange[]> {
     return invoke("workspace_status", id);

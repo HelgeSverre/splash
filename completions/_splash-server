@@ -1,0 +1,2 @@
+#compdef splash-server
+_arguments '--help[Show help]' '--version[Show version]' '--port[Loopback port]:port:' '--data-dir[Data directory]:directory:_directories' '--name[Server display name]:name:' '*:project folder:_directories'

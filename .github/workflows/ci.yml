@@ -16,6 +16,40 @@ permissions:
   contents: read
 
 jobs:
+  server-linux:
+    name: Linux server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-server
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      # Elyra currently links the desktop libraries even for its headless router.
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev pkg-config
+      - name: Build frontend
+        working-directory: app
+        run: npm ci && npm run build
+      - name: Test browser bridge
+        run: node --experimental-strip-types --test app/tests/*.test.ts
+      - name: Build and test the server
+        run: |
+          cargo build --locked --bin splash-server
+          cargo test --locked --test server
+          python3 scripts/test-server-http.py target/debug/splash-server
+
   check:
     name: just check
     runs-on: macos-15

@@ -24,9 +24,27 @@
   import { installKeybindings } from "./lib/keybindings.svelte";
   import { installTabOrder } from "./lib/focus";
   import { showError } from "./lib/system";
+  import ServerConnection from './components/ServerConnection.svelte';
+  import ServerFolderPicker from './components/ServerFolderPicker.svelte';
+  import { folderPicker } from './lib/folder-picker.svelte';
+  import { serverMode, installServerConnection, workspaceClient, renewWorkspace } from './lib/server.svelte';
+  import { openTranscript } from './lib/transcripts.svelte';
+  import { sessionTabs } from "./lib/tabs.svelte";
+  import { applyWorkspace } from './lib/workspace.svelte';
+  import { reconnectTerminals } from './components/TerminalPane.svelte';
 
   installLive();
-  loadAll().then(installRoute).catch(showError);
+  let routeInstalled = false;
+  async function restoreWorkspace() {
+    await loadAll();
+    if (!routeInstalled) { installRoute(); routeInstalled = true; }
+    const id = currentSession()?.id;
+    if (id) { await openTranscript(id); await renewWorkspace(id); applyWorkspace({ session: id, paths: [] });
+      applyWorkspace({ session: id, paths: sessionTabs(id).list.flatMap((tab) => "path" in tab ? [tab.path] : []) }); }
+    await reconnectTerminals(new Set(app.sessions.map((s) => s.id)));
+  }
+  if (serverMode) installServerConnection(restoreWorkspace);
+  else loadAll().then(() => { installRoute(); routeInstalled = true; }).catch(showError);
   installKeybindings();
   installTabOrder();
   installCommands();
@@ -42,9 +60,15 @@
   let watched: string | undefined;
   $effect(() => {
     const id = sessionId;
-    if (watched && watched !== id) api.watch_workspace(watched, false).catch(() => {});
-    if (id && id !== watched) api.watch_workspace(id, true).catch(() => {});
+    if (watched && watched !== id) api.watch_workspace(watched, false, workspaceClient).catch(() => {});
+    if (id && id !== watched) renewWorkspace(id).catch(() => {});
     watched = id;
+  });
+  $effect(() => {
+    const id = sessionId;
+    if (!id) return;
+    const timer = setInterval(() => renewWorkspace(id).catch(() => {}), 30000);
+    return () => clearInterval(timer);
   });
 </script>
 
@@ -54,6 +78,7 @@
     <Splitter axis="x" label="Resize sidebar" value={layout.left} min={200} max={420} onmove={(d) => (layout.left = clamp(layout.left + d, 200, 420))} onend={saveLayout} />
   {/if}
   <main>
+    {#if serverMode}<ServerConnection />{/if}
     <div class="top">
       <div class="center">
         {#if app.view.kind === "library"}
@@ -84,6 +109,8 @@
     {/if}
   </main>
 </div>
+
+{#if folderPicker.open}<ServerFolderPicker />{/if}
 
 {#if github.issueOpen}<IssueComposer />{/if}
 

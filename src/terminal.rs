@@ -80,7 +80,7 @@ impl Terminals {
                 pixel_height: 0,
             })
             .map_err(io)?;
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
         let mut cmd = CommandBuilder::new(shell);
         cmd.arg("-l");
         cmd.cwd(cwd);

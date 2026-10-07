@@ -1,11 +1,13 @@
 // Projects, sessions and agents: the app's data, fed by commands and the
 // session, agents and project channels (lib/live), and which view shows.
-import { dialog, notify } from "@elyra/runtime";
+import { dialog } from "@elyra/runtime";
 import { api, type GithubItem, type AgentStatus, type Isolation, type Project, type SessionView, type Status } from "../bindings";
 import type { View } from "./route.svelte";
 import { prefs, setPref } from "./prefs.svelte";
 import { showSideTab } from "./layout.svelte";
-import { showError } from "./system";
+import { showError, notifyUser } from "./system";
+import { serverMode } from "./server.svelte";
+import { pickServerFolder } from "./folder-picker.svelte";
 import { dropTranscript, newTranscript, openTranscript } from "./transcripts.svelte";
 import { dropTabs, ensureTabs, openTab } from "./tabs.svelte";
 import { dropWorkspace, ensureWorkspace } from "./workspace.svelte";
@@ -51,7 +53,7 @@ export async function loadAll() {
   app.projects = projects;
   app.sessions = sessions;
   Object.assign(prefs, settings);
-  refreshAgents(false);
+  await refreshAgents(false);
 }
 
 async function refreshAgents(refresh = true) {
@@ -99,7 +101,7 @@ export async function addProject(path: string) {
 
 /** Ask for a folder and add it as a project: the project, or null if cancelled or it failed. */
 export async function pickFolder(): Promise<Project | null> {
-  const [dir] = await dialog.open({ directory: true, title: "Add a project folder" });
+  const dir = serverMode ? await pickServerFolder() : (await dialog.open({ directory: true, title: "Add a project folder" }))[0];
   if (!dir) return null;
   try {
     return await addProject(dir);
@@ -169,10 +171,10 @@ export function applySession(s: SessionView | undefined) {
   if (!background || before === undefined || before === s.status) return;
   if (s.status === "awaiting_permission") {
     app.unread[s.id] = true;
-    notify(`${s.title} needs permission`, "Splash is waiting for you to allow or reject a tool call.").catch(() => {});
+    notifyUser(`${s.title} needs permission`, "Splash is waiting for you to allow or reject a tool call.").catch(() => {});
   } else if (isBusy(before) && s.status === "idle") {
     app.unread[s.id] = true;
-    notify(`${s.title} finished`, agentById(s.agent_id)?.name ?? s.agent_id).catch(() => {});
+    notifyUser(`${s.title} finished`, agentById(s.agent_id)?.name ?? s.agent_id).catch(() => {});
   } else if (s.status === "error" && before !== "error") {
     app.unread[s.id] = true;
   }

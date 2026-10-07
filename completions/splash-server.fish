@@ -1,0 +1,5 @@
+complete -c splash-server -l help -s h -d 'Show help'
+complete -c splash-server -l version -s V -d 'Show version'
+complete -c splash-server -l port -x -d 'Loopback port'
+complete -c splash-server -l name -x -d 'Server display name'
+complete -c splash-server -l data-dir -r -a '(__fish_complete_directories)' -d 'Data directory'

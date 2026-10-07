@@ -1,0 +1,14 @@
+[Unit]
+Description=Splash coding-agent server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/splash-server --data-dir %h/.local/share/SplashServer --name devbox
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target

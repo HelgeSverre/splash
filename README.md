@@ -19,13 +19,22 @@ Splash talks to agents over the [Agent Client Protocol](https://agentclientproto
 
 Each session is one agent working in one project folder. It runs in the folder itself or, in a git repository, in a separate worktree: a second checkout of the repo on its own branch.
 
-Splash is an early personal project, developed and tested on macOS only.
+Splash is an early personal project. The desktop app targets macOS; the single-user server can run independently of a desktop window. Linux server builds and headless startup are covered by CI.
 
 ## Screenshots
 
-Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories. The session library, ACP history, fork, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness.
+Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories. The session library, ACP history, fork, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness. Server captures use the authenticated server locally with isolated data and fixture agents; they demonstrate the UI, not a live remote deployment.
 
 <table>
+  <tr>
+    <td width="50%" valign="top"><strong>Sign in to a Splash server</strong><br><a href="screenshots/server-login.jpg"><img src="screenshots/server-login.jpg" alt="Token login for the authenticated Splash server" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Server session library</strong><br><a href="screenshots/server-library.jpg"><img src="screenshots/server-library.jpg" alt="Connected server status and saved conversations in the browser" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><strong>Choose a folder on the server</strong><br><a href="screenshots/server-folders.jpg"><img src="screenshots/server-folders.jpg" alt="Browser folder picker showing projects on the server filesystem" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Keep drafts during a disconnect</strong><br><a href="screenshots/server-offline.jpg"><img src="screenshots/server-offline.jpg" alt="Offline banner with a saved conversation and an unsent draft preserved" width="100%"></a></td>
+  </tr>
+
   <tr>
     <td width="50%" valign="top">
       <strong>Browse history across agents and folders</strong><br>
@@ -261,6 +270,96 @@ just run ~/code/some-repo   # the same, adding a folder as a project
 The first build compiles all Rust dependencies and takes a few minutes. In the app, add a project folder, press ⌘N to open the new-session dialog, pick an agent, and send a prompt. `just detect` lists which agents Splash can find and whether they answer.
 
 Data lives in `~/Library/Application Support/Splash`. Set `SPLASH_DATA_DIR` to use another folder.
+
+## Run as a web app over SSH
+
+Run `splash-server` on the machine that owns your repositories and agent logins.
+Open its UI in your browser through an SSH tunnel. Agents still speak ACP over
+local stdio on that machine; SSH transports the browser connection. Files, Git,
+terminals, session discovery and agent execution all stay together on the server.
+
+```text
+Browser → localhost:4780 → SSH tunnel → Splash server → ACP stdio → agents
+                                            └─────── repositories / terminals
+```
+
+Build on the server with Rust, Node.js and the frontend dependencies installed:
+
+```sh
+cd app && npm ci && cd ..
+just server-build
+mkdir -p ~/.local/bin
+cp target/release/splash-server ~/.local/bin/
+~/.local/bin/splash-server --name devbox --data-dir ~/.local/share/SplashServer ~/code/my-project
+```
+
+On Ubuntu 24.04, install `build-essential pkg-config libgtk-3-dev
+libwebkit2gtk-4.1-dev libxdo-dev libssl-dev` first. Elyra currently links desktop
+libraries into the server binary, but the server does not open a window or need
+a display. Install and authenticate your chosen agents on that same machine.
+Node.js is also needed there for agents launched through npm adapters.
+
+From your laptop:
+
+```sh
+ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
+  -L 127.0.0.1:4780:127.0.0.1:4780 devbox
+```
+
+Open **http://127.0.0.1:4780** and paste the token from the server's
+`DATA_DIR/server.token`. Startup prints the token file's location, never its
+contents. Read the file through your SSH session. Keep the token private: it
+provides access to this user's repositories, terminals and agents.
+
+The server binds only to loopback and requires a token. Login uses an HttpOnly,
+SameSite cookie; foreign origins and non-loopback Host headers are rejected.
+This is a personal, single-user service intended for SSH forwarding, not a public
+or multi-user web deployment. Several hosts can use different local tunnel ports;
+each server keeps its own login cookie and database.
+
+`--port`, `--data-dir`, `--name`, `--help` and `--version` are available. The default
+data folder is `SplashServer` under the OS data directory, separate from the
+desktop app's `Splash` folder. `SPLASH_DATA_DIR` overrides it. Do not share a live
+database with the desktop app; a lock prevents two servers using the same folder.
+Completion scripts for Bash, Zsh and Fish are in [completions/](completions/).
+
+### Keep the server running
+
+For Linux, install the supplied user service after copying the binary:
+
+```sh
+mkdir -p ~/.config/systemd/user
+cp packaging/server/splash.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now splash
+journalctl --user -u splash -f
+```
+
+Edit its name, data directory and environment as needed. To keep a user service
+running after logout, the machine administrator can enable lingering with
+`loginctl enable-linger USER`. For macOS, copy the
+[launchd example](packaging/server/com.helgesverre.splash-server.plist.example) to
+`~/Library/LaunchAgents/com.helgesverre.splash-server.plist`, replace `YOUR_USER`
+with your actual account name, then load it with
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.helgesverre.splash-server.plist`.
+These templates are not installed automatically.
+
+Closing a browser or losing the SSH tunnel leaves agents running in the service.
+When connectivity returns, Splash refreshes sessions, the current transcript,
+permissions, files and existing terminal views. Drafts stay in the open tab;
+sending is disabled while disconnected. Commands are never automatically replayed
+because a failed response does not prove that the server missed the command.
+
+Restarting the backend interrupts agent and terminal processes. Saved transcripts
+remain, and the browser restores its connection and current view; continue the
+conversation explicitly. Drafts are held in browser memory, so save important
+unsent text before reloading or signing out. To rotate access, stop the service,
+remove only `server.token` from its data directory, and start it again; every
+browser must sign in with the new token.
+
+This version connects one browser tab to one server. A multi-host dashboard and
+launching a remote ACP agent directly through `ssh host agent --acp` are separate
+future work; they are not needed for the server-over-SSH setup above.
 
 ## Features
 

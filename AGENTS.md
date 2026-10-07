@@ -10,11 +10,16 @@ Run `just check` and `just frontend` for significant changes. Use an isolated
 `SPLASH_DATA_DIR` for app testing and screenshots; do not use personal agent
 conversations or modify the user's normal Splash database as test data.
 
+For server changes, also run `node --experimental-strip-types --test app/tests/*.test.ts`
+and `python3 scripts/test-server-http.py target/debug/splash-server` after building
+the binary. Verify reconnects against an isolated server; do not interrupt the
+user's normal server or agents.
+
 ## UI screenshots and README
 
 For every substantial UI change:
 
-- Run the real app or the `splash-web` harness and capture screenshots of the
+- Run the real app or the `splash-web` harness (or `splash-server` for server UI) and capture screenshots of the
   finished UI. Do not substitute mockups, design concepts, or fabricated UI.
 - Cover most major screens and workflows affected by the change, including
   meaningful populated states. Capture relevant empty, loading, or error states
