@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agents, type AgentId } from "./agents.ts";
-import { initRepo } from "./git.ts";
+import { initRepo, write } from "./git.ts";
 import { BINARIES, E2E, FIXTURES } from "./paths.ts";
 
 export type WorldOptions = {
@@ -53,6 +53,8 @@ export class World {
       SPLASH_SHELL: "/bin/bash",
       SPLASH_DATA_DIR: this.data,
       SPLASH_E2E_DIR: this.control,
+      // The desktop harness answers its stubbed folder dialog from this file.
+      SPLASH_WEB_DIALOG_FILE: join(this.control, "dialog.json"),
       SPLASH_E2E_FAKE_ACP: BINARIES.fakeAcp,
       SPLASH_E2E_FIXTURES: FIXTURES,
       GIT_CONFIG_GLOBAL: this.gitconfig,
@@ -63,6 +65,19 @@ export class World {
       NO_COLOR: "1",
       RUST_BACKTRACE: "1",
     };
+  }
+
+  /** A plain folder (not a git repository) under the test's root. */
+  folder(name: string, files: Record<string, string> = {}): string {
+    const dir = join(this.root, name);
+    mkdirSync(dir, { recursive: true });
+    for (const [path, text] of Object.entries(files)) write(dir, path, text);
+    return dir;
+  }
+
+  /** Pool's login check is a credentials file in the home folder. */
+  signInPool() {
+    write(this.home, ".config/poolside/credentials.json", "{}");
   }
 
   dispose() {

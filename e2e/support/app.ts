@@ -39,6 +39,16 @@ export class App {
   entries(kind: string) {
     return this.transcript.locator(`[data-kind="${kind}"]`);
   }
+  get sendButton() {
+    return this.page.getByRole("button", { name: "Send", exact: true });
+  }
+  get stopButton() {
+    return this.page.getByRole("button", { name: "Stop", exact: true });
+  }
+  /** The session header's title, which renames on click. */
+  get title() {
+    return this.page.locator('button[title="Rename"]');
+  }
   get status() {
     return this.page.locator("[data-status]");
   }
@@ -47,8 +57,13 @@ export class App {
     return this.harness === "web" ? `Alt+Shift+${combo}` : `ControlOrMeta+${combo}`;
   }
 
+  /** The sidebar's New session item (the Welcome page has a button of its own). */
+  get newSessionButton() {
+    return this.sidebar.locator(".footer .nav-item", { hasText: "New session" });
+  }
+
   async waitReady() {
-    await expect(this.page.getByRole("button", { name: "New session", exact: true })).toBeVisible();
+    await expect(this.newSessionButton).toBeVisible();
   }
 
   async expectStatus(status: Status, timeout?: number) {
@@ -64,7 +79,7 @@ export class App {
   /** Start a session through the New session dialog and wait until the agent is ready. */
   async newSession(options: { agent?: AgentId; where?: "worktree" | "in_place"; project?: string; folders?: string[] } = {}) {
     const before = await this.page.evaluate(() => location.hash);
-    await this.page.getByRole("button", { name: "New session", exact: true }).click();
+    await this.newSessionButton.click();
     const dialog = this.page.getByRole("dialog", { name: "New session" });
     await expect(dialog).toBeVisible();
     if (options.project) await dialog.getByRole("radiogroup", { name: "Project" }).getByRole("radio", { name: options.project }).click();
@@ -100,14 +115,29 @@ export class App {
     await this.sidebar.getByRole("button", { name: new RegExp(`^${name}`) }).click();
   }
 
+  /** A tab of the side panel (Review, Changes, Files, Details). */
+  sideTab(name: "Review" | "Changes" | "Files" | "Details") {
+    return this.page.getByRole("tablist", { name: "Side panel" }).getByRole("tab", { name: new RegExp(`^${name}`) });
+  }
+
+  /** A value in the Details panel, by its label. */
+  detail(label: string) {
+    return this.page.locator(".kv-k", { hasText: new RegExp(`^${label}$`) }).locator("xpath=following-sibling::*[1]");
+  }
+
+  /** The composer's option pickers (mode, model, effort…), by option name. */
+  picker(name: string) {
+    return this.page.locator(`.composer .controls [aria-haspopup=listbox][title="${name}"]`);
+  }
+
   /** A project's toggle in the sidebar. */
   projectRow(name: string) {
     return this.sidebar.locator(".project-toggle", { hasText: name });
   }
 
   /** The sidebar row of a session, by title. */
-  sessionRow(title: string | RegExp) {
-    return this.sidebar.locator("nav").getByRole("button", { name: title });
+  sessionRow(title: string) {
+    return this.sidebar.locator("nav .nav-item").filter({ has: this.page.locator(".label").getByText(title, { exact: true }) });
   }
 
   /** Right-click a sidebar row and pick a menu item. */
@@ -116,8 +146,11 @@ export class App {
     await this.ui.menuItem(item).click();
   }
 
+  /** Answer the open confirm or prompt dialog; another may follow it. */
   async confirm(label: string) {
+    const text = this.ui.modal.locator(".elyra-modal-body, .elyra-modal-title").first();
+    const message = (await text.innerText()).split("\n")[0];
     await this.ui.modalButton(label).click();
-    await expect(this.ui.modal).toBeHidden();
+    await expect(this.ui.modal.filter({ hasText: message })).toHaveCount(0);
   }
 }

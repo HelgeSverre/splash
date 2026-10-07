@@ -6,7 +6,7 @@
 // Options (test.use): `agents`, `gh`, `folders` ("repo" adds the temp repo as a
 // project at startup, "none" starts empty), `signIn` (web: log in first).
 import { test as base, expect, type Page } from "@playwright/test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentId } from "./support/agents.ts";
 import { App } from "./support/app.ts";
@@ -27,6 +27,10 @@ export type Splash = {
   signIn(): Promise<void>;
   /** Restart the backend on the same port and data directory, then reload. */
   restart(options?: { reload?: boolean }): Promise<void>;
+  /** Add a project folder the way a user does: the native dialog on the
+   * desktop (answered by the harness), the server folder picker on the web.
+   * Splash then opens the New session dialog for it. */
+  addProject(path: string): Promise<void>;
 };
 
 type Options = {
@@ -68,6 +72,25 @@ export const test = base.extend<Options & { splash: Splash }>({
         await app.waitReady();
         // Startup folders are added in the background.
         if (folders === "repo") await expect(app.projectRow("repo")).toBeVisible();
+      },
+      async addProject(path: string) {
+        const add = app.sidebar.getByRole("button", { name: "Add a project folder" }).first();
+        if (harness === "desktop") {
+          writeFileSync(join(world.control, "dialog.json"), JSON.stringify([path]));
+          await add.click();
+          return;
+        }
+        await add.click();
+        const picker = page.getByRole("dialog", { name: "Add a folder on the server" });
+        const input = picker.getByLabel("Server folder path");
+        await expect(input).toHaveValue(world.home);
+        await input.fill(path);
+        await picker.getByRole("button", { name: "Go" }).click();
+        // The listing must be the typed folder before it can be added.
+        await expect(picker.locator(".folders")).toHaveAttribute("aria-busy", "false");
+        await expect(input).toHaveValue(path);
+        await picker.getByRole("button", { name: "Add this folder" }).click();
+        await expect(picker).toBeHidden();
       },
       async restart({ reload = harness === "desktop" } = {}) {
         await backend.restart();

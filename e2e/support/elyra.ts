@@ -3,11 +3,13 @@
 // class names.
 import type { Locator, Page } from "@playwright/test";
 
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const elyra = (page: Page) => ({
   modal: page.locator(".elyra-modal-overlay"),
-  /** Click a confirm/prompt button by its label ("Remove", "Cancel", "OK"…). */
-  modalButton: (label: string | RegExp): Locator =>
-    page.locator(".elyra-modal-overlay .elyra-modal-btn").filter({ hasText: label }),
+  /** A confirm/prompt button by its exact label ("Remove", "Cancel", "OK"…). */
+  modalButton: (label: string): Locator =>
+    page.locator(".elyra-modal-overlay .elyra-modal-btn").filter({ hasText: new RegExp(`^${escape(label)}$`) }),
   modalInput: page.locator(".elyra-modal-overlay .elyra-modal-input"),
   toasts: page.locator(".elyra-toast"),
   palette: page.locator(".elyra-cmdk input"),

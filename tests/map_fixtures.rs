@@ -165,6 +165,33 @@ fn every_agent_fixture_maps_to_a_finished_turn() {
     }
 }
 
+/// Recordings synthesized for the browser tests (`e2e/`) stay valid traffic.
+#[test]
+fn synthesized_e2e_fixtures_map_to_a_finished_turn() {
+    let dir = format!("{}/fixtures/e2e", env!("CARGO_MANIFEST_DIR"));
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter_map(|n| n.strip_suffix(".jsonl").map(str::to_owned))
+        .collect();
+    names.sort();
+    assert!(!names.is_empty());
+    for name in names {
+        let t = replay("e2e", &name);
+        assert!(
+            matches!(t.entries().last(), Some(Entry::TurnEnd { .. })),
+            "{name}: {:?}",
+            kinds(&t)
+        );
+        assert!(
+            !t.entries()
+                .iter()
+                .any(|e| matches!(e, Entry::Unknown { .. })),
+            "{name}: unknown updates"
+        );
+    }
+}
+
 #[test]
 fn pool_permissions_are_resolved_with_the_chosen_option() {
     let t = replay("pool", "read");

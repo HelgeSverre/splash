@@ -123,10 +123,21 @@ async fn main() {
     let mut turns = turns.into_iter();
 
     let (tx, mut rx) = mpsc::unbounded_channel::<Value>();
+    // Every message is audited as it arrives, including permission answers
+    // and cancels read in the middle of a turn.
+    let audit_path = audit.clone();
     tokio::spawn(async move {
         let mut lines = BufReader::new(tokio::io::stdin()).lines();
         while let Ok(Some(line)) = lines.next_line().await {
             if let Ok(v) = serde_json::from_str::<Value>(&line) {
+                if let Some(path) = &audit_path {
+                    let mut file = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path)
+                        .unwrap();
+                    writeln!(file, "{v}").unwrap();
+                }
                 if tx.send(v).is_err() {
                     break;
                 }
@@ -136,14 +147,6 @@ async fn main() {
 
     let mut next_id = 1000u64;
     while let Some(msg) = rx.recv().await {
-        if let Some(path) = &audit {
-            let mut file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .unwrap();
-            writeln!(file, "{msg}").unwrap();
-        }
         let Some(method) = msg["method"].as_str() else {
             continue;
         };
