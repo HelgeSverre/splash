@@ -119,7 +119,7 @@ impl Workspace {
         let cwd = if root.exists() {
             root
         } else {
-            std::env::var("HOME").map(PathBuf::from).unwrap_or(root)
+            dirs::home_dir().unwrap_or(root)
         };
         let core = self.core.clone();
         let terminals = Arc::downgrade(&self.terminals);

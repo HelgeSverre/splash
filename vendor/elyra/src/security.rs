@@ -388,10 +388,15 @@ impl Policy {
     /// unlocks what the policy already allows.
     pub(crate) fn init_script(&self) -> String {
         // The token is a hex string, so it can't break out of the literal.
-        format!(
+        let script = format!(
             "globalThis.__ELYRA__ = Object.freeze({{ token: \"{}\" }});",
             self.token
-        )
+        );
+        // Wry maps custom schemes to HTTP on WebView2. The 0.8 frontend
+        // runtime still fetches elyra:// URLs; bridge only that exact origin.
+        #[cfg(windows)]
+        let script = script + include_str!("shell/windows-bridge.js");
+        script
     }
 
     /// Whether `shell.open` may hand `target` to the OS.

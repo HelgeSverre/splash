@@ -17,3 +17,8 @@ upstream provides an equivalent supported feature boundary.
 Enable Wry `linux-body` so Linux custom-protocol IPC receives MessagePack POST
 bodies (requires WebKitGTK 2.40+, satisfied by Ubuntu 24.04). Native renderer
 smoke tests exercise this round trip.
+
+On Windows, the initialization script translates the 0.8 runtime's exact
+`elyra://localhost/` fetch prefix to Wry's `http://elyra.localhost/` WebView2
+origin. Token/client headers and router authorization are unchanged. Remove
+this bridge when the frontend runtime supports the platform origin itself.

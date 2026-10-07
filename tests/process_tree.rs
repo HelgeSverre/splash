@@ -53,3 +53,28 @@ async fn terminating_an_agent_stops_its_descendants_with_spaced_unicode_paths() 
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelling_detection_stops_its_descendants() {
+    let dir = std::env::temp_dir().join(splash::store::new_id("splash-cancel"));
+    std::fs::create_dir(&dir).unwrap();
+    let heartbeat = dir.join("cancelled heartbeat.txt");
+    let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_fake-acp"));
+    command.arg("--spawn-heartbeat-child").arg(&heartbeat);
+    let task = tokio::spawn(splash::procs::output_with_timeout(
+        command,
+        Duration::from_secs(60),
+    ));
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !heartbeat.exists() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(heartbeat.exists(), "grandchild never started");
+    task.abort();
+    let _ = task.await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let size = std::fs::metadata(&heartbeat).unwrap().len();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(std::fs::metadata(&heartbeat).unwrap().len(), size);
+    std::fs::remove_dir_all(dir).unwrap();
+}
