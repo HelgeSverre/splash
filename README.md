@@ -26,9 +26,15 @@ Splash is an early personal project. Native CI covers macOS (Apple silicon and I
 Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories. The session library, ACP history, fork, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness. Server captures use the authenticated server locally with isolated data and fixture agents; they demonstrate the UI, not a live remote deployment.
 
 The platform settings captures below show a macOS browser connected to the local
-macOS demo server; they are not native Windows/Linux screenshots.
+macOS demo server. The Linux and Windows captures show downloaded CI artifacts
+running in Ubuntu 24.04 Docker/Xvfb and a temporary Windows Server 2025 EC2 desktop.
+See the [artifact smoke-test report](docs/artifact-smoke-2026-10-07.md) for scope and results.
 
 <table>
+  <tr>
+    <td width="50%" valign="top"><strong>Linux CI artifact — installed DEB</strong><br><a href="screenshots/linux-ci-artifact.png"><img src="screenshots/linux-ci-artifact.png" alt="Installed Linux CI artifact rendering in an Ubuntu 24.04 Docker container with Xvfb" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Windows CI artifact — standard-user install</strong><br><a href="screenshots/windows-ci-artifact.png"><img src="screenshots/windows-ci-artifact.png" alt="Installed Windows CI artifact running as a standard user on a temporary Windows Server 2025 EC2 desktop" width="100%"></a></td>
+  </tr>
   <tr>
     <td width="50%" valign="top"><strong>Backend host and shell diagnostics</strong><br><a href="screenshots/platform-host.jpg"><img src="screenshots/platform-host.jpg" alt="About Splash showing the backend operating system, architecture, terminal shell and isolated data location" width="100%"></a></td>
     <td width="50%" valign="top"><strong>Client and browser shortcut conventions</strong><br><a href="screenshots/platform-shortcuts.jpg"><img src="screenshots/platform-shortcuts.jpg" alt="Keyboard settings with browser-safe default shortcuts on a macOS client" width="100%"></a></td>
