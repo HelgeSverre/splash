@@ -111,7 +111,13 @@ pub async fn read(
     extra: &[String],
     request: Request,
 ) -> Result<HistoryResult> {
-    let (conn, mut process) = transport::spawn(agent, cwd, extra, Arc::new(|_, _| {}))?;
+    let (conn, mut process) =
+        transport::spawn(agent, cwd, extra, Arc::new(|_, _| {})).map_err(|e| {
+            Error::Other(format!(
+                "Could not start {} for session discovery: {e}",
+                agent.name
+            ))
+        })?;
     let replay = Arc::new(Mutex::new(Replay::default()));
     let session = Arc::new(Mutex::new(match &request {
         Request::Load(info) | Request::Fork(info) => info.clone(),
@@ -206,11 +212,20 @@ pub async fn read(
     if let Some(mut child) = process.child.take() {
         let _ = child.wait().await;
     }
+    process.drain_stderr().await;
     outcome
         .map_err(|_| {
             Error::Other("Agent history request timed out. Retry when the agent is ready.".into())
         })?
-        .map_err(|e| Error::Other(format!("Agent history request failed: {e}")))?;
+        .map_err(|e| {
+            let tail = process.stderr_tail();
+            let mut message = format!("{} history request failed: {e}", agent.name);
+            if !tail.is_empty() {
+                message.push_str("\n\nAgent output:\n");
+                message.push_str(&tail);
+            }
+            Error::Other(message)
+        })?;
     let entries = std::mem::take(&mut *replay.lock()).finish();
     let page = std::mem::take(&mut *page.lock());
     let session = session.lock().clone();

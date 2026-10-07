@@ -38,3 +38,8 @@ For every substantial UI change:
 Screenshots are documentation assets, not frontend assets. Keep them out of the
 embedded webview and release bundle. Describe demo fixtures honestly in the
 README and keep any historical design explorations clearly separated.
+
+For long-lived demo previews, copy required server and fixture-agent executables
+into the isolated demo directory. Do not leave launchers pointing into `target/`,
+which build cleanup may remove. Before handing off a preview, exercise its main
+actions (including **Find sessions**) with the same environment it will retain.

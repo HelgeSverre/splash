@@ -479,3 +479,43 @@ fn session_info_updates_distinguish_omitted_fields_from_explicit_null() {
     assert_eq!(transcript.meta.source_metadata_json, None);
     assert_eq!(transcript.meta.info_revision, 3);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn discovery_reports_the_launcher_error_when_initialization_closes() {
+    let spec = AgentSpec {
+        id: "broken",
+        name: "Broken adapter",
+        cli: "/bin/sh",
+        program: "/bin/sh",
+        args: &[
+            "-c",
+            "printf 'adapter executable missing: reinstall the adapter\\n' >&2; exit 127",
+        ],
+        env: &[],
+        transport: Transport::Native,
+        experimental: false,
+        auth: AuthCheck::File("nope"),
+    };
+    let result = splash::acp::history::read(
+        &spec,
+        &std::env::temp_dir(),
+        &[],
+        splash::acp::history::Request::List {
+            cwd: None,
+            cursor: None,
+        },
+    )
+    .await;
+    let error = match result {
+        Err(e) => e.to_string(),
+        Ok(_) => panic!("broken adapter must fail"),
+    };
+    assert!(
+        error.contains("Broken adapter history request failed"),
+        "{error}"
+    );
+    assert!(
+        error.contains("adapter executable missing: reinstall the adapter"),
+        "{error}"
+    );
+}

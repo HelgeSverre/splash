@@ -27,6 +27,10 @@ Click any screenshot to open it at full size. Session and workbench captures use
 
 <table>
   <tr>
+    <td width="50%" valign="top"><strong>Discover sessions through the server</strong><br><a href="screenshots/server-discovery-restored.jpg"><img src="screenshots/server-discovery-restored.jpg" alt="Successful server discovery with two fixture sessions each from Claude Code, Codex and Pi" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Diagnose an adapter startup failure</strong><br><a href="screenshots/server-discovery-error.jpg"><img src="screenshots/server-discovery-error.jpg" alt="Agent initialization failure including stderr that identifies a missing adapter executable" width="100%"></a></td>
+  </tr>
+  <tr>
     <td width="50%" valign="top"><strong>Sign in to a Splash server</strong><br><a href="screenshots/server-login.jpg"><img src="screenshots/server-login.jpg" alt="Token login for the authenticated Splash server" width="100%"></a></td>
     <td width="50%" valign="top"><strong>Server session library</strong><br><a href="screenshots/server-library.jpg"><img src="screenshots/server-library.jpg" alt="Connected server status and saved conversations in the browser" width="100%"></a></td>
   </tr>
@@ -356,6 +360,12 @@ conversation explicitly. Drafts are held in browser memory, so save important
 unsent text before reloading or signing out. To rotate access, stop the service,
 remove only `server.token` from its data directory, and start it again; every
 browser must sign in with the new token.
+
+If **Find sessions** reports a transport closing during `initialize`, the adapter
+exited before completing its ACP handshake. The error includes the agent's recent
+stderr under **Agent output**. Check that executable paths still exist and that
+the agent or adapter is installed and authenticated on the server, then retry.
+The documented demo uses fixture agents, not your personal agent installations.
 
 This version connects one browser tab to one server. A multi-host dashboard and
 launching a remote ACP agent directly through `ssh host agent --acp` are separate

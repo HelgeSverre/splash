@@ -36,11 +36,24 @@ pub struct AgentProcess {
     pub child: Option<Child>,
     /// The last ~40 lines of stderr, for error messages when the agent dies.
     pub stderr: Arc<Mutex<VecDeque<String>>>,
+    stderr_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl AgentProcess {
     pub fn kill(&self) {
         crate::procs::kill_group(self.pgid);
+    }
+
+    /// Drain diagnostics after exit, bounded in case a descendant holds stderr open.
+    pub async fn drain_stderr(&mut self) {
+        if let Some(mut task) = self.stderr_task.take() {
+            if tokio::time::timeout(std::time::Duration::from_millis(250), &mut task)
+                .await
+                .is_err()
+            {
+                task.abort();
+            }
+        }
     }
 
     pub fn stderr_tail(&self) -> String {
@@ -94,7 +107,7 @@ pub fn spawn(
     let stderr = child.stderr.take().expect("piped stderr");
 
     let tail = Arc::new(Mutex::new(VecDeque::with_capacity(40)));
-    {
+    let stderr_task = {
         let tail = tail.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
@@ -105,8 +118,8 @@ pub fn spawn(
                 }
                 t.push_back(line);
             }
-        });
-    }
+        })
+    };
 
     let out_tap = tap.clone();
     let outgoing = futures::sink::unfold(stdin, move |mut stdin, line: String| {
@@ -145,6 +158,7 @@ pub fn spawn(
             pgid,
             child: Some(child),
             stderr: tail,
+            stderr_task: Some(stderr_task),
         },
     ))
 }
