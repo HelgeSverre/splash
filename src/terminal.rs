@@ -38,6 +38,7 @@ struct Term {
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send + Sync>,
+    tree: crate::procs::ProcessTree,
     buffer: Arc<Mutex<(VecDeque<u8>, u32)>>,
 }
 
@@ -94,19 +95,12 @@ impl Terminals {
         cmd.set_suspended(true);
         let mut child = pair.slave.spawn_command(cmd).map_err(io)?;
         drop(pair.slave);
-        if let Some(pid) = child.process_id() {
-            // The shell leads its own session, so its pid is its group id.
-            if let Err(error) = crate::procs::register(pid as i32) {
-                let _ = child.kill();
-                return Err(error.into());
-            }
-            #[cfg(windows)]
-            if let Err(error) = crate::procs::resume(pid as i32) {
-                crate::procs::kill_group(pid as i32);
-                let _ = child.kill();
-                return Err(error.into());
-            }
-        }
+        let pid = child
+            .process_id()
+            .ok_or_else(|| Error::Io("Terminal has no process ID".into()))?;
+        let tree = crate::procs::ProcessTree::new(pid as i32).inspect_err(|_| {
+            let _ = child.kill();
+        })?;
         let mut reader = pair.master.try_clone_reader().map_err(io)?;
         let writer = pair.master.take_writer().map_err(io)?;
 
@@ -158,6 +152,7 @@ impl Terminals {
                 writer,
                 master: pair.master,
                 child,
+                tree,
                 buffer,
             },
         );
@@ -190,9 +185,7 @@ impl Terminals {
     /// Kill the shell (a new one starts on the next `open`).
     pub fn close(&self, session: &str) {
         if let Some(mut t) = self.map.lock().remove(session) {
-            if let Some(pid) = t.child.process_id() {
-                crate::procs::kill_group(pid as i32);
-            }
+            t.tree.kill();
             let _ = t.child.kill();
             let _ = t.child.wait();
         }
@@ -203,9 +196,6 @@ impl Terminals {
         let mut map = self.map.lock();
         if let Some(t) = map.get_mut(session) {
             if matches!(t.child.try_wait(), Ok(Some(_))) {
-                if let Some(pid) = t.child.process_id() {
-                    crate::procs::unregister(pid as i32);
-                }
                 map.remove(session);
             }
         }
@@ -241,7 +231,9 @@ mod tests {
         } else {
             "echo splash-$((40+2))\n"
         };
-        terms.write("t1", command).unwrap();
+        if !cfg!(windows) {
+            terms.write("t1", command).unwrap();
+        }
 
         let mut seen = String::new();
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
@@ -250,6 +242,12 @@ mod tests {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(e.data)
                     .unwrap();
+                // ConPTY asks the terminal emulator for its cursor position at startup.
+                // This fixture has no xterm.js, so answer its device status query.
+                if cfg!(windows) && bytes.windows(4).any(|part| part == b"\x1b[6n") {
+                    terms.write("t1", "\x1b[1;1R").unwrap();
+                    terms.write("t1", command).unwrap();
+                }
                 seen.push_str(&String::from_utf8_lossy(&bytes));
             }
         }

@@ -1,3 +1,5 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 fn main() -> elyra::Result<()> {
     if std::env::args().any(|arg| arg == "--version") {
         println!("Splash {}", env!("CARGO_PKG_VERSION"));

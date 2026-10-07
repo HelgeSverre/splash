@@ -1028,7 +1028,9 @@ sys.exit(status)
                 .unwrap();
         assert_eq!(sent, json!({"title":title,"body":body}));
         let args = std::fs::read_to_string(fixture.dir.join("args")).unwrap();
-        assert!(args.contains("repos/a/b/issues\n--input\n-"));
+        assert!(args
+            .replace("\r\n", "\n")
+            .contains("repos/a/b/issues\n--input\n-"));
         assert!(!fixture.dir.join("unexpected").exists());
         fixture.response("HTTP 403: issues are disabled", false);
         assert!(fixture

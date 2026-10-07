@@ -80,19 +80,14 @@ pub async fn detect(spec: &AgentSpec) -> AgentStatus {
 async fn run(args: &[&str]) -> Option<(bool, String)> {
     let (program, rest) = args.split_first()?;
     let program = env::which(program)?;
-    let out = tokio::time::timeout(
-        Duration::from_secs(10),
-        Command::new(program)
-            .args(rest)
-            .env("PATH", env::path())
-            .env("NO_COLOR", "1")
-            .stdin(std::process::Stdio::null())
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await
-    .ok()?
-    .ok()?;
+    let mut command = Command::new(program);
+    command
+        .args(rest)
+        .env("PATH", env::path())
+        .env("NO_COLOR", "1");
+    let out = crate::procs::output_with_timeout(command, Duration::from_secs(10))
+        .await
+        .ok()?;
     let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
     text.push_str(&String::from_utf8_lossy(&out.stderr));
     Some((out.status.success(), strip_ansi(&text)))

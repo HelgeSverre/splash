@@ -38,18 +38,14 @@ pub fn run_with_timeout(cmd: &mut Command, timeout: Duration) -> Option<Output> 
         .spawn()
         .ok()?;
     let pid = child.id() as i32;
-    if register(pid).is_err() {
-        let _ = child.kill();
-        let _ = child.wait();
-        return None;
-    }
-    #[cfg(windows)]
-    if resume(pid).is_err() {
-        kill_group(pid);
-        let _ = child.kill();
-        let _ = child.wait();
-        return None;
-    }
+    let tree = match ProcessTree::new(pid) {
+        Ok(tree) => tree,
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+    };
     // Drain stdout alongside, so a chatty child can't block on a full pipe.
     let mut out = child.stdout.take()?;
     let reader = std::thread::spawn(move || {
@@ -63,17 +59,78 @@ pub fn run_with_timeout(cmd: &mut Command, timeout: Duration) -> Option<Output> 
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
             _ => {
-                kill_group(pid);
+                tree.kill();
                 let _ = child.kill();
                 let _ = child.wait();
                 return None;
             }
         }
     };
-    kill_group(pid);
+    tree.kill();
     Some(Output {
         status,
         stdout: reader.join().unwrap_or_default(),
         stderr: Vec::new(),
     })
+}
+
+/// Own a registered child tree. Cleanup also runs on setup errors and cancellation.
+pub struct ProcessTree {
+    id: i32,
+    killed: std::sync::atomic::AtomicBool,
+}
+impl ProcessTree {
+    /// Windows callers must create the child suspended; assignment precedes resume.
+    pub fn new(id: i32) -> std::io::Result<Self> {
+        if id <= 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Invalid process ID",
+            ));
+        }
+        register(id)?;
+        let tree = Self {
+            id,
+            killed: std::sync::atomic::AtomicBool::new(false),
+        };
+        #[cfg(windows)]
+        resume(id)?;
+        Ok(tree)
+    }
+    pub fn kill(&self) {
+        if !self.killed.swap(true, std::sync::atomic::Ordering::AcqRel) {
+            kill_group(self.id);
+        }
+    }
+}
+impl Drop for ProcessTree {
+    fn drop(&mut self) {
+        self.kill();
+    }
+}
+
+/// Bounded detection commands need the same descendant cleanup as ACP sessions.
+pub async fn output_with_timeout(
+    mut command: tokio::process::Command,
+    timeout: Duration,
+) -> std::io::Result<Output> {
+    #[cfg(unix)]
+    command.process_group(0);
+    #[cfg(windows)]
+    command.creation_flags(windows_sys::Win32::System::Threading::CREATE_SUSPENDED);
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()?;
+    let id = child
+        .id()
+        .ok_or_else(|| std::io::Error::other("Child has no process ID"))? as i32;
+    let _tree = ProcessTree::new(id).inspect_err(|_| {
+        let _ = child.start_kill();
+    })?;
+    tokio::time::timeout(timeout, child.wait_with_output())
+        .await
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "Command timed out"))?
 }

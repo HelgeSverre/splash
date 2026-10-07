@@ -11,9 +11,10 @@ body:
     validations:
       required: true
   - type: input
-    id: macos
+    id: platform
     attributes:
-      label: macOS version and Mac model
+      label: Operating system, version and architecture
+      description: For browser mode, include both the browser/client OS and the server host OS.
     validations:
       required: true
   - type: input

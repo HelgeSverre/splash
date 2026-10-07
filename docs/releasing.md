@@ -2,7 +2,8 @@
 
 Splash's permanent bundle identifier is `no.helgesverre.splash`, following the
 `no.helgesverre.*` convention used by Token, Strek and MDViewer.
-The database and worktrees remain in `~/Library/Application Support/Splash`.
+On macOS the database and worktrees remain in `~/Library/Application Support/Splash`.
+Windows and Linux use their native application data directories.
 
 ## GitHub Actions setup
 
@@ -83,7 +84,7 @@ unsigned fallback. No Installer certificate is needed for the app ZIP.
 
 Manual workflow runs also require signing and notarization. They upload Actions
 artifacts; runs on branches do not create a GitHub release. The ZIP name records
-the build host architecture. The current `macos-15` runner builds for Apple Silicon. The frontend targets
+the build host architecture. The `macos-15` runner builds for Apple Silicon and `macos-15-intel` builds for Intel. The frontend targets
 Safari 17, and packaging sets macOS 14 as the minimum supported version.
 
 ## Local verification
@@ -115,3 +116,30 @@ after rebuilding.
 
 References: [Apple's notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
 and [GitHub's certificate setup](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications).
+
+## Windows, Linux and headless artifacts
+
+The reusable `packages.yml` workflow runs with CI on main and pull requests.
+It builds native Windows x64 installers and portable ZIPs, Ubuntu 24.04 x64
+DEBs, AppImages and tarballs, and standalone headless server archives for all
+four OS/architecture targets. Every artifact has a SHA-256 sidecar. Download
+`splash-packages-*` from the completed CI run. Windows packages and standalone
+server archives are unsigned; Apple signing applies to the desktop app ZIPs.
+
+Windows uses a per-user NSIS installer and requires WebView2 Evergreen. CI
+silently installs into a path containing spaces, waits for the real renderer
+and IPC handshake, and uninstalls. User data is retained by uninstall.
+
+Linux AppImages use the host GTK/WebKit runtime; Ubuntu 24.04 (glibc 2.39) is
+the baseline, not a claim of compatibility with older distributions. The pinned
+appimagetool and its embedded runtime are checksum verified. The final image
+is inspected for executable permissions on AppRun and the binary and for its
+glibc symbol requirements. A fresh ordinary-user container with its own TMPDIR
+then exercises the extracted AppImage, DEB payload and server archive. WebKit's
+sandbox remains enabled. Xvfb covers X11; Wayland still needs a native manual
+check. See the README for runtime packages and FUSE-free extraction.
+
+On a version tag, the Release workflow waits for these packages and both
+signed macOS desktop ZIPs, then one publishing job collects them into a single
+draft release. Do not publish a draft until platform checks and manual launch
+checks pass. A branch workflow run only uploads Actions artifacts.

@@ -32,6 +32,7 @@ pub type Tap = Arc<dyn Fn(Dir, &str) + Send + Sync>;
 /// processes the adapter starts (the vendor CLI under `npx`) go too.
 pub struct AgentProcess {
     pub pgid: i32,
+    tree: crate::procs::ProcessTree,
     /// Taken by whoever waits on the exit (killing goes through the group).
     pub child: Option<Child>,
     /// The last ~40 lines of stderr, for error messages when the agent dies.
@@ -41,7 +42,7 @@ pub struct AgentProcess {
 
 impl AgentProcess {
     pub fn kill(&self) {
-        crate::procs::kill_group(self.pgid);
+        self.tree.kill();
     }
 
     /// Drain diagnostics after exit, bounded in case a descendant holds stderr open.
@@ -101,18 +102,9 @@ pub fn spawn(
     cmd.creation_flags(windows_sys::Win32::System::Threading::CREATE_SUSPENDED);
     let mut child = cmd.spawn()?;
     let pgid = child.id().map(|p| p as i32).unwrap_or(0);
-    if pgid > 0 {
-        if let Err(error) = crate::procs::register(pgid) {
-            let _ = child.start_kill();
-            return Err(error);
-        }
-        #[cfg(windows)]
-        if let Err(error) = crate::procs::resume(pgid) {
-            crate::procs::kill_group(pgid);
-            let _ = child.start_kill();
-            return Err(error);
-        }
-    }
+    let tree = crate::procs::ProcessTree::new(pgid).inspect_err(|_| {
+        let _ = child.start_kill();
+    })?;
 
     let stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
@@ -168,6 +160,7 @@ pub fn spawn(
         transport,
         AgentProcess {
             pgid,
+            tree,
             child: Some(child),
             stderr: tail,
             stderr_task: Some(stderr_task),

@@ -13,3 +13,7 @@ to upstream v0.8.0. No change to the IPC format or router authorization.
 When updating Elyra, reapply/review these changes and run the server HTTP tests
 with `--no-default-features`, plus the desktop matrix. Remove this copy when
 upstream provides an equivalent supported feature boundary.
+
+Enable Wry `linux-body` so Linux custom-protocol IPC receives MessagePack POST
+bodies (requires WebKitGTK 2.40+, satisfied by Ubuntu 24.04). Native renderer
+smoke tests exercise this round trip.

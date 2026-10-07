@@ -59,7 +59,7 @@ rmp-serde = { version = "1.3" }
 rmp = { version = "0.8" }
 rmpv = { version = "1", features = ["with-serde"] }
 tao = { version = "0.35", optional = true }
-wry = { version = "0.55", optional = true }
+wry = { version = "0.55", optional = true, features = ["linux-body"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 rust-embed = { version = "8" }
 thiserror = { version = "2" }

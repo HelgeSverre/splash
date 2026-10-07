@@ -56,7 +56,7 @@ def main():
         standalone = temp / f'splash-server-{VERSION}-{system}-{arch}'
         copy(server, standalone / server.name)
         copy(ROOT / 'LICENSE', standalone / 'LICENSE', 0o644)
-        (standalone / 'README.txt').write_text('Run splash-server --help. Binds localhost only. For remote access use an SSH tunnel.\nLogin token is stored in the server data directory.\nhttps://github.com/HelgeSverre/splash#remote-server\n')
+        (standalone / 'README.txt').write_text('Run splash-server --help. Binds localhost only. For remote access use an SSH tunnel.\nLogin token is stored in the server data directory.\nhttps://github.com/HelgeSverre/splash#run-as-a-web-app-over-ssh\n')
         archive(standalone, output / (standalone.name + suffix))
         if system == 'windows':
             portable = temp / f'Splash-{VERSION}-windows-{arch}'

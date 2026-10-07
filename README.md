@@ -34,6 +34,9 @@ macOS demo server; they are not native Windows/Linux screenshots.
     <td width="50%" valign="top"><strong>Client and browser shortcut conventions</strong><br><a href="screenshots/platform-shortcuts.jpg"><img src="screenshots/platform-shortcuts.jpg" alt="Keyboard settings with browser-safe default shortcuts on a macOS client" width="100%"></a></td>
   </tr>
   <tr>
+    <td colspan="2" valign="top"><strong>Verify ACP compatibility on the backend host</strong><br><a href="screenshots/platform-agent-check.jpg"><img src="screenshots/platform-agent-check.jpg" alt="Agent settings showing a successful fixture-backed ACP handshake on the macOS demo host" width="100%"></a></td>
+  </tr>
+  <tr>
     <td width="50%" valign="top"><strong>Discover sessions through the server</strong><br><a href="screenshots/server-discovery-restored.jpg"><img src="screenshots/server-discovery-restored.jpg" alt="Successful server discovery with two fixture sessions each from Claude Code, Codex and Pi" width="100%"></a></td>
     <td width="50%" valign="top"><strong>Diagnose an adapter startup failure</strong><br><a href="screenshots/server-discovery-error.jpg"><img src="screenshots/server-discovery-error.jpg" alt="Agent initialization failure including stderr that identifies a missing adapter executable" width="100%"></a></td>
   </tr>
@@ -269,7 +272,8 @@ All archives/installers have adjacent SHA-256 files. Verify with `sha256sum -c`
 on Linux, `shasum -a 256` on macOS, or `Get-FileHash -Algorithm SHA256` on Windows.
 Tagged releases assemble all platform artifacts into one **draft**, after native
 checks and package smoke tests pass. macOS signing/notarization keeps using the
-configured Apple secrets; Windows signing is not configured.
+configured Apple secrets for desktop app ZIPs; Windows packages and standalone
+server archives are unsigned.
 
 #### Linux AppImage caveats
 
@@ -731,7 +735,7 @@ For substantial UI changes, capture most major affected screens in an isolated
 demo workspace, inspect the images, show them during the work, and update the
 gallery above. See [AGENTS.md](AGENTS.md) for the screenshot policy.
 
-CI runs `just check` on pushes to main, pull requests and before every release build. Pushing a `v*` tag builds, signs and notarizes the app, then creates a draft release with a verified ZIP and checksum. The tag must match the Cargo and bundle versions. See [Releasing](docs/releasing.md) for signing configuration and local verification.
+CI runs `just check` on pushes to main, pull requests and before every release build. Pushing a `v*` tag builds, signs and notarizes the app, then collects the macOS ZIPs, Windows/Linux packages and headless archives with checksums into one draft release. The tag must match the Cargo and bundle versions. See [Releasing](docs/releasing.md) for signing configuration and local verification.
 
 ## License
 
