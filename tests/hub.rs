@@ -189,9 +189,19 @@ async fn a_prompt_names_the_session_until_the_agent_does() {
     })
     .await;
     turn_ended(&hub, &id).await;
-    // Persisted too.
-    let stored = hub.core.store().await.unwrap().session(&id).await.unwrap();
-    assert_eq!(stored.title, CODEX_TITLE);
+    // The agent title is written through the store's asynchronous queue.
+    eventually("the persisted agent title", || async {
+        hub.core
+            .store()
+            .await
+            .unwrap()
+            .session(&id)
+            .await
+            .unwrap()
+            .title
+            == CODEX_TITLE
+    })
+    .await;
 
     // A name the user gave sticks.
     let named = hub
