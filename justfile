@@ -86,6 +86,15 @@ release: frontend check _rata
 web *FOLDERS: frontend
     SPLASH_DATA_DIR={{ dev_data }} cargo run --bin splash-web -- --port 4780 {{ FOLDERS }}
 
+# Single-user server; use an SSH tunnel for remote access.
+[group('server')]
+serve *ARGS: frontend
+    cargo run --bin splash-server -- {{ ARGS }}
+
+[group('server')]
+server-build: frontend
+    cargo build --release --bin splash-server
+
 # Drive one agent headless over ACP; --record NAME writes fixtures/<agent>/NAME.jsonl
 [group('harness')]
 spike agent dir prompt *FLAGS:

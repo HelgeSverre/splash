@@ -579,3 +579,44 @@ async fn completed_attention_persists_until_acknowledged() {
     let _ = std::fs::remove_dir_all(data);
     let _ = std::fs::remove_dir_all(repo);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn closing_one_browser_keeps_the_other_workspace_subscription() {
+    let (data, repo) = (temp("watch-data"), repo());
+    let events = elyra::EventBus::new();
+    let spec = fake_agent("claude/read");
+    let hub = Hub::with_agents(data.clone(), events.clone(), Arc::new(move |_| Some(spec)));
+    let project = hub
+        .sessions
+        .add_project(&repo.to_string_lossy())
+        .await
+        .unwrap();
+    let session = hub
+        .sessions
+        .create(&project.id, "fake", Isolation::InPlace, None)
+        .await
+        .unwrap();
+    let id = &session.record.id;
+    hub.workspace.watch(id, true, "browser-a").unwrap();
+    hub.workspace.watch(id, true, "browser-b").unwrap();
+    hub.workspace.watch(id, false, "browser-a").unwrap();
+    assert!(hub.workspace.watch(id, true, "").is_err());
+    std::fs::write(repo.join("other-browser.txt"), "still watched").unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let bytes = events.next_batch().await;
+            let batch: Vec<(String, serde_json::Value)> = rmp_serde::from_slice(&bytes).unwrap();
+            if batch.iter().any(|(channel, value)| {
+                channel == "workspace" && value.to_string().contains("other-browser.txt")
+            }) {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("remaining browser must receive filesystem changes");
+    hub.workspace.watch(id, false, "browser-b").unwrap();
+    drop(hub);
+    std::fs::remove_dir_all(data).unwrap();
+    std::fs::remove_dir_all(repo).unwrap();
+}
