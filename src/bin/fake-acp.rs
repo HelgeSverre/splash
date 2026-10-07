@@ -9,7 +9,9 @@
 //!
 //! Test flags: `--apply-diffs` writes each completed edit's new text to disk,
 //! `--exit-mid-turn N` dies after N steps of the first turn, `--fail-prompt`
-//! answers every prompt with an error.
+//! answers every prompt with an error, `--announce-commands` sends the
+//! recording's slash commands right after `session/new`, as adapters do (so a
+//! handshake probe sees them).
 
 use std::io::Write;
 use std::time::Duration;
@@ -139,6 +141,16 @@ async fn main() {
         .map(|r| r["line"].clone())
         .collect();
     let has_load = rows.iter().any(|r| r["line"]["method"] == "session/load");
+    let announce = args
+        .iter()
+        .any(|s| s == "--announce-commands")
+        .then(|| {
+            replay
+                .iter()
+                .find(|u| u["params"]["update"]["sessionUpdate"] == "available_commands_update")
+        })
+        .flatten()
+        .cloned();
     let recorded_sid = new_session["sessionId"].clone();
     let turns = extract_turns(&rows);
     let mut turns = turns.into_iter();
@@ -200,6 +212,10 @@ async fn main() {
                 notices_before.iter().cloned().for_each(send);
                 send(json!({"jsonrpc": "2.0", "id": id, "result": new_session}));
                 notices_after.iter().cloned().for_each(send);
+                if let Some(mut update) = announce.clone() {
+                    update["params"]["sessionId"] = new_session["sessionId"].clone();
+                    send(update);
+                }
             }
             "session/list" => {
                 let mut result = if msg["params"]["cursor"] == "page-2" {

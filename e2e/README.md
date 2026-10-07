@@ -68,6 +68,8 @@ world.agents.requests("claude", "session/resume"); // ACP requests the agent rec
 
 `fake-acp` also takes `--apply-diffs`, `--exit-mid-turn N` and `--fail-prompt`
 for edits on disk and failures.
+`--announce-commands` sends the recording's slash commands right after
+`session/new`, as adapters do, so a Settings refresh (the handshake) lists them.
 
 ## Writing tests
 
