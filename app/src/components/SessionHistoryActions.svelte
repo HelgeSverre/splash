@@ -15,7 +15,7 @@
   let error = $state("");
   let notice = $state("");
   let panel = $state<"manage" | "fork" | null>(null);
-  let confirm = $state<"native" | "local" | null>(null);
+  let confirm = $state<"native" | "local" | "dirty" | null>(null);
   const source = $derived(session.source ?? {});
   const caps = $derived(session.meta.history_capabilities ?? source.capabilities);
   const disconnected = $derived(["exited", "error"].includes(session.status));
@@ -27,7 +27,7 @@
   const localLabel = $derived(session.isolation === "worktree" && !session.external ? "Delete local session" : "Remove local copy");
   const date = (value: string | null | undefined) => value ? (Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : value) : "Not reported";
   function close() { if (!busy) { panel = null; confirm = null; } }
-  async function run(action: "refresh" | "disconnect" | "capabilities" | "delete" | "remove" | "fork" | "review") {
+  async function run(action: "refresh" | "disconnect" | "capabilities" | "delete" | "remove" | "discard" | "fork" | "review") {
     if (busy) return;
     const id = session.id;
     const agentId = session.agent_id;
@@ -47,8 +47,11 @@
         applySession(await api.delete_agent_history(id));
         invalidateHistory(agentId); confirm = null;
         notice = "Removed from agent history. Your local transcript is still available.";
-      } else if (action === "remove") {
-        await deleteSession(id); invalidateHistory(agentId);
+      } else if (action === "remove" || action === "discard") {
+        // A dirty worktree needs a second, explicit confirmation.
+        try { await deleteSession(id, action === "discard"); }
+        catch (e) { if (errorMessage(e) !== "dirty") throw e; confirm = "dirty"; return; }
+        invalidateHistory(agentId);
       } else {
         const child = await api.fork_session(id);
         applySession(child); invalidateHistory(agentId);
@@ -102,9 +105,9 @@
         {#if !disconnected}<p>Disconnect the agent before changing its saved history.</p>{/if}
         {#if confirm}
           <div class="confirmation" role="group" aria-label="Confirm deletion">
-            <h3>{confirm === "native" ? "Delete from agent history?" : `${localLabel}?`}</h3>
-            <p>{confirm === "native" ? "The agent will remove this conversation from its session list. It may delete or archive its stored data. Splash keeps your local transcript as a read-only copy." : session.isolation === "worktree" && !session.external ? "This deletes the local transcript and its worktree. The Git branch and agent's saved conversation remain." : "This removes the transcript from Splash. Your files and the agent’s saved conversation remain."}</p>
-            <div class="buttons"><button class="btn" disabled={!!busy} onclick={() => confirm = null}>Cancel</button><button class="btn danger" disabled={!!busy || !disconnected} onclick={() => run(confirm === "native" ? "delete" : "remove")}>{busy ? "Working…" : confirm === "native" ? "Delete from agent history" : localLabel}</button></div>
+            <h3>{confirm === "native" ? "Delete from agent history?" : confirm === "dirty" ? "Discard uncommitted changes?" : `${localLabel}?`}</h3>
+            <p>{confirm === "native" ? "The agent will remove this conversation from its session list. It may delete or archive its stored data. Splash keeps your local transcript as a read-only copy." : confirm === "dirty" ? "The worktree has uncommitted changes. Delete anyway and permanently discard them? Keeping the branch does not preserve uncommitted changes." : session.isolation === "worktree" && !session.external ? "This deletes the local transcript and its worktree. The Git branch and agent's saved conversation remain." : "This removes the transcript from Splash. Your files and the agent’s saved conversation remain."}</p>
+            <div class="buttons"><button class="btn" disabled={!!busy} onclick={() => confirm = null}>Cancel</button><button class="btn danger" disabled={!!busy || !disconnected} onclick={() => run(confirm === "native" ? "delete" : confirm === "dirty" ? "discard" : "remove")}>{busy ? "Working…" : confirm === "native" ? "Delete from agent history" : confirm === "dirty" ? "Discard & delete" : localLabel}</button></div>
           </div>
         {:else}
           <div class="buttons management">
