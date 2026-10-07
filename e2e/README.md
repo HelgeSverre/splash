@@ -112,8 +112,14 @@ test("…", async ({ splash }) => {
   below). Wait on what the user sees and `expect.poll` for the database and
   files. Never sleep, never wait for `networkidle` (the event stream is a long
   poll).
-- `support/app.ts` has the common steps; `support/elyra.ts` locates the
+- Helpers by area: `support/app.ts` (sidebar, New session, header,
+  composer, transcript, tabs: the common steps), `views.ts` (Needs
+  attention, Review, the library, changes, files, log, terminal),
+  `history.ts`, `github.ts`, `settings.ts`, and `server.ts` (login,
+  connection banner, folder picker). `support/elyra.ts` locates the
   runtime's confirm, prompt, toast, palette and context menu.
+- `app.waitReady()` waits until the app has loaded and shown the URL's view
+  (`data-ready` on the app root); `waitShown()` only until it is drawn.
 - Options: `test.use({ agents: [...], gh: true, folders: "none", signIn: false })`.
 - To prepare files before the backend starts, use a `beforeEach` that asks
   only for `world`: `test.beforeEach(({ world }) => world.signInPool())`.
