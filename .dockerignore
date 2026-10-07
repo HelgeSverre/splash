@@ -4,3 +4,6 @@
 !scripts/test-server-http.py
 !packaging/
 !packaging/smoke-linux.sh
+
+# Never send signing credentials to the Docker build context.
+signing/

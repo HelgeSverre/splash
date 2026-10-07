@@ -5,3 +5,6 @@ app/dist/*
 .DS_Store
 
 __pycache__/
+
+# Local Apple signing credentials; never commit.
+/signing/

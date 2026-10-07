@@ -14,21 +14,26 @@ certificate's expiry, matching private key, installed signing identity and
 Apple authentication before writing settings. Secret values are sent to `gh`
 over stdin and never printed or placed in command arguments.
 
-For the existing shared Sourcefour assets:
+Run from the Splash repository root using the local, ignored signing assets:
 
 ```bash
 python3 scripts/release.py setup \
-  --application-p12 ../sourcefour/signing/developer-id-application.p12 \
-  --password-file ../sourcefour/signing/password.txt \
-  --notary-key ../sourcefour/signing/AuthKey_M6BZU43Q98.p8 \
-  --issuer-id "$(gh variable get APPLE_NOTARY_ISSUER_ID --repo HelgeSverre/sourcefour)" \
+  --application-p12 signing/developer-id-application.p12 \
+  --password-file signing/password.txt \
+  --notary-key signing/AuthKey_M6BZU43Q98.p8 \
+  --issuer-file signing/issuer-id.txt \
   --repo HelgeSverre/splash \
   --apply
 ```
 
 This uses a team API key, not an Apple ID app-specific password. The certificate
-password only decrypts the `.p12` export. The shared assets are read in place;
-they are not copied into Splash. Local non-secret configuration is written to
+password only decrypts the `.p12` export. Signing assets live in the local
+`signing/` directory, including `issuer-id.txt`. This directory is ignored by Git,
+excluded from Cargo packages and Docker build contexts, and is not an application
+bundle resource. Keep its permissions at `0700` and its files at `0600`. A fresh
+clone needs these files provisioned separately; they are never committed. The
+installer certificate assets are retained locally but are not needed for the
+macOS app ZIP. Local non-secret configuration is written to
 `~/.config/splash/release.json` (override with `SPLASH_RELEASE_CONFIG`), and the
 default Keychain profile is `splash-notary`. The default GitHub repository comes
 from the current checkout; `--repo` makes the destination explicit.
