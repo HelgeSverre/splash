@@ -38,7 +38,8 @@ test("a failed agent can be rechecked, reconnected or dismissed", async ({ splas
   await app.openNav("attention");
   const attention = new Attention(page);
   const item = attention.item(id, "failed");
-  await expect(item).toBeVisible();
+  // How the agent exited and what it said, not the protocol's closed connection.
+  await expect(attention.detail(item)).toHaveText("Claude Code exited: exit status: 1\nfake-acp: lost connection to the model provider");
 
   // The connection test runs the agent without the conversation.
   await attention.recheck(item).click();

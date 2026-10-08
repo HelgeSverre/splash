@@ -39,6 +39,8 @@ const INIT_TIMEOUT: Duration = Duration::from_secs(180);
 const FLUSH_EVERY: Duration = Duration::from_millis(33);
 /// Checkpoint still-streaming entries to the database this often.
 const CHECKPOINT_EVERY: u32 = 60; // × FLUSH_EVERY ≈ 2s
+/// How long an agent that closed its output gets to exit and say why.
+const EXIT_GRACE: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
@@ -306,6 +308,8 @@ async fn run(
             let mut ticker = tokio::time::interval(FLUSH_EVERY);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             let mut ticks: u32 = 0;
+            // When the agent closed its output mid-turn; its exit should follow.
+            let mut closed: Option<Instant> = None;
 
             loop {
                 let before = status;
@@ -344,9 +348,12 @@ async fn run(
                             if let Some(ms) = turn_ms {
                                 transcript.end_turn("error", ms);
                             }
-                            transcript.push(Entry::Error { text: format!("{} exited: {why}", spec_agent.name) });
+                            // The exit status and stderr are what the user needs: the
+                            // entry and the attention item both say them.
+                            let text = format!("{} exited: {why}", spec_agent.name);
+                            transcript.push(Entry::Error { text: text.clone() });
                             flush(&*sink, &key, &mut transcript, true);
-                            sink.status(&key, Status::Exited, Some(&why), &transcript.meta);
+                            sink.status(&key, Status::Exited, Some(&text), &transcript.meta);
                             return Ok(());
                         }
                     },
@@ -370,10 +377,16 @@ async fn run(
                                 status = Status::Idle;
                                 detail = None;
                             }
-                            Err(e) if crate::procs::is_shutting_down() && agent_client_protocol::is_incoming_transport_closed(&e) => {
-                                // Splash is stopping the agent: not its failure.
-                                stopped_by_splash(&*sink, &key, &mut transcript, Some(elapsed));
-                                return Ok(());
+                            Err(e) if agent_client_protocol::is_incoming_transport_closed(&e) => {
+                                // The agent closed its output: Splash is stopping it,
+                                // or it is exiting and its exit status and stderr,
+                                // which say why, follow. The protocol error doesn't.
+                                if crate::procs::is_shutting_down() {
+                                    stopped_by_splash(&*sink, &key, &mut transcript, Some(elapsed));
+                                    return Ok(());
+                                }
+                                transcript.end_turn("error", elapsed);
+                                closed = Some(Instant::now());
                             }
                             Err(e) => {
                                 transcript.end_turn("error", elapsed);
@@ -453,6 +466,14 @@ async fn run(
                     _ = ticker.tick() => {
                         ticks = ticks.wrapping_add(1);
                         flush(&*sink, &key, &mut transcript, ticks.is_multiple_of(CHECKPOINT_EVERY));
+                        // Closed output and no exit: the agent can't be used either.
+                        if closed.is_some_and(|at| at.elapsed() >= EXIT_GRACE) {
+                            closed = None;
+                            let text = format!("{} closed its connection but kept running.", spec_agent.name);
+                            transcript.push(Entry::Error { text: text.clone() });
+                            status = Status::Error;
+                            detail = Some(text);
+                        }
                     }
                     else => break,
                 }

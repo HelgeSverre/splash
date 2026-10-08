@@ -171,14 +171,18 @@ test("an agent that exits mid-turn leaves an error and a recovery item", async (
   world.agents.flags("claude", "--exit-mid-turn", "3");
   const id = await app.newSession({ where: "in_place" });
   await app.send("What does subtract do?");
-  await expect(app.entries("error").last()).toHaveText("Claude Code exited: exit status: 1 fake-acp: lost connection to the model provider");
+  const exited = "Claude Code exited: exit status: 1\nfake-acp: lost connection to the model provider";
+  await expect(app.entries("error").last()).toHaveText(exited);
   await expect(app.turnEnds()).toHaveAttribute("data-stop-reason", "error");
   await app.expectStatus("exited");
+  // The exit says why; the protocol's "Incoming transport closed" doesn't.
+  await expect(app.entries("error")).toHaveCount(1);
   await expect(app.resumeNote).toContainText("Viewing saved history. Continue to reconnect the agent.");
 
   await app.openNav("attention");
   const attention = new Attention(page);
   const item = attention.item(id, "failed");
+  await expect(attention.detail(item)).toHaveText(exited);
   await expect(attention.reconnect(item)).toBeVisible();
 
   world.agents.flags("claude");

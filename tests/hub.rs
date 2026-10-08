@@ -42,12 +42,17 @@ fn repo() -> PathBuf {
 }
 
 fn fake_agent(fixture: &str) -> &'static AgentSpec {
+    fake_agent_with(fixture, &[])
+}
+
+/// `fake-acp` replaying `fixture`, with extra flags.
+fn fake_agent_with(fixture: &str, flags: &[&'static str]) -> &'static AgentSpec {
     let program: &'static str =
         Box::leak(env!("CARGO_BIN_EXE_fake-acp").to_string().into_boxed_str());
     let path: &'static str = Box::leak(
         format!("{}/fixtures/{fixture}.jsonl", env!("CARGO_MANIFEST_DIR")).into_boxed_str(),
     );
-    let args: &'static [&'static str] = Box::leak(vec![path].into_boxed_slice());
+    let args: &'static [&'static str] = Box::leak([&[path], flags].concat().into_boxed_slice());
     Box::leak(Box::new(AgentSpec {
         id: "fake",
         name: "Fake",
@@ -586,6 +591,66 @@ async fn completed_attention_persists_until_acknowledged() {
         .attention
         .is_none());
     hub.sessions.delete(&s.record.id, false).await.unwrap();
+    let _ = std::fs::remove_dir_all(data);
+    let _ = std::fs::remove_dir_all(repo);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_agent_that_exits_mid_turn_needs_recovery_with_its_exit_and_stderr() {
+    let (data, repo) = (temp("data"), repo());
+    let spec = fake_agent_with("claude/read", &["--exit-mid-turn", "2"]);
+    let hub = Hub::with_agents(
+        data.clone(),
+        elyra::EventBus::new(),
+        Arc::new(move |_| Some(spec)),
+    );
+    let project = hub
+        .sessions
+        .add_project(repo.to_str().unwrap())
+        .await
+        .unwrap();
+    let s = hub
+        .sessions
+        .create(&project.id, "fake", Isolation::InPlace, None)
+        .await
+        .unwrap();
+    let id = &s.record.id;
+    hub.sessions
+        .prompt(id, "What does subtract do?")
+        .await
+        .unwrap();
+    eventually("exited", || async {
+        status(&hub, id).await == Some(Status::Exited)
+    })
+    .await;
+
+    let code = if cfg!(windows) {
+        "exit code: 1"
+    } else {
+        "exit status: 1"
+    };
+    let exited = format!("Fake exited: {code}\nfake-acp: lost connection to the model provider");
+    // The inbox says what the transcript says: the exit and stderr, not the
+    // protocol's "Incoming transport closed".
+    let store = hub.core.store().await.unwrap();
+    store.settle().await;
+    let attention = store.session(id).await.unwrap().attention.unwrap();
+    assert_eq!(attention.kind, splash::store::AttentionKind::Failed);
+    assert_eq!(attention.detail, exited);
+    let entries = store.entries(id).await.unwrap();
+    let errors: Vec<&str> = entries
+        .iter()
+        .filter_map(|e| match e {
+            Entry::Error { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(errors, [exited.as_str()]);
+    assert!(entries
+        .iter()
+        .any(|e| matches!(e, Entry::TurnEnd { stop_reason, .. } if stop_reason == "error")));
+
+    hub.sessions.delete(id, false).await.unwrap();
     let _ = std::fs::remove_dir_all(data);
     let _ = std::fs::remove_dir_all(repo);
 }
