@@ -518,8 +518,11 @@ test("Actions lists runs across the scope and filters them on GitHub", async ({ 
   const gh = new FakeGithub(world);
   const actions = new ActionsView(page);
   const titles = actions.titles;
-  /** The latest runs request for e2e/demo. */
-  const demoRuns = () => gh.rest(/^repos\/e2e\/demo\/actions\/(workflows\/\d+\/)?runs\?/).at(-1)?.argv[3];
+  /** Every runs request for e2e/demo. Requests can finish (and be logged) out
+   * of order, so tests look for the one they expect rather than the last. */
+  const demoRuns = () => gh.rest(/^repos\/e2e\/demo\/actions\/(workflows\/\d+\/)?runs\?/).map((c) => c.argv[3]);
+  const requested = (query: RegExp | string) =>
+    expect.poll(() => demoRuns().some((r) => (typeof query === "string" ? r === query : query.test(r)))).toBe(true);
 
   // A slow repository can be paused and resumed.
   gh.delay(/^repos\/e2e-labs\/widgets\/actions\/runs\?/, 4);
@@ -535,7 +538,7 @@ test("Actions lists runs across the scope and filters them on GitHub", async ({ 
   for (const [count, n] of Object.entries({ runs: 4, active: 1, failed: 1, passed: 2 }))
     await expect(actions.summary).toHaveAttribute(`data-${count}`, String(n));
   await expect(titles).toHaveText(["Try feature a", "Fix subtract sign", "Bump widget styles", "Initial commit"]);
-  expect(demoRuns()).toMatch(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&${LAST_30_DAYS}$`));
+  await requested(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&${LAST_30_DAYS}$`));
 
   // Status, branch and event filters go to GitHub, encoded.
   await actions.status.selectOption("failure");
@@ -543,9 +546,7 @@ test("Actions lists runs across the scope and filters them on GitHub", async ({ 
   await actions.branch.fill("fix/subtract-sign");
   await actions.event.fill("pull_request");
   await actions.apply.click();
-  await expect
-    .poll(demoRuns)
-    .toMatch(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&status=failure&branch=fix%2Fsubtract-sign&event=pull_request&${LAST_30_DAYS}$`));
+  await requested(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&status=failure&branch=fix%2Fsubtract-sign&event=pull_request&${LAST_30_DAYS}$`));
   await expect(titles).toHaveText(["Fix subtract sign"]);
 
   await actions.status.selectOption("success");
@@ -554,7 +555,7 @@ test("Actions lists runs across the scope and filters them on GitHub", async ({ 
   await actions.apply.click();
   await actions.range.selectOption({ value: "" });
   await expect(titles).toHaveText(["Bump widget styles", "Initial commit", "Release v0.1.0"]);
-  await expect.poll(demoRuns).toBe("repos/e2e/demo/actions/runs?per_page=30&page=1&status=success");
+  await requested("repos/e2e/demo/actions/runs?per_page=30&page=1&status=success");
 
   // A workflow's own runs.
   await actions.tab("workflows").click();
@@ -564,7 +565,7 @@ test("Actions lists runs across the scope and filters them on GitHub", async ({ 
   await expect(actions.tab("runs")).toHaveAttribute("aria-selected", "true");
   await expect(actions.workflowFilter).toHaveText("e2e/demo · CI");
   await expect(titles).toHaveText(["Try feature a", "Fix subtract sign", "Initial commit"]);
-  await expect.poll(demoRuns).toBe("repos/e2e/demo/actions/workflows/101/runs?per_page=30&page=1");
+  await requested("repos/e2e/demo/actions/workflows/101/runs?per_page=30&page=1");
   await actions.allWorkflows.click();
   await expect(titles).toHaveText(["Try feature a", "Fix subtract sign", "Bump widget styles", "Initial commit", "Release v0.1.0"]);
 });
