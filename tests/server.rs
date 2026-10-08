@@ -256,3 +256,60 @@ async fn different_servers_can_share_a_browser_cookie_jar() {
         assert_eq!(s.app.handle(request).await.status(), StatusCode::OK);
     }
 }
+
+/// A window loads its state with commands, then starts polling for events. An
+/// event in between must still reach it, even while another window is
+/// connected: the window's queue exists from its first command.
+#[tokio::test]
+async fn events_between_a_windows_first_command_and_first_poll_reach_it() {
+    let s = TestServer::new();
+    let ipc = s.ipc_token().await;
+    let call = |path: &str, client: &str, body: Vec<u8>| {
+        let mut r = s.request(path, "POST", true, body);
+        r.headers_mut()
+            .insert("x-elyra-token", ipc.parse().unwrap());
+        r.headers_mut()
+            .insert("x-elyra-client-id", client.parse().unwrap());
+        r
+    };
+    // Another window is already listening.
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        s.app.handle(call("/__events", "first-window", vec![])),
+    )
+    .await;
+    // A new window loads its projects, ...
+    let r = s
+        .app
+        .handle(call(
+            "/__cmd/list_projects",
+            "new-window",
+            rmp_serde::to_vec(&()).unwrap(),
+        ))
+        .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    // ... a project is added before it polls ...
+    let folder = s.dir.join("project");
+    std::fs::create_dir_all(&folder).unwrap();
+    let r = s
+        .app
+        .handle(call(
+            "/__cmd/add_project",
+            "first-window",
+            rmp_serde::to_vec(&(folder.to_string_lossy(),)).unwrap(),
+        ))
+        .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    // ... and its first poll brings that event.
+    let batch = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        s.app.handle(call("/__events", "new-window", vec![])),
+    )
+    .await
+    .expect("the event was queued for the new window");
+    let events: Vec<(String, serde_json::Value)> = rmp_serde::from_slice(batch.body()).unwrap();
+    assert!(
+        events.iter().any(|(channel, _)| channel == "project"),
+        "{events:?}"
+    );
+}

@@ -162,6 +162,16 @@ pub(super) async fn route(runner: &Arc<Runner>, request: Request<Vec<u8>>) -> Bo
     }
 
     if let Some(name) = path.strip_prefix(CMD_PREFIX) {
+        // A window loads its state with commands before its first poll: give it
+        // a queue now, so events in between reach it (Splash patch).
+        if let Some(client) = request
+            .headers()
+            .get("x-elyra-client-id")
+            .and_then(|v| v.to_str().ok())
+            .filter(|id| !id.is_empty())
+        {
+            runner.bus.register_client(client);
+        }
         let name = name.to_owned();
         let request_id = request
             .headers()

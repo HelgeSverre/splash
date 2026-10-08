@@ -28,3 +28,10 @@ icon on Windows and Linux; upstream sets none. `WindowIcon::Png` decodes with th
 the desktop dependency graph; `WindowIcon::Resource` loads an icon embedded in
 the Windows executable at the window's 16px and 32px logical sizes. macOS keeps
 using the bundle icon.
+
+A window's commands register its event queue (`shell/router.rs`), as its first
+poll does. A window loads its state with commands and then starts polling;
+upstream created the queue only at that first poll, so an event emitted in
+between was lost for the new window while another window was connected (its
+view of a session's status could stay stale). Splash's `tests/server.rs`
+covers it.
