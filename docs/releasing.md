@@ -197,7 +197,8 @@ four OS/architecture targets. Every artifact has a SHA-256 sidecar. Download
 `splash-packages-*` from the completed CI run. Windows packages and standalone
 server archives are unsigned; Apple signing applies to the desktop app ZIPs.
 
-Windows uses a per-user NSIS installer and requires WebView2 Evergreen. The
+Windows uses a per-user NSIS installer and requires WebView2 Evergreen. CI
+builds it with the pinned, checksum-verified NSIS portable ZIP. The
 MSVC runtime is statically linked for both app and server; packaging inspects PE
 imports and rejects external VC++ runtime DLL dependencies. CI
 silently installs into a path containing spaces, waits for the real renderer

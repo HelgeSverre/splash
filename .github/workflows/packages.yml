@@ -15,6 +15,11 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      # Portable ZIP from https://sourceforge.net/projects/nsis/files/NSIS%203/
+      # whose file listing publishes this SHA-256.
+      NSIS_VERSION: '3.13'
+      NSIS_SHA256: ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -38,19 +43,51 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libssl-dev pkg-config squashfs-tools appstream desktop-file-utils
-      # The Chocolatey feed sometimes answers 504 and choco still exits 0, so
-      # retry and fail here rather than at packaging time.
+      # NSIS comes from the project's own portable ZIP, pinned and checksum
+      # verified, and is cached so most runs never download it. Chocolatey's
+      # feed went down for whole runs, which blocked CI and releases.
+      - name: Restore Windows installer tool
+        id: nsis
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.tool_cache }}/nsis-${{ env.NSIS_VERSION }}
+          key: nsis-${{ env.NSIS_VERSION }}-${{ env.NSIS_SHA256 }}
       - name: Windows installer tool
         if: runner.os == 'Windows'
         run: |
-          makensis="/c/Program Files (x86)/NSIS/makensis.exe"
-          for attempt in 1 2 3 4; do
-            choco install nsis --no-progress -y || true
-            [[ -x "$makensis" ]] && break
-            echo "NSIS not installed (attempt $attempt); retrying" >&2
-            sleep $((attempt * 15))
-          done
-          "$makensis" -VERSION
+          nsis="$(cygpath -u "$RUNNER_TOOL_CACHE")/nsis-$NSIS_VERSION"
+          if [[ ! -x "$nsis/Bin/makensis.exe" ]]; then
+            zip="$(cygpath -u "$RUNNER_TEMP")/nsis-$NSIS_VERSION.zip"
+            url="https://downloads.sourceforge.net/project/nsis/NSIS%203/$NSIS_VERSION/nsis-$NSIS_VERSION.zip"
+            # SourceForge redirects to a mirror; a bad one can fail or serve the
+            # wrong bytes, so retry both and never unpack an unverified file.
+            for attempt in 1 2 3 4; do
+              if curl --fail --silent --show-error --location --retry 2 --connect-timeout 30 --max-time 300 --output "$zip" "$url" &&
+                [[ "$(sha256sum < "$zip" | cut -d' ' -f1)" == "$NSIS_SHA256" ]]; then
+                break
+              fi
+              rm -f "$zip"
+              if (( attempt == 4 )); then
+                echo "::error::Could not download NSIS $NSIS_VERSION with SHA-256 $NSIS_SHA256"
+                exit 1
+              fi
+              echo "NSIS download failed or did not match its checksum (attempt $attempt); retrying" >&2
+              sleep $((attempt * 15))
+            done
+            python -m zipfile -e "$zip" "$(dirname "$nsis")"
+          fi
+          version="$("$nsis/Bin/makensis.exe" -VERSION | tr -d '\r')"
+          echo "makensis $version"
+          [[ "$version" == "v$NSIS_VERSION" ]]
+          # scripts/package-platform.py finds makensis on PATH.
+          cygpath -w "$nsis/Bin" >> "$GITHUB_PATH"
+      - name: Save Windows installer tool
+        if: runner.os == 'Windows' && steps.nsis.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.tool_cache }}/nsis-${{ env.NSIS_VERSION }}
+          key: ${{ steps.nsis.outputs.cache-primary-key }}
       - name: Build native binaries
         run: |
           npm ci --prefix app
