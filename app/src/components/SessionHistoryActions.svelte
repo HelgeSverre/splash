@@ -5,6 +5,7 @@
   import { invalidateHistory } from "../lib/agent-history.svelte";
   import { sourceIsNewer } from "../lib/session-history";
   import { errorMessage } from "../lib/format";
+  import { serverUnavailable } from "../lib/server.svelte";
   import { home } from "../lib/paths";
   import Modal from "./ui/Modal.svelte";
   import ModalHeader from "./ui/ModalHeader.svelte";
@@ -73,10 +74,10 @@
     {#if session.parent_id}<button class="plain parent" data-testid="history-parent" data-session-id={session.parent_id} disabled={!parent} onclick={() => parent && openSession(parent.id)}>Fork of {parent?.title ?? "removed local session"}</button>{/if}
   </div>
   <div class="buttons">
-    {#if !disconnected}<button class="btn sm" data-testid="history-disconnect" disabled={!!busy || working} onclick={() => run("disconnect")}>Disconnect agent</button>{/if}
-    {#if native && !caps}<button class="btn sm" data-testid="history-check-support" disabled={!!busy} onclick={() => run("capabilities")}>Check history support</button>{/if}
-    {#if native && caps?.load}<button class="btn sm" data-testid="history-refresh" title={actionHint} disabled={!!busy || !disconnected} onclick={() => run("refresh")}>{busy === "refresh" ? "Refreshing…" : "Refresh from agent"}</button>{/if}
-    {#if native && caps?.fork && caps.load}<button class="btn sm" data-testid="history-fork" title={actionHint} disabled={!!busy || !disconnected} onclick={() => { panel = "fork"; error = ""; }}>Fork conversation</button>{/if}
+    {#if !disconnected}<button class="btn sm" data-testid="history-disconnect" disabled={!!busy || working || serverUnavailable()} onclick={() => run("disconnect")}>Disconnect agent</button>{/if}
+    {#if native && !caps}<button class="btn sm" data-testid="history-check-support" disabled={!!busy || serverUnavailable()} onclick={() => run("capabilities")}>Check history support</button>{/if}
+    {#if native && caps?.load}<button class="btn sm" data-testid="history-refresh" title={actionHint} disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => run("refresh")}>{busy === "refresh" ? "Refreshing…" : "Refresh from agent"}</button>{/if}
+    {#if native && caps?.fork && caps.load}<button class="btn sm" data-testid="history-fork" title={actionHint} disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => { panel = "fork"; error = ""; }}>Fork conversation</button>{/if}
     <button class="btn sm" data-testid="history-manage" disabled={!!busy} onclick={() => { panel = "manage"; error = ""; }}>Manage history</button>
   </div>
   {#if error && !panel}<p class="error" role="alert" data-testid="history-error">{error}</p>{/if}
@@ -107,20 +108,20 @@
           <div class="confirmation" role="group" aria-label="Confirm deletion" data-testid="history-confirm" data-confirm={confirm}>
             <h3 data-testid="history-confirm-title">{confirm === "native" ? "Delete from agent history?" : confirm === "dirty" ? "Discard uncommitted changes?" : `${localLabel}?`}</h3>
             <p data-testid="history-confirm-message">{confirm === "native" ? "The agent will remove this conversation from its session list. It may delete or archive its stored data. Splash keeps your local transcript as a read-only copy." : confirm === "dirty" ? "The worktree has uncommitted changes. Delete anyway and permanently discard them? Keeping the branch does not preserve uncommitted changes." : session.isolation === "worktree" && !session.external ? "This deletes the local transcript and its worktree. The Git branch and agent's saved conversation remain." : "This removes the transcript from Splash. Your files and the agent’s saved conversation remain."}</p>
-            <div class="buttons"><button class="btn" data-testid="history-confirm-cancel" disabled={!!busy} onclick={() => confirm = null}>Cancel</button><button class="btn danger" data-testid="history-confirm-delete" disabled={!!busy || !disconnected} onclick={() => run(confirm === "native" ? "delete" : confirm === "dirty" ? "discard" : "remove")}>{busy ? "Working…" : confirm === "native" ? "Delete from agent history" : confirm === "dirty" ? "Discard & delete" : localLabel}</button></div>
+            <div class="buttons"><button class="btn" data-testid="history-confirm-cancel" disabled={!!busy} onclick={() => confirm = null}>Cancel</button><button class="btn danger" data-testid="history-confirm-delete" disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => run(confirm === "native" ? "delete" : confirm === "dirty" ? "discard" : "remove")}>{busy ? "Working…" : confirm === "native" ? "Delete from agent history" : confirm === "dirty" ? "Discard & delete" : localLabel}</button></div>
           </div>
         {:else}
           <div class="buttons management">
             {#if native && caps?.delete}<button class="btn" data-testid="history-delete-agent" disabled={!!busy || !disconnected} onclick={() => confirm = "native"}>Delete agent history…</button>{/if}
             <button class="btn" data-testid="history-remove-local" data-worktree={session.isolation === "worktree" && !session.external} disabled={!!busy || !disconnected} onclick={() => confirm = "local"}>{localLabel}…</button>
-            {#if native}<button class="btn ghost" data-testid="history-recheck" disabled={!!busy} onclick={() => run("capabilities")}>{busy === "capabilities" ? "Checking…" : "Recheck support"}</button>{/if}
+            {#if native}<button class="btn ghost" data-testid="history-recheck" disabled={!!busy || serverUnavailable()} onclick={() => run("capabilities")}>{busy === "capabilities" ? "Checking…" : "Recheck support"}</button>{/if}
           </div>
         {/if}
       {:else}
         <div class="buttons fork-actions">
           <button class="btn" data-testid="history-fork-cancel" disabled={!!busy} onclick={close}>Cancel</button>
-          <button class="btn" data-testid="history-fork-review" disabled={!!busy || !disconnected} onclick={() => run("review")}>Fork for review</button>
-          <button class="btn primary" data-testid="history-fork-separate" disabled={!!busy || !disconnected} onclick={() => run("fork")}>{busy ? "Forking…" : "Try another approach"}</button>
+          <button class="btn" data-testid="history-fork-review" disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => run("review")}>Fork for review</button>
+          <button class="btn primary" data-testid="history-fork-separate" disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => run("fork")}>{busy ? "Forking…" : "Try another approach"}</button>
         </div>
         <p class="note">Fork for review prepares a review message in the new conversation for you to send.</p>
       {/if}

@@ -55,6 +55,20 @@ export class Connection {
   async expectStatus(status: "connecting" | "online" | "syncing" | "offline" | "auth", timeout?: number) {
     await expect(this.banner).toHaveAttribute("data-status", status, { timeout });
   }
+  /** Fail the page's connection checks, so it keeps the IPC token it has
+   * (a restarted server's token stays unknown to it) until `releaseChecks`. */
+  async holdChecks() {
+    await this.page.route("**/__server/state", (route) => route.abort());
+  }
+  async releaseChecks() {
+    await this.page.unroute("**/__server/state");
+  }
+  /** The page has adopted this server instance (and its IPC token), restored
+   * the workspace and shows Connected. */
+  async expectInstance(instance: string, timeout?: number) {
+    await this.page.waitForFunction((i) => globalThis.__SPLASH_SERVER__?.instance === i, instance, { timeout });
+    await this.expectStatus("online", timeout);
+  }
 }
 
 /** "Add a folder on the server": browse the server's folders. */

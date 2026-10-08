@@ -102,7 +102,7 @@ export const test = base.extend<Options & { world: World; splash: Splash }>({
       async restart({ reload = harness === "desktop" } = {}) {
         await backend.restart();
         // The desktop page's IPC token dies with its backend; the web version
-        // reconnects by itself, within its 5 s connection check.
+        // reconnects by itself as soon as a request fails.
         if (reload) {
           await page.reload();
           await app.waitReady();

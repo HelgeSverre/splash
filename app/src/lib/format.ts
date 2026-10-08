@@ -51,8 +51,23 @@ export const statusLabel = (status: string) => STATUS[status] ?? status.replaceA
 /** 0.4213 → "$0.42" (`digits` for more precision). */
 export const usd = (n: number, digits = 2) => `$${n.toFixed(digits)}`;
 
+/** Why a command failed, in plain words, when the web version lost its server:
+ * the request never arrived (the server bridge's `ServerUnreachableError`), or
+ * a restarted server refused the old IPC token (the runtime's `ForbiddenError`).
+ * Undefined for any other error, and always in the desktop app, where a
+ * refused token is a bug worth showing as it is. */
+export function connectionError(e: unknown, serverMode: boolean): string | undefined {
+  if (!serverMode || !(e instanceof Error)) return undefined;
+  if (e.name === "ServerUnreachableError") return "Reconnecting to the server. Try again in a moment.";
+  if (e.name === "ForbiddenError" && "detail" in e && /token/i.test(String(e.detail))) return "The server restarted. Try again in a moment.";
+  return undefined;
+}
+
 /** The message of anything thrown: an Error, a command error, or a plain value. */
 export function errorMessage(e: unknown): string {
+  // `serverMode` from server.svelte.ts, read directly to keep this module plain.
+  const lost = connectionError(e, !!globalThis.__SPLASH_SERVER__);
+  if (lost) return lost;
   if (e instanceof Error && e.name === "CommandError" && "detail" in e && typeof e.detail === "string") return e.detail;
   if (e instanceof Error) return e.message;
   return String((e as { message?: unknown } | null)?.message ?? e);

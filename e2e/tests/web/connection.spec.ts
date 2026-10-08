@@ -47,9 +47,10 @@ test("a lost connection keeps drafts and blocks sending until it returns", async
   await expect(connection.error).toHaveText("Check that the server and SSH tunnel are running. Your drafts are kept here.");
   await expect(app.sendButton).toBeDisabled();
   await expect(app.composer).toHaveValue("Keep this draft");
+  await expect(connection.retry).toBeVisible();
 
+  // Retrying by hand is optional: the page keeps looking, every 2 s at most.
   await backend.start();
-  await connection.retry.click();
   await connection.expectStatus("online");
   await expect(app.composer).toHaveValue("Keep this draft");
   await expect(app.sendButton).toBeEnabled();

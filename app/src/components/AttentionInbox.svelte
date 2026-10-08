@@ -5,6 +5,7 @@
   import EmptyState from "./ui/EmptyState.svelte";
   import AgentIcon from "./AgentIcon.svelte";
   import { errorMessage } from "../lib/format";
+  import { serverUnavailable } from "../lib/server.svelte";
 
   let busy = $state("");
   let error = $state("");
@@ -52,9 +53,9 @@
               <p class="detail" data-testid="attention-detail">{group.kind === "permission" && s.status !== "awaiting_permission" ? "The agent stopped while waiting for permission. Reconnect to continue; the old request can no longer be answered." : s.attention?.detail}</p>
               <div class="actions">
                 <button class="btn primary" data-testid="attention-open" onclick={() => open(s)}>{group.kind === "permission" && s.status === "awaiting_permission" ? "Answer permission" : group.kind === "review" ? "Review response & changes" : "Open conversation"}</button>
-                {#if s.status === "error" || s.status === "exited"}<button class="btn" data-testid="attention-reconnect" disabled={!!busy} onclick={() => run(s, "retry")}>{busy === s.id ? "Working…" : "Reconnect agent"}</button>{/if}
-                {#if group.kind !== "review"}<button class="btn" data-testid="attention-recheck" disabled={!!busy} onclick={() => run(s, "check")}>Recheck agent</button>{/if}
-                {#if s.status !== "awaiting_permission"}<button class="btn ghost" data-testid="attention-dismiss" disabled={!!busy} onclick={() => run(s, "dismiss")}>{group.kind === "review" ? "Mark reviewed" : "Dismiss"}</button>{/if}
+                {#if s.status === "error" || s.status === "exited"}<button class="btn" data-testid="attention-reconnect" disabled={!!busy || serverUnavailable()} onclick={() => run(s, "retry")}>{busy === s.id ? "Working…" : "Reconnect agent"}</button>{/if}
+                {#if group.kind !== "review"}<button class="btn" data-testid="attention-recheck" disabled={!!busy || serverUnavailable()} onclick={() => run(s, "check")}>Recheck agent</button>{/if}
+                {#if s.status !== "awaiting_permission"}<button class="btn ghost" data-testid="attention-dismiss" disabled={!!busy || serverUnavailable()} onclick={() => run(s, "dismiss")}>{group.kind === "review" ? "Mark reviewed" : "Dismiss"}</button>{/if}
               </div>
             </article>
           {/each}

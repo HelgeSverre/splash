@@ -11,7 +11,7 @@
   import { registerComposer } from "../lib/focus";
   import { app, projectById, agentById, isBusy, drafts } from "../lib/sessions.svelte";
   import { showSideTab } from "../lib/layout.svelte";
-  import { connection, serverMode } from "../lib/server.svelte";
+  import { serverUnavailable } from "../lib/server.svelte";
   import { showError } from "../lib/system";
 
   let { session }: { session: SessionView } = $props();
@@ -36,7 +36,6 @@
     drafts[lastId] = text;
   });
 
-  const disconnected = $derived(serverMode && connection.status !== "online");
   const busy = $derived(isBusy(session.status));
   const archived = $derived(session.archived || session.source?.deleted);
   const project = $derived(projectById(session.project_id));
@@ -62,7 +61,7 @@
   async function send() {
     const prompt = text.trim();
     const id = session.id;
-    if (disconnected || !prompt || busy || archived || sending[id] || session.status === "starting") return;
+    if (serverUnavailable() || !prompt || busy || archived || sending[id] || session.status === "starting") return;
     sending[id] = true;
     try {
       await api.send_prompt(id, prompt);
@@ -100,7 +99,7 @@
 
 <div class="composer" data-testid="composer">
   {#if !archived && (session.status === "exited" || session.status === "error")}
-    <div class="resume-note" data-testid="composer-resume-note"><span>{session.status === "error" ? "Connection failed. Your saved conversation is preserved." : "Viewing saved history. Continue to reconnect the agent."}</span><button class="btn sm" data-testid="composer-continue" onclick={() => api.restart_session(session.id).catch(showError)}>Continue conversation</button></div>
+    <div class="resume-note" data-testid="composer-resume-note"><span>{session.status === "error" ? "Connection failed. Your saved conversation is preserved." : "Viewing saved history. Continue to reconnect the agent."}</span><button class="btn sm" data-testid="composer-continue" disabled={serverUnavailable()} onclick={() => api.restart_session(session.id).catch(showError)}>Continue conversation</button></div>
   {/if}
   <div class="chips">
     <button class="plain chip" data-testid="composer-where" onclick={showDetails} title={session.cwd}>
@@ -132,9 +131,9 @@
       placeholder={archived ? (session.source?.deleted ? "Agent history was deleted. This local copy is read-only." : "This session is archived.") : busy ? "The agent is working…" : "Describe a task or ask a question"}
     ></textarea>
     {#if busy}
-      <IconButton data-testid="composer-stop" class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" onclick={stop} />
+      <IconButton data-testid="composer-stop" class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" disabled={serverUnavailable()} onclick={stop} />
     {:else}
-      <IconButton data-testid="composer-send" size="sm" icon="send" title="Send (⏎)" label="Send" disabled={disconnected || !text.trim() || archived || sending[session.id] || session.status === "starting"} onclick={send} />
+      <IconButton data-testid="composer-send" size="sm" icon="send" title="Send (⏎)" label="Send" disabled={serverUnavailable() || !text.trim() || archived || sending[session.id] || session.status === "starting"} onclick={send} />
     {/if}
   </div>
 

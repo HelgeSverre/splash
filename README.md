@@ -406,12 +406,15 @@ These templates are not installed automatically.
 Closing a browser or losing the SSH tunnel leaves agents running in the service.
 When connectivity returns, Splash refreshes sessions, the current transcript,
 permissions, files and existing terminal views. Drafts stay in the open tab;
-sending is disabled while disconnected. Commands are never automatically replayed
-because a failed response does not prove that the server missed the command.
+sending, continuing a conversation and the Needs attention, Review and history
+actions are disabled while disconnected. Commands are never automatically replayed
+because a failed response does not prove that the server missed the command. One
+that fails while the connection is being restored says so ("The server restarted.
+Try again in a moment.").
 
 Restarting the backend interrupts agent and terminal processes. Saved transcripts
-remain, and the browser restores its connection and current view; continue the
-conversation explicitly. Drafts are held in browser memory, so save important
+remain, and the browser notices the restart at once and restores its connection
+and current view as soon as the server answers; continue the conversation explicitly. Drafts are held in browser memory, so save important
 unsent text before reloading or signing out. To rotate access, stop the service,
 remove only `server.token` from its data directory, and start it again; every
 browser must sign in with the new token.

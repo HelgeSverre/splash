@@ -30,7 +30,11 @@
       return response;
     } catch (error) {
       globalThis.dispatchEvent(new Event('splash:offline'));
-      throw error; // Never replay commands: the server may have received them.
+      // Never replay commands: the server may have received them. Name the
+      // failure so the app can say it is reconnecting instead of "Failed to fetch".
+      const lost = new Error('Could not reach the Splash server', { cause: error });
+      lost.name = 'ServerUnreachableError';
+      throw lost;
     }
   };
 })();

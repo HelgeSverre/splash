@@ -96,9 +96,8 @@ test("a command that fails in flight is not sent again", async ({ splash }) => {
   await expect(app.sendButton).toBeDisabled();
   await expect(app.composer).toHaveValue("Did this arrive?");
 
-  // Back online: still exactly one attempt, and nothing reached the agent.
+  // Back online by itself: still exactly one attempt, and nothing reached the agent.
   await page.unroute("**/__server/state");
-  await connection.retry.click();
   await connection.expectStatus("online");
   await expect(connection.message).toHaveText("Connected · files and agents run on this server");
   expect(sent).toHaveLength(1);

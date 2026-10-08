@@ -21,7 +21,9 @@ test('bridge renews IPC headers without replaying mutations after connection los
   context.__SPLASH_SERVER__.token = 'after-restart';
   fail = true;
   const before = calls.length;
-  await assert.rejects(context.fetch('elyra://localhost/__cmd/send_prompt', {method:'POST'}));
+  // Named for the app's "Reconnecting to the server" message, with the cause kept.
+  await assert.rejects(context.fetch('elyra://localhost/__cmd/send_prompt', {method:'POST'}), (e: Error) =>
+    e.name === 'ServerUnreachableError' && (e.cause as Error).message === 'Tunnel disconnected');
   assert.equal(calls.length, before + 1);
   assert.equal(calls.at(-1)?.headers?.get('x-elyra-token'), 'after-restart');
   assert.deepEqual(events, ['splash:offline']);
