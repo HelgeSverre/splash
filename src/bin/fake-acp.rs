@@ -9,7 +9,8 @@
 //!
 //! Test flags: `--apply-diffs` writes each completed edit's new text to disk,
 //! `--exit-mid-turn N` dies after N steps of the first turn, `--fail-prompt`
-//! answers every prompt with an error, `--announce-commands` sends the
+//! answers every prompt with an error, `--trace FILE` logs every message sent,
+//! `--announce-commands` sends the
 //! recording's slash commands right after `session/new`, as adapters do (so a
 //! handshake probe sees them).
 //!
@@ -64,6 +65,7 @@ async fn main() {
         return;
     }
     let audit = option("--audit");
+    let _ = TRACE.set(option("--trace"));
     let apply_diffs = args.iter().any(|s| s == "--apply-diffs");
     let exit_mid_turn: Option<usize> = option("--exit-mid-turn").and_then(|n| n.parse().ok());
     let mut first_turn = true;
@@ -441,7 +443,19 @@ fn write_diffs(step: &Value) {
     }
 }
 
+/// `--trace <file>`: every message sent, as the audit logs every one received.
+static TRACE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
 fn send(v: Value) {
+    if let Some(path) = TRACE.get().and_then(Option::as_ref) {
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(file, "{v}");
+        }
+    }
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{v}");
     let _ = out.flush();

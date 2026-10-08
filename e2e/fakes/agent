@@ -12,7 +12,8 @@
 #   <agent>.speed    FAKE_ACP_SPEED (default 0: no delays)
 #   <agent>.auth     "logged_out" to fail the login check
 #
-# Every request the agent receives is appended to <agent>.audit.jsonl.
+# Every message the agent receives is appended to <agent>.audit.jsonl, every
+# one it sends to <agent>.sent.jsonl.
 set -eu
 dir=${SPLASH_E2E_DIR:?SPLASH_E2E_DIR is not set}
 name=$(basename "$0")
@@ -30,7 +31,7 @@ launch() {
 	FAKE_ACP_SPEED=$(cat "$dir/$agent.speed" 2>/dev/null || echo 0)
 	export FAKE_ACP_SPEED
 	# shellcheck disable=SC2086 # the flags file holds separate words
-	exec "${SPLASH_E2E_FAKE_ACP:?}" "$fixture" --audit "$dir/$agent.audit.jsonl" $flags
+	exec "${SPLASH_E2E_FAKE_ACP:?}" "$fixture" --audit "$dir/$agent.audit.jsonl" --trace "$dir/$agent.sent.jsonl" $flags
 }
 
 logged_out() { [ "$(cat "$dir/$1.auth" 2>/dev/null || true)" = logged_out ]; }
