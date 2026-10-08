@@ -23,7 +23,7 @@ pub fn register(pgid: i32) -> std::io::Result<()> {
         {
             std::thread::spawn(move || {
                 if let Some(signal) = signals.forever().next() {
-                    kill_all_at_exit();
+                    shut_down();
                     // The handler thread can safely lock and sleep. Restore the
                     // default signal action so shells observe the original signal.
                     let _ = signal_hook::low_level::emulate_default_handler(signal);
@@ -58,9 +58,16 @@ pub fn kill_group(pgid: i32) {
 }
 
 extern "C" fn kill_all_at_exit() {
+    shut_down();
+}
+
+/// Splash is exiting: tell the shutdown hooks, then stop every registered
+/// group (SIGTERM, and SIGKILL shortly after). Runs once.
+pub fn shut_down() {
     if SHUTTING_DOWN.swap(true, Ordering::AcqRel) {
         return;
     }
+    super::run_shutdown_hooks();
     // Don't block on the lock during exit; if it's held, skip rather than hang.
     let Some(guard) = GROUPS.try_lock() else {
         return;

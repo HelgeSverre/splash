@@ -53,7 +53,7 @@ test("a failed agent can be rechecked, reconnected or dismissed", async ({ splas
   await expect(attention.empty).toBeVisible();
 });
 
-test("attention survives a restart; a session stopped mid-permission needs recovery", async ({ splash }) => {
+test("attention survives a restart; a permission it interrupted waits for a reconnect", async ({ splash }) => {
   const { app, page, world } = splash;
   const reviewed = await app.newSession({ agent: "codex", where: "in_place" });
   await app.prompt("Have a look at calc.py");
@@ -62,16 +62,43 @@ test("attention survives a restart; a session stopped mid-permission needs recov
   await app.send("Find calc.py");
   await app.expectStatus("awaiting_permission");
 
-  // Stopping the backend stops its agents: the unanswered request is gone.
+  // Stopping the backend stops its agents. That isn't the agent failing, so
+  // the item stays a permission, though the old request can't be answered.
   await splash.restart();
   await app.openNav("attention");
   const attention = new Attention(page);
   await expect(attention.item(reviewed, "review")).toBeVisible();
-  await expect(attention.group("permission")).toHaveCount(0);
-  const item = attention.item(waiting, "failed");
+  await expect(attention.group("failed")).toHaveCount(0);
+  const item = attention.item(waiting, "permission");
+  await expect(attention.detail(item)).toHaveText(
+    "The agent stopped while waiting for permission. Reconnect to continue; the old request can no longer be answered.",
+  );
   await attention.reconnect(item).click();
   await expect(app.permissionAnswer(app.permissions("rejected"))).toHaveText("→ cancelled");
   await app.expectStatus("idle");
+  await app.openNav("attention");
+  await expect(attention.group("permission")).toHaveCount(0);
+});
+
+test("a turn a restart interrupted needs recovery", async ({ splash }) => {
+  const { app, page, world } = splash;
+  world.agents.fixture("claude", "claude/cancel.jsonl");
+  world.agents.speed("claude", 1);
+  const id = await app.newSession({ where: "in_place" });
+  await app.send("Write a long essay");
+  await app.expectStatus("running");
+
+  await splash.restart();
+  await app.openNav("attention");
+  const attention = new Attention(page);
+  const item = attention.item(id, "failed");
+  await expect(attention.detail(item)).toHaveText("Splash stopped while the agent was working. Reconnect to continue.");
+  await attention.reconnect(item).click();
+  await expect(app.entries("error").last()).toHaveText("Splash stopped while the agent was working.");
+  await expect(app.turnEnds()).toHaveAttribute("data-stop-reason", "cancelled");
+  await app.expectStatus("idle");
+  await app.openNav("attention");
+  await expect(attention.group("failed")).toHaveCount(0);
 });
 
 test("a background session that needs you is marked unread", async ({ splash }) => {

@@ -92,6 +92,13 @@ impl Hub {
                 ws.forget(id);
             }
         });
+        // Splash stopping its agents on exit is not their failure.
+        let s = Arc::downgrade(&sessions);
+        crate::procs::on_shutdown(move || {
+            if let Some(s) = s.upgrade() {
+                s.shut_down();
+            }
+        });
         Self {
             github: Arc::new(crate::github::Github::new(core.clone())),
             agents: Arc::new(Agents::new(core.clone())),

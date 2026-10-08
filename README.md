@@ -527,7 +527,8 @@ conversations already saved in Splash.
 
 **Needs attention** keeps pending permissions, failures, and completed turns
 across restarts. An interrupted permission must be requested again by the
-reconnected agent; an old request cannot be answered. **Review response &
+reconnected agent; an old request cannot be answered. On macOS and Linux, a
+turn still running when Splash quits needs recovery after the restart. **Review response &
 changes** opens the Review panel. Its file list describes the folder's current
 git changes, which may include work from another session sharing that folder.
 Send feedback or request a review to continue the same conversation, then use

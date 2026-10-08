@@ -336,11 +336,13 @@ async fn run(
                             transcript.push(Entry::Error { text });
                         }
                         Inbound::Exited(why) => {
+                            let turn_ms = prompt.is_some().then(|| turn_started.elapsed().as_secs_f64() * 1000.0);
                             if crate::procs::is_shutting_down() {
+                                stopped_by_splash(&*sink, &key, &mut transcript, turn_ms);
                                 return Ok(());
                             }
-                            if prompt.is_some() {
-                                transcript.end_turn("error", turn_started.elapsed().as_secs_f64() * 1000.0);
+                            if let Some(ms) = turn_ms {
+                                transcript.end_turn("error", ms);
                             }
                             transcript.push(Entry::Error { text: format!("{} exited: {why}", spec_agent.name) });
                             flush(&*sink, &key, &mut transcript, true);
@@ -351,8 +353,13 @@ async fn run(
                     result = async { prompt.as_mut().unwrap().await }, if prompt.is_some() => {
                         prompt = None;
                         let elapsed = turn_started.elapsed().as_secs_f64() * 1000.0;
+                        // An agent that closed its output can't read an answer, and
+                        // writing one to it would only break the connection.
+                        let gone = result.as_ref().is_err_and(agent_client_protocol::is_incoming_transport_closed);
                         for (_, r) in permissions.drain() {
-                            let _ = r.respond(RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled));
+                            if !gone {
+                                let _ = r.respond(RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled));
+                            }
                         }
                         match result {
                             Ok(resp) => {
@@ -362,6 +369,11 @@ async fn run(
                                 transcript.end_turn(&reason, elapsed);
                                 status = Status::Idle;
                                 detail = None;
+                            }
+                            Err(e) if crate::procs::is_shutting_down() && agent_client_protocol::is_incoming_transport_closed(&e) => {
+                                // Splash is stopping the agent: not its failure.
+                                stopped_by_splash(&*sink, &key, &mut transcript, Some(elapsed));
+                                return Ok(());
                             }
                             Err(e) => {
                                 transcript.end_turn("error", elapsed);
@@ -500,6 +512,24 @@ fn flush(sink: &dyn Sink, key: &str, transcript: &mut Transcript, checkpoint: bo
     if !unsaved.is_empty() {
         sink.persist(key, unsaved);
     }
+}
+
+/// Splash is exiting and stopped the agent, which is not its failure. Close
+/// the turn it was in (`turn_ms`), so no tool or permission stays open.
+fn stopped_by_splash(
+    sink: &dyn Sink,
+    key: &str,
+    transcript: &mut Transcript,
+    turn_ms: Option<f64>,
+) {
+    if let Some(ms) = turn_ms {
+        transcript.end_turn("cancelled", ms);
+        transcript.push(Entry::Error {
+            text: "Splash stopped while the agent was working.".into(),
+        });
+    }
+    flush(sink, key, transcript, true);
+    sink.status(key, Status::Exited, None, &transcript.meta);
 }
 
 fn fail(sink: &dyn Sink, key: &str, transcript: &mut Transcript, msg: &str) {

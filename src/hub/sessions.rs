@@ -81,6 +81,9 @@ pub struct Sessions {
     /// title may replace it.
     auto_titled: Mutex<HashSet<String>>,
     on_stop: OnceLock<OnStop>,
+    /// Splash is exiting: its agents stop because it stops them, not because
+    /// they failed.
+    shutting_down: AtomicBool,
 }
 
 impl Sessions {
@@ -98,6 +101,7 @@ impl Sessions {
             watching_rpc: Mutex::default(),
             auto_titled: Mutex::default(),
             on_stop: OnceLock::new(),
+            shutting_down: AtomicBool::new(false),
         }
     }
 
@@ -583,6 +587,35 @@ impl Sessions {
         }
     }
 
+    /// Splash is exiting and about to stop every agent. Record what each
+    /// session needs after a restart now, while the store still writes: work
+    /// in progress needs recovery, and a pending permission keeps its item.
+    /// What the agents report as they stop changes no attention.
+    pub(super) fn shut_down(&self) {
+        use store::{Attention, AttentionKind};
+        self.shutting_down.store(true, Ordering::Release);
+        let running: Vec<String> = self
+            .live
+            .lock()
+            .iter()
+            .filter(|(_, l)| l.status == Status::Running)
+            .map(|(id, _)| id.clone())
+            .collect();
+        let attention = Attention {
+            kind: AttentionKind::Failed,
+            detail: "Splash stopped while the agent was working. Reconnect to continue.".into(),
+            at: store::now(),
+        };
+        for id in running {
+            if let Some(r) = self.records.lock().get_mut(&id) {
+                r.attention = Some(attention.clone());
+            }
+            if let Some(store) = self.core.opened_store() {
+                store.queue_attention(&id, Some(&attention));
+            }
+        }
+    }
+
     /// Stop the agent and, for worktree sessions, remove the worktree (the
     /// branch stays). Refuses a dirty worktree unless `force`.
     pub async fn archive(&self, id: &str, force: bool) -> Result<()> {
@@ -744,13 +777,18 @@ impl Sink for Sessions {
                 }
                 _ => None,
             };
+            // An agent Splash stops on its way out did not fail: `shut_down`
+            // has recorded what the session needs.
+            let stopped_by_us = self.shutting_down.load(Ordering::Acquire)
+                && matches!(status, Status::Error | Status::Exited);
             // Starting a new turn resolves old attention; reconnecting preserves review.
-            let should_update = attention.is_some()
-                || status == Status::Running
-                || (status == Status::Idle
-                    && self.record(key).is_ok_and(|r| {
-                        r.attention.is_some_and(|a| a.kind != AttentionKind::Review)
-                    }));
+            let should_update = !stopped_by_us
+                && (attention.is_some()
+                    || status == Status::Running
+                    || (status == Status::Idle
+                        && self.record(key).is_ok_and(|r| {
+                            r.attention.is_some_and(|a| a.kind != AttentionKind::Review)
+                        })));
             if should_update {
                 if let Some(r) = self.records.lock().get_mut(key) {
                     r.attention = attention.clone();

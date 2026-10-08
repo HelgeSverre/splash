@@ -18,6 +18,26 @@ pub use unix::*;
 #[cfg(windows)]
 pub use windows::*;
 
+type Hook = Box<dyn Fn() + Send>;
+static SHUTDOWN_HOOKS: parking_lot::Mutex<Vec<Hook>> = parking_lot::Mutex::new(Vec::new());
+
+/// Run `hook` when Splash starts to exit, before it stops the agents. Only on
+/// Unix: on Windows the agents end with Splash's process, so nothing runs in
+/// between.
+pub fn on_shutdown(hook: impl Fn() + Send + 'static) {
+    SHUTDOWN_HOOKS.lock().push(Box::new(hook));
+}
+
+#[cfg(unix)]
+fn run_shutdown_hooks() {
+    // Don't block during exit; if the lock is held, skip rather than hang.
+    if let Some(hooks) = SHUTDOWN_HOOKS.try_lock() {
+        for hook in hooks.iter() {
+            hook();
+        }
+    }
+}
+
 /// Run `cmd` (stdin closed, stdout captured, stderr dropped), killing it if
 /// it isn't done within `timeout`. `None` when it can't start or times out.
 pub fn run_with_timeout(cmd: &mut Command, timeout: Duration) -> Option<Output> {
