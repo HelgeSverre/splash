@@ -58,6 +58,25 @@ test("agent history actions menu", async ({ splash }) => {
   await history.importSession("Fix the subtract sign", world.repo);
   await history.openMenu();
   await capture(page, `quality-${harness}-history-actions-menu`);
+  await history.menu.press("Escape");
+  await history.openMenu();
+  await history.refreshButton.click();
+  await expect(history.notice).toHaveText("History refreshed from the agent.");
+  await capture(page, `quality-${harness}-history-refresh`);
+  await history.manage();
+  await capture(page, `quality-${harness}-history-management`);
+  await history.deleteAgentHistoryButton.click();
+  await expect(history.confirmation).toBeVisible();
+  await capture(page, `quality-${harness}-history-delete`);
+  await history.closeDialog.click();
+  await history.openMenu();
+  await history.forkButton.click();
+  await expect(history.dialog("fork")).toBeVisible();
+  await capture(page, `quality-${harness}-history-fork`);
+  await history.closeDialog.click();
+  await history.fork("review");
+  await expect(app.composer).toHaveValue(/Review the work in the parent conversation\./);
+  await capture(page, `quality-${harness}-history-fork-review`);
 });
 
 test("an offline server preserves the conversation draft", async ({ splash }) => {

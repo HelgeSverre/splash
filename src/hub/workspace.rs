@@ -123,14 +123,15 @@ impl Workspace {
         };
         let core = self.core.clone();
         let terminals = Arc::downgrade(&self.terminals);
-        self.terminals.open(id, &cwd, cols, rows, move |ev| {
-            if ev.exited {
-                if let Some(t) = terminals.upgrade() {
-                    t.reap(&ev.session);
+        self.terminals
+            .open(id, &cwd, cols, rows, move |ev, generation| {
+                if ev.exited {
+                    if let Some(t) = terminals.upgrade() {
+                        t.reap(&ev.session, generation);
+                    }
                 }
-            }
-            core.emit("term", &ev);
-        })
+                core.emit("term", &ev);
+            })
     }
 
     pub fn term_write(&self, id: &str, data: &str) -> Result<()> {
