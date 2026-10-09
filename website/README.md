@@ -119,6 +119,9 @@ data: `WebSite` and `SoftwareApplication` on the home page, and a
 `static/favicon.ico` (16, 32 and 48 px, from `app/public/icon.png`) is for
 clients that ask for it by name; pages declare the SVG and PNG icons.
 
+`src/app.html` loads Ahrefs Web Analytics on every page, the 404 fallback
+included. This is the website only; the app has no analytics.
+
 Each page has a 1200 × 630 share card in `static/og/<slug>.png`, defined in
 `src/lib/og.ts`: the page's headline over its real app window (a live scene, or
 a capture from `SHOTS`), in the site's own tokens. `/og-card/<slug>` renders a
