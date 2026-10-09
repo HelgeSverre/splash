@@ -73,6 +73,40 @@ The changelog renders every `../.github/release-notes-<version>.md`, the same
 files the release workflow publishes, newest first. Add the release date to
 `DATES` in `releases.ts`.
 
+## Comparison pages
+
+`/vs/<slug>` compares Splash with one other tool. The pages are factual, not
+sales copy: every statement about either product cites a public source, and
+the footer's Comparisons column is their only link (not the nav).
+
+| File | Role |
+| --- | --- |
+| `src/lib/compare/types.ts` | The `Comparison` shape: intro, product cards, grouped rows, differences, fit, sources. |
+| `src/lib/compare/splash.ts` | Splash's side of every page: `SPLASH`, the `S` answer cells and their sources in this repository. The agent count and version are read from the source. |
+| `src/lib/compare/<slug>.ts` | One comparison's data and sources. |
+| `src/lib/compare/index.ts` | `COMPARISONS`, in footer order. The route, footer, sitemap and share cards read it. |
+| `src/lib/compare/sources.ts` | Numbers sources in the order a page cites them, and fails the prerender on a statement without a source, an unknown source id, or a source nothing cites. |
+
+`src/routes/vs/[slug]/+page.svelte` is the shared layout, built from
+`CompareHeader`, `CompareGlance`, `CompareTable` (with `CompareCell` and
+`Cite`), `Details`, `CompareFit` and `CompareSources`. Sections without data
+are left out. A page that needs a different structure can add
+`src/routes/vs/<slug>/+page.svelte` and compose the same components.
+
+Rules for the data:
+
+- Facts about another product come from its own site, docs, changelog or
+  repository, read when the page is written; `checked` records the date.
+- Paraphrase; quote nothing longer than a few words.
+- Marks (`yes`, `partial`, `no`, `unknown`) go on capability rows only. `no`
+  means the product's own sources say it's absent or out of scope.
+- Include rows where the other product does something Splash doesn't.
+- Splash's answers come from `S`. Change `splash.ts` when Splash changes, and
+  every page follows.
+
+To recheck a page, open each source, update anything that changed, and move
+`checked` (and each source's `checked`) to that day.
+
 ## Search and share cards
 
 The site lives at `https://splash.computer` (`SITE_URL` in `src/lib/site.ts`).

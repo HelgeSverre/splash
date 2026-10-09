@@ -1,6 +1,9 @@
 <script lang="ts">
-	// A feature page's detail points: short titled paragraphs in a grid.
-	export type Point = { title: string; text: string };
+	// A page's detail points: short titled paragraphs in a grid. `cite` is for
+	// comparison pages, which provide the source numbers.
+	import type { Point } from '../compare/types.ts';
+	import Cite from './Cite.svelte';
+
 	let { points, heading }: { points: Point[]; heading?: string } = $props();
 </script>
 
@@ -10,7 +13,7 @@
 		{#each points as p (p.title)}
 			<div class="point">
 				<h3 class="h3">{p.title}</h3>
-				<p>{@html p.text}</p>
+				<p>{@html p.text}{#if p.cite}<Cite ids={p.cite} />{/if}</p>
 			</div>
 		{/each}
 	</div>

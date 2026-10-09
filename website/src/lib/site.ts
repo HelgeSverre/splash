@@ -6,6 +6,22 @@ export const RELEASES_URL = `${REPO}/releases`;
 export const ISSUES_URL = `${REPO}/issues`;
 export const ACP_URL = 'https://agentclientprotocol.com';
 
+/** Comparison pages (/vs/<slug>), in footer order. Their data is in src/lib/compare. */
+export const COMPARISON_LINKS: { slug: string; name: string }[] = [
+	{ slug: 'claude-desktop', name: 'Claude Code Desktop' },
+	{ slug: 'codeg', name: 'Codeg' },
+	{ slug: 'codex-app', name: 'ChatGPT desktop app' },
+	{ slug: 'conductor', name: 'Conductor' },
+	{ slug: 'emdash', name: 'Emdash' },
+	{ slug: 'jean', name: 'Jean' },
+	{ slug: 'kepler', name: 'Kepler' },
+	{ slug: 'orca', name: 'Orca' },
+	{ slug: 'paseo', name: 'Paseo' },
+	{ slug: 'soloterm', name: 'Solo' },
+	{ slug: 'superset', name: 'Superset' },
+	{ slug: 't3-code', name: 'T3 Code' }
+];
+
 /** `summary` is the nav menu line, `title` the page's H1, `description` its search snippet. */
 export type FeatureLink = { slug: string; name: string; summary: string; title: string; description: string };
 

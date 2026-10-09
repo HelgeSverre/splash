@@ -1,6 +1,6 @@
 <script lang="ts">
 	import SplashMark from '$splash/components/SplashMark.svelte';
-	import { FEATURES, REPO, ISSUES_URL, ACP_URL } from '../site';
+	import { FEATURES, REPO, ISSUES_URL, ACP_URL, COMPARISON_LINKS } from '../site';
 
 	const year = new Date().getFullYear();
 </script>
@@ -16,6 +16,13 @@
 			<h2>Features</h2>
 			{#each FEATURES as f (f.slug)}<a href="/features/{f.slug}">{f.name}</a>{/each}
 		</nav>
+		{#if COMPARISON_LINKS.length}
+			<nav aria-label="Comparisons">
+				<h2>Comparisons</h2>
+				{#each COMPARISON_LINKS as c (c.slug)}<a href="/vs/{c.slug}">vs {c.name}</a>{/each}
+				<a class="all" href="/vs">All comparisons →</a>
+			</nav>
+		{/if}
 		<nav aria-label="Project">
 			<h2>Project</h2>
 			<a href="/download">Download</a>
@@ -39,7 +46,9 @@
 	}
 	.grid {
 		display: grid;
-		grid-template-columns: 2fr 1fr 1fr;
+		grid-auto-flow: column;
+		grid-template-columns: 2fr;
+		grid-auto-columns: 1fr;
 		gap: 40px;
 	}
 	.brand {
@@ -74,6 +83,10 @@
 		text-decoration: none;
 	}
 	nav a:is(:hover, :focus-visible) {
+		color: var(--text);
+	}
+	nav a.all {
+		margin-top: 4px;
 		color: var(--text);
 	}
 	.bottom {
@@ -113,6 +126,7 @@
 	}
 	@media (max-width: 720px) {
 		.grid {
+			grid-auto-flow: row;
 			grid-template-columns: 1fr 1fr;
 		}
 		.about {

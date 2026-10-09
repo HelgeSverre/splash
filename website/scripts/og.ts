@@ -1,6 +1,8 @@
 // Captures each page's share card (src/lib/og.ts) to static/og/<slug>.png.
 // The card route exists on the dev server only, so this starts one and
 // screenshots every card in the installed Chrome. CHROME_PATH overrides it.
+// Arguments limit the capture to cards whose slug starts with one of them:
+// `bun run og vs` recaptures only the comparison cards.
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -19,7 +21,9 @@ try {
 	const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1 });
 	page.on('pageerror', (e) => console.error(e));
 	await mkdir(out, { recursive: true });
+	const only = process.argv.slice(2);
 	for (const [slug, card] of Object.entries(CARDS)) {
+		if (only.length && !only.some((prefix) => slug.startsWith(prefix))) continue;
 		await page.goto(`${base}/og-card/${slug}`);
 		// Fonts and images loaded and the live scene mounted (Live shows a
 		// spinner until then), then let the scene play before the capture.

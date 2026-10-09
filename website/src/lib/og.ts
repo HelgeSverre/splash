@@ -1,6 +1,6 @@
 // The share card for each page (1200 × 630): /og-card/[slug] renders it on
 // the dev server and scripts/og.ts captures it to static/og/<slug>.png.
-import { FEATURES } from './site';
+import { COMPARISON_LINKS, FEATURES } from './site';
 
 /** A live scene from src/lib/scenes, a real capture from SHOTS, or the app icon. */
 export type Visual =
@@ -51,5 +51,18 @@ export const CARDS: Record<string, Card> = {
 			const { visual, shows } = FEATURE_VISUALS[f.slug];
 			return [f.slug, { eyebrow: f.name, title: f.title, visual, alt: `${f.title} Below, ${shows}.`, settle: 2500 } satisfies Card];
 		})
+	),
+	vs: {
+		eyebrow: 'Compare',
+		title: 'Splash and the alternatives,',
+		accent: 'compared.',
+		visual: { icon: true },
+		alt: 'Splash and the alternatives, compared. The Splash app icon and the platforms it runs on.'
+	},
+	...Object.fromEntries(
+		COMPARISON_LINKS.map((c) => [
+			`vs-${c.slug}`,
+			{ eyebrow: 'Compare', title: `Splash and ${c.name},`, accent: 'compared.', visual: { icon: true }, alt: `Splash and ${c.name}, compared. The Splash app icon and the platforms it runs on.` } satisfies Card
+		])
 	)
 };

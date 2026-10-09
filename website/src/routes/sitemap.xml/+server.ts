@@ -1,9 +1,9 @@
 // Every page, for search engines. Prerendered to build/sitemap.xml.
-import { FEATURES, SITE_URL } from '#lib/site.ts';
+import { COMPARISON_LINKS, FEATURES, SITE_URL } from '#lib/site.ts';
 
 export const prerender = true;
 
-const PATHS = ['/', '/download', ...FEATURES.map((f) => `/features/${f.slug}`)];
+const PATHS = ['/', '/download', ...FEATURES.map((f) => `/features/${f.slug}`), '/vs', ...COMPARISON_LINKS.map((c) => `/vs/${c.slug}`)];
 
 export function GET() {
 	const urls = PATHS.map((path) => `\t<url><loc>${SITE_URL}${path}</loc></url>`).join('\n');
