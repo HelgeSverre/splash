@@ -127,6 +127,26 @@ See the [artifact smoke-test report](docs/artifact-smoke-2026-10-07.md) for scop
   </tr>
   <tr>
     <td width="50%" valign="top">
+      <strong>Diagrams in agent messages</strong><br>
+      <a href="screenshots/markdown-diagrams-session.png"><img src="screenshots/markdown-diagrams-session.png" alt="A fixture agent's reply with a mermaid flowchart and sequence diagram drawn in the transcript, in the app's dark theme" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>State diagram with the ELK layout</strong><br>
+      <a href="screenshots/markdown-diagram-state.png"><img src="screenshots/markdown-diagram-state.png" alt="A mermaid state diagram of a session's states, laid out by ELK with pill-shaped transition labels and chevron arrows" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Diagram source on demand</strong><br>
+      <a href="screenshots/markdown-diagram-source.png"><img src="screenshots/markdown-diagram-source.png" alt="The same flowchart block switched to its mermaid source with the Source button pressed" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Invalid diagram left as code</strong><br>
+      <a href="screenshots/markdown-diagram-invalid.png"><img src="screenshots/markdown-diagram-invalid.png" alt="A mermaid fence that does not parse, shown as a code block with the parse error under it" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
       <strong>Sessions and transcripts</strong><br>
       <a href="screenshots/session.jpg"><img src="screenshots/session.jpg" alt="Saved conversation with explicit reconnect and the review panel" width="100%"></a>
     </td>
@@ -432,7 +452,7 @@ future work; they are not needed for the server-over-SSH setup above.
 ## Features
 
 - **Sessions.** In place or in a worktree on a `splash/…` branch. Archiving or deleting removes the worktree and keeps the branch. Both require an explicit discard confirmation if there are uncommitted changes; deleting also removes the transcript.
-- **Transcript.** Markdown with syntax highlighting, collapsible thinking, tool calls with status and diffs, plans as checklists, and permission requests answered with the 1–9 keys.
+- **Transcript.** Markdown with syntax highlighting, ```` ```mermaid ```` fences drawn as diagrams (ELK layout, the app's colours, source a click away, invalid ones left as code), collapsible thinking, tool calls with status and diffs, plans as checklists, and permission requests answered with the 1–9 keys.
 - **Agent controls.** Model, mode and effort pickers when the agent offers them, slash-command completion, and context and cost readouts when the agent reports them.
 - **GitHub.** A triage view across personal and organization repositories, with repository/owner filters, issues, PRs, branches, recent activity and discussions. Git remotes connect items to local projects and sessions; additional projects can be linked manually. Create issues in any accessible repository with a Markdown editor and preview.
 - **Actions.** Cross-repository workflow runs, filters, workflow catalog, attempt details, job steps and searchable log previews.
