@@ -49,11 +49,12 @@
   // changing transcript entries. Keep a reader at the bottom in that case, but
   // never move someone who deliberately scrolled up to read earlier output.
   $effect(() => {
-    if (!scroller) return;
+    const element = scroller;
+    if (!element) return;
     const observer = new ResizeObserver(() => {
-      if (active && pinned && app.focusEntry === null) scroller!.scrollTop = scroller!.scrollHeight;
+      if (active && pinned && app.focusEntry === null) element.scrollTop = element.scrollHeight;
     });
-    observer.observe(scroller);
+    observer.observe(element);
     return () => observer.disconnect();
   });
 

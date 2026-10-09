@@ -23,20 +23,44 @@ sg_id=$(read_field security_group_id)
 role_name=$(read_field iam_role_name)
 profile_name=$(read_field instance_profile_name)
 bucket=$(read_field s3_bucket)
+root_volume_id=$(read_field root_volume_id)
+ledger_name=$(read_field name)
+expected_instance_id=${SPLASH_QUALITY_EXPECTED_INSTANCE_ID:-}
 
-for value in "$instance_id" "$vpc_id" "$subnet_id" "$route_table_id" "$igw_id" "$sg_id" "$role_name" "$profile_name" "$bucket"; do
+for value in "$instance_id" "$vpc_id" "$subnet_id" "$route_table_id" "$igw_id" "$sg_id" "$role_name" "$profile_name" "$bucket" "$root_volume_id" "$ledger_name" "$expected_instance_id"; do
   [[ -n "$value" ]] || { echo "Ledger is incomplete; refusing cleanup." >&2; exit 1; }
 done
+[[ "$expected_instance_id" == "$instance_id" ]] || { echo "SPLASH_QUALITY_EXPECTED_INSTANCE_ID does not match the ledger; refusing cleanup." >&2; exit 1; }
 
 # Verify the exact instance is one created for this audit before terminating it.
 tags=$(aws ec2 describe-instances --profile "$profile" --region "$region" --instance-ids "$instance_id" \
   --query 'Reservations[0].Instances[0].Tags' --output json)
-node -e 'const tags=JSON.parse(process.argv[1]); const values=Object.fromEntries(tags.map(t=>[t.Key,t.Value])); if(values.Purpose !== "SplashQualityAudit" || values.ManagedBy !== "Codex") process.exit(1)' "$tags" \
+node -e 'const tags=JSON.parse(process.argv[1]); const values=Object.fromEntries(tags.map(t=>[t.Key,t.Value])); if(values.Purpose !== "SplashQualityAudit" || values.ManagedBy !== "Codex" || values.Name !== `${process.argv[2]}-runner`) process.exit(1)' "$tags" "$ledger_name" \
   || { echo "Refusing: instance is not tagged as this audit runner." >&2; exit 1; }
 
 echo "Terminating only audit instance $instance_id"
 aws ec2 terminate-instances --profile "$profile" --region "$region" --instance-ids "$instance_id" >/dev/null
 aws ec2 wait instance-terminated --profile "$profile" --region "$region" --instance-ids "$instance_id"
+for attempt in $(seq 1 30); do
+  set +e
+  volume_result=$(aws ec2 describe-volumes --profile "$profile" --region "$region" --volume-ids "$root_volume_id" 2>&1)
+  volume_status=$?
+  set -e
+  if [[ "$volume_status" == 0 ]]; then
+    if [[ "$attempt" == 30 ]]; then
+      echo "Audit root volume $root_volume_id still exists after termination; refusing to continue cleanup." >&2
+      exit 1
+    fi
+    sleep 2
+    continue
+  fi
+  if [[ "$volume_result" == *"InvalidVolume.NotFound"* ]]; then
+    break
+  fi
+  echo "Could not verify deletion of audit root volume $root_volume_id; refusing cleanup." >&2
+  printf '%s\n' "$volume_result" >&2
+  exit 1
+done
 
 echo "Deleting only audit source bucket $bucket"
 aws s3 rm "s3://$bucket" --recursive --profile "$profile" --region "$region" --only-show-errors

@@ -29,4 +29,5 @@ export const ICONS: Record<string, string> = {
   monitor: "M2 3.5h12v8H2zM5.5 14h5M8 11.5V14",
   "panel-right": "M2 3h12v10H2zM10 3v10",
   "panel-bottom": "M2 3h12v10H2zM2 9.5h12",
+  "more-vertical": "M8 3.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM8 8.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM8 14a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z",
 };

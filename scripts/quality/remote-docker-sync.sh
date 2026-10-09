@@ -23,7 +23,14 @@ trap 'rm -rf "$tmpdir"' EXIT
 # --cached includes tracked files, --modified includes staged and unstaged edits,
 # and --others --exclude-standard adds new test files while excluding .env and
 # other ignored private/development material.
-git ls-files -z --cached --modified --others --exclude-standard >"$tmpdir/files"
+node - >"$tmpdir/files" <<'NODE'
+const { execFileSync } = require('node:child_process');
+const { existsSync } = require('node:fs');
+const listed = execFileSync('git', ['ls-files', '-z', '--cached', '--modified', '--others', '--exclude-standard']);
+for (const file of new Set(listed.toString().split('\0'))) {
+  if (file && existsSync(file)) process.stdout.write(`${file}\0`);
+}
+NODE
 COPYFILE_DISABLE=1 tar --no-xattrs --null --files-from="$tmpdir/files" -czf "$tmpdir/$snapshot.tar.gz"
 
 aws s3 cp "$tmpdir/$snapshot.tar.gz" "s3://$bucket/snapshots/$snapshot.tar.gz" \

@@ -260,6 +260,17 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
+    /// ConPTY can split or repeat cursor-position requests across PTY reads.
+    /// Keep a three-byte suffix so `ESC[6n` spanning two chunks still gets a
+    /// response, and answer every complete request we observe.
+    fn cursor_queries(tail: &mut Vec<u8>, bytes: &[u8]) -> usize {
+        tail.extend_from_slice(bytes);
+        let count = tail.windows(4).filter(|part| *part == b"\x1b[6n").count();
+        let keep = tail.len().min(3);
+        tail.drain(..tail.len() - keep);
+        count
+    }
+
     #[test]
     fn a_shell_echoes_and_reattaches_with_scrollback() {
         let terms = Terminals::default();
@@ -275,11 +286,9 @@ mod tests {
         } else {
             "echo splash-$((40+2))\n"
         };
-        if !cfg!(windows) {
-            terms.write("t1", command).unwrap();
-        }
-
         let mut seen = String::new();
+        let mut query_tail = Vec::new();
+        let mut sent_command = false;
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         while !seen.contains("splash-42") && std::time::Instant::now() < deadline {
             if let Ok(e) = rx.recv_timeout(Duration::from_millis(200)) {
@@ -287,10 +296,18 @@ mod tests {
                     .decode(e.data)
                     .unwrap();
                 // ConPTY asks the terminal emulator for its cursor position at startup.
-                // This fixture has no xterm.js, so answer its device status query.
-                if cfg!(windows) && bytes.windows(4).any(|part| part == b"\x1b[6n") {
-                    terms.write("t1", "\x1b[1;1R").unwrap();
+                // This fixture has no xterm.js, so answer every query it emits.
+                let queries = cursor_queries(&mut query_tail, &bytes);
+                if cfg!(windows) {
+                    for _ in 0..queries {
+                        terms.write("t1", "\x1b[1;1R").unwrap();
+                    }
+                }
+                if !sent_command
+                    && ((cfg!(windows) && queries > 0) || (!cfg!(windows) && !bytes.is_empty()))
+                {
                     terms.write("t1", command).unwrap();
+                    sent_command = true;
                 }
                 seen.push_str(&String::from_utf8_lossy(&bytes));
             }
@@ -319,21 +336,25 @@ mod tests {
             .unwrap();
 
         let exit = if cfg!(windows) { "exit\r\n" } else { "exit\n" };
-        if !cfg!(windows) {
-            terms.write("t1", exit).unwrap();
-        }
-
         let mut exited = false;
         let mut exit_seq = 0;
-        let mut sent_exit = !cfg!(windows);
+        let mut query_tail = Vec::new();
+        let mut sent_exit = false;
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         while !exited && std::time::Instant::now() < deadline {
             if let Ok(event) = rx.recv_timeout(Duration::from_millis(200)) {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(event.data)
                     .unwrap();
-                if cfg!(windows) && !sent_exit && bytes.windows(4).any(|part| part == b"\x1b[6n") {
-                    terms.write("t1", "\x1b[1;1R").unwrap();
+                let queries = cursor_queries(&mut query_tail, &bytes);
+                if cfg!(windows) {
+                    for _ in 0..queries {
+                        terms.write("t1", "\x1b[1;1R").unwrap();
+                    }
+                }
+                if !sent_exit
+                    && ((cfg!(windows) && queries > 0) || (!cfg!(windows) && !bytes.is_empty()))
+                {
                     terms.write("t1", exit).unwrap();
                     sent_exit = true;
                 }
@@ -378,11 +399,8 @@ mod tests {
             .unwrap();
 
         let exit = if cfg!(windows) { "exit\r\n" } else { "exit\n" };
-        if !cfg!(windows) {
-            terms.write("t1", exit).unwrap();
-        }
-
-        let mut sent_exit = !cfg!(windows);
+        let mut query_tail = Vec::new();
+        let mut sent_exit = false;
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         let exit_seq = loop {
             if let Ok(seq) = exit_ready_rx.try_recv() {
@@ -393,8 +411,15 @@ mod tests {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(event.data)
                     .unwrap();
-                if cfg!(windows) && !sent_exit && bytes.windows(4).any(|part| part == b"\x1b[6n") {
-                    terms.write("t1", "\x1b[1;1R").unwrap();
+                let queries = cursor_queries(&mut query_tail, &bytes);
+                if cfg!(windows) {
+                    for _ in 0..queries {
+                        terms.write("t1", "\x1b[1;1R").unwrap();
+                    }
+                }
+                if !sent_exit
+                    && ((cfg!(windows) && queries > 0) || (!cfg!(windows) && !bytes.is_empty()))
+                {
                     terms.write("t1", exit).unwrap();
                     sent_exit = true;
                 }
@@ -429,10 +454,8 @@ mod tests {
         } else {
             "echo splash-restarted\n"
         };
-        if !cfg!(windows) {
-            terms.write("t1", command).unwrap();
-        }
-        let mut sent_command = !cfg!(windows);
+        let mut query_tail = Vec::new();
+        let mut sent_command = false;
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         let mut live_output = false;
         while !live_output && std::time::Instant::now() < deadline {
@@ -440,9 +463,15 @@ mod tests {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(event.data)
                     .unwrap();
-                if cfg!(windows) && !sent_command && bytes.windows(4).any(|part| part == b"\x1b[6n")
+                let queries = cursor_queries(&mut query_tail, &bytes);
+                if cfg!(windows) {
+                    for _ in 0..queries {
+                        terms.write("t1", "\x1b[1;1R").unwrap();
+                    }
+                }
+                if !sent_command
+                    && ((cfg!(windows) && queries > 0) || (!cfg!(windows) && !bytes.is_empty()))
                 {
-                    terms.write("t1", "\x1b[1;1R").unwrap();
                     terms.write("t1", command).unwrap();
                     sent_command = true;
                 }

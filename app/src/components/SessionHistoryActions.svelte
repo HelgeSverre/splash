@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { api, type SessionView } from "../bindings";
   import { app, applySession, deleteSession, drafts, openSession } from "../lib/sessions.svelte";
   import { openTranscript } from "../lib/transcripts.svelte";
@@ -10,6 +11,9 @@
   import Modal from "./ui/Modal.svelte";
   import ModalHeader from "./ui/ModalHeader.svelte";
   import Tag from "./ui/Tag.svelte";
+  import Icon from "./Icon.svelte";
+  import MenuItem from "./ui/MenuItem.svelte";
+  import { rovingIndex } from "../lib/focus";
 
   let { session }: { session: SessionView } = $props();
   let busy = $state("");
@@ -17,6 +21,13 @@
   let notice = $state("");
   let panel = $state<"manage" | "fork" | null>(null);
   let confirm = $state<"native" | "local" | "dirty" | null>(null);
+  let menuOpen = $state(false);
+  let menuRoot: HTMLDivElement | undefined = $state();
+  let menuTrigger: HTMLButtonElement | undefined = $state();
+  let menu: HTMLDivElement | undefined = $state();
+  let menuStyle = $state("");
+  const uid = $props.id();
+  const menuId = `history-menu-${uid}`;
   const source = $derived(session.source ?? {});
   const caps = $derived(session.meta.history_capabilities ?? source.capabilities);
   const disconnected = $derived(["exited", "error"].includes(session.status));
@@ -26,8 +37,70 @@
   const parent = $derived(app.sessions.find((s) => s.id === session.parent_id));
   const actionHint = $derived(!disconnected ? "Disconnect the agent first." : "");
   const localLabel = $derived(session.isolation === "worktree" && !session.external ? "Delete local session" : "Remove local copy");
+  const busyLabel = $derived(busy === "refresh" ? "Refreshing history…" : busy === "capabilities" ? "Checking history support…" : busy === "disconnect" ? "Disconnecting agent…" : "");
   const date = (value: string | null | undefined) => value ? (Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : value) : "Not reported";
   function close() { if (!busy) { panel = null; confirm = null; } }
+  const menuItems = () => Array.from(menu?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? []);
+  async function showMenu(last = false) {
+    menuOpen = true;
+    await tick();
+    placeMenu();
+    const items = menuItems();
+    const enabled = items.map((item, i) => item.disabled ? -1 : i).filter((i) => i >= 0);
+    const index = last ? enabled.at(-1) : enabled[0];
+    if (index === undefined) menu?.focus();
+    else items[index].focus();
+  }
+  function placeMenu() {
+    if (!menuOpen || !menu || !menuTrigger) return;
+    const trigger = menuTrigger.getBoundingClientRect();
+    const margin = 8;
+    const width = Math.max(1, Math.min(280, window.innerWidth - margin * 2));
+    const below = window.innerHeight - trigger.bottom - margin;
+    const above = trigger.top - margin;
+    const menuHeight = Math.min(menu.scrollHeight, 360);
+    const opensBelow = below >= menuHeight || below >= above;
+    const availableHeight = Math.max(1, opensBelow ? below : above);
+    const height = Math.min(menuHeight, availableHeight);
+    const left = Math.min(Math.max(margin, trigger.right - width), window.innerWidth - width - margin);
+    const top = opensBelow
+      ? Math.min(trigger.bottom + 4, window.innerHeight - margin - height)
+      : Math.max(margin, trigger.top - 4 - height);
+    menuStyle = `left:${Math.round(left)}px;top:${Math.round(top)}px;width:${Math.round(width)}px;max-height:${Math.round(availableHeight)}px;`;
+  }
+  function hideMenu(refocus = true) {
+    menuOpen = false;
+    if (refocus) menuTrigger?.focus();
+  }
+  function chooseMenu(action: "refresh" | "disconnect" | "capabilities" | "fork" | "manage") {
+    // Modal remembers the active element on mount. Return focus before the
+    // selected menu item unmounts so closing Manage or Fork lands on trigger.
+    hideMenu();
+    if (action === "fork" || action === "manage") { panel = action; error = ""; }
+    else void run(action);
+  }
+  function onMenuKey(e: KeyboardEvent) {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); return hideMenu(); }
+    // Return focus to the trigger before Tab advances beyond the menu.
+    if (e.key === "Tab") return hideMenu();
+    const items = menuItems();
+    const next = rovingIndex(e, items.indexOf(document.activeElement as HTMLButtonElement), items.length, "vertical", (i) => items[i].disabled);
+    if (next === null) return;
+    e.preventDefault();
+    items[next].focus();
+  }
+  function onTriggerKey(e: KeyboardEvent) {
+    if (!menuOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      void showMenu(e.key === "ArrowUp");
+    }
+  }
+  function onFocusOut(e: FocusEvent) {
+    if (menuOpen && menuRoot && !menuRoot.contains(e.relatedTarget as Node | null)) menuOpen = false;
+  }
+  function onPointerDown(e: PointerEvent) {
+    if (menuOpen && menuRoot && !menuRoot.contains(e.target as Node)) menuOpen = false;
+  }
   async function run(action: "refresh" | "disconnect" | "capabilities" | "delete" | "remove" | "discard" | "fork" | "review") {
     if (busy) return;
     const id = session.id;
@@ -65,6 +138,8 @@
   }
 </script>
 
+<svelte:window onpointerdown={onPointerDown} onresize={placeMenu} />
+
 <div class="history-bar" data-testid="history-bar" data-sync={source.deleted ? "deleted" : newer ? "outdated" : source.last_synced_at ? "synced" : "unsynced"}>
   <div class="context">
     {#if source.deleted}<Tag tone="muted">Local history only</Tag>
@@ -73,13 +148,20 @@
     {:else}<span>Agent history</span>{/if}
     {#if session.parent_id}<button class="plain parent" data-testid="history-parent" data-session-id={session.parent_id} disabled={!parent} onclick={() => parent && openSession(parent.id)}>Fork of {parent?.title ?? "removed local session"}</button>{/if}
   </div>
-  <div class="buttons">
-    {#if !disconnected}<button class="btn sm" data-testid="history-disconnect" disabled={!!busy || working || serverUnavailable()} onclick={() => run("disconnect")}>Disconnect agent</button>{/if}
-    {#if native && !caps}<button class="btn sm" data-testid="history-check-support" disabled={!!busy || serverUnavailable()} onclick={() => run("capabilities")}>Check history support</button>{/if}
-    {#if native && caps?.load}<button class="btn sm" data-testid="history-refresh" title={actionHint} disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => run("refresh")}>{busy === "refresh" ? "Refreshing…" : "Refresh from agent"}</button>{/if}
-    {#if native && caps?.fork && caps.load}<button class="btn sm" data-testid="history-fork" title={actionHint} disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => { panel = "fork"; error = ""; }}>Fork conversation</button>{/if}
-    <button class="btn sm" data-testid="history-manage" disabled={!!busy} onclick={() => { panel = "manage"; error = ""; }}>Manage history</button>
+  <div class="history-menu" bind:this={menuRoot} onfocusout={onFocusOut}>
+    <button class="plain history-menu-trigger" data-testid="history-menu-trigger" bind:this={menuTrigger} title="History actions" aria-label="History actions"
+      onclick={() => menuOpen ? hideMenu(false) : void showMenu()} onkeydown={onTriggerKey} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined}><Icon name="more-vertical" size={12} /></button>
+    {#if menuOpen}
+      <div class="popover menu" data-testid="history-menu" id={menuId} role="menu" aria-label="Agent history actions" tabindex="-1" bind:this={menu} onkeydown={onMenuKey} style={menuStyle}>
+        {#if !disconnected}<MenuItem data-testid="history-menu-item" data-action="disconnect" role="menuitem" name="Disconnect agent" disabled={!!busy || working || serverUnavailable()} onclick={() => chooseMenu("disconnect")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />{/if}
+        {#if native && !caps}<MenuItem data-testid="history-menu-item" data-action="capabilities" role="menuitem" name={busy === "capabilities" ? "Checking history support…" : "Check history support"} disabled={!!busy || serverUnavailable()} onclick={() => chooseMenu("capabilities")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />{/if}
+        {#if native && caps?.load}<MenuItem data-testid="history-menu-item" data-action="refresh" role="menuitem" name={busy === "refresh" ? "Refreshing…" : "Refresh from agent"} description={actionHint || undefined} disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => chooseMenu("refresh")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />{/if}
+        {#if native && caps?.fork && caps.load}<MenuItem data-testid="history-menu-item" data-action="fork" role="menuitem" name="Fork conversation" description={actionHint || undefined} disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => chooseMenu("fork")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />{/if}
+        <MenuItem data-testid="history-menu-item" data-action="manage" role="menuitem" name="Manage history" disabled={!!busy} onclick={() => chooseMenu("manage")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />
+      </div>
+    {/if}
   </div>
+  {#if busyLabel}<p class="notice" role="status" data-testid="history-busy">{busyLabel}</p>{/if}
   {#if error && !panel}<p class="error" role="alert" data-testid="history-error">{error}</p>{/if}
   {#if notice}<p class="notice" role="status" data-testid="history-notice">{notice}</p>{/if}
 </div>
@@ -133,6 +215,10 @@
 <style>
   .history-bar { display: flex; align-items: center; gap: 10px; padding: 10px var(--gutter); border-bottom: 1px solid var(--border); flex-wrap: wrap; font-size: var(--fs-xs); }
   .context { flex: 1; display: flex; flex-direction: column; align-items: start; gap: 6px; color: var(--muted); min-width: 150px; }
+  .history-menu { position: relative; flex: none; }
+  .history-menu-trigger { display: inline-grid; place-items: center; width: var(--control-h-xs); height: var(--control-h-xs); border-radius: var(--radius-sm); color: var(--muted); }
+  .history-menu-trigger:is(:hover, :focus-visible), .history-menu-trigger[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+  .menu { position: fixed; z-index: 30; overflow: auto; }
   .buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .parent { color: var(--accent); text-align: left; }
   .notice, .error { flex-basis: 100%; margin: 4px 0; overflow-wrap: anywhere; } .notice { color: var(--muted); } .error { color: var(--del-fg); white-space: pre-wrap; }
   .body { padding: 20px; overflow: auto; font-size: var(--fs-sm); } h2 { font-size: var(--fs-lg); margin: 0 0 14px; } h3 { font-size: var(--fs-sm); margin: 0 0 8px; } p { color: var(--text-2); line-height: 1.5; }

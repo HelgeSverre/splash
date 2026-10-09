@@ -2,6 +2,7 @@ import { renameSync } from "node:fs";
 import { expect, test } from "../../fixtures.ts";
 import { capture } from "../../support/capture.ts";
 import { Connection } from "../../support/server.ts";
+import { History, historyAgents } from "../../support/history.ts";
 import { Workbench } from "../../support/views.ts";
 
 test.skip(process.env.SPLASH_CAPTURE_SCREENSHOTS !== "1", "Documentation capture is run explicitly after the quality gate");
@@ -31,8 +32,10 @@ test("conversation, library and missing workspace", async ({ splash }) => {
   await capture(page, `quality-${harness}-small-window`);
   await app.terminalToggle.click();
   await bench.terminalInput.click();
-  await page.keyboard.type("printf 'isolated demo terminal\\n'");
+  await page.keyboard.type("PS1='demo:repo$ '; clear; printf 'isolated demo terminal\\n'");
+  await expect(bench.terminalScreen).toContainText("PS1=");
   await page.keyboard.press("Enter");
+  await expect(bench.terminalScreen).not.toContainText("PS1=");
   await expect(bench.terminalScreen).toContainText("isolated demo terminal");
   await capture(page, `quality-${harness}-small-window-terminal`);
   await bench.hideTerminal.click();
@@ -46,6 +49,15 @@ test("conversation, library and missing workspace", async ({ splash }) => {
   await app.openNav("library");
   await expect(app.sessionRows).toHaveCount(1);
   await capture(page, `quality-${harness}-library`);
+});
+
+test("agent history actions menu", async ({ splash }) => {
+  const { app, page, world, harness } = splash;
+  historyAgents(world);
+  const history = new History(app);
+  await history.importSession("Fix the subtract sign", world.repo);
+  await history.openMenu();
+  await capture(page, `quality-${harness}-history-actions-menu`);
 });
 
 test("an offline server preserves the conversation draft", async ({ splash }) => {

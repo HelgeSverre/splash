@@ -227,7 +227,6 @@ test("returning to Chat follows output that arrived while Log was open", async (
 
   await app.sessionTab("chat").click();
   await expect.poll(() => app.transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight)).toBeLessThanOrEqual(2);
-  await app.stopButton.click();
 });
 
 test("session controls remain reachable in a narrow centre pane", async ({ splash }) => {
