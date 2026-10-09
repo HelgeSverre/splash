@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Seo from '#lib/components/Seo.svelte';
 	import CompareCard from '#lib/components/CompareCard.svelte';
+	import JsonLd, { breadcrumbs } from '#lib/components/JsonLd.svelte';
 	import { date } from '#lib/compare/date.ts';
 	import type { PageProps } from './$types';
 
@@ -12,6 +13,8 @@
 	description="How Splash compares with other apps for running coding agents in parallel: agents, platforms, pricing, worktrees and review, with a source for every fact."
 	card="vs"
 />
+
+<JsonLd data={breadcrumbs([{ name: 'Splash', path: '/' }, { name: 'Compare', path: '/vs' }])} />
 
 <header class="head">
 	<div class="glow" aria-hidden="true"></div>

@@ -112,9 +112,12 @@ To recheck a page, open each source, update anything that changed, and move
 The site lives at `https://splash.computer` (`SITE_URL` in `src/lib/site.ts`).
 Every page renders `Seo.svelte`: title, description, canonical URL, and Open
 Graph and Twitter tags pointing at its share card. Feature pages take their H1
-and description from `FEATURES` in `site.ts`. The home page adds JSON-LD
-(`WebSite` and `SoftwareApplication`), and `src/routes/sitemap.xml` lists every
-page; `static/robots.txt` points to it.
+and description from `FEATURES` in `site.ts`. `JsonLd.svelte` writes structured
+data: `WebSite` and `SoftwareApplication` on the home page, and a
+`BreadcrumbList` on feature and comparison pages and `/vs`.
+`src/routes/sitemap.xml` lists every page; `static/robots.txt` points to it.
+`static/favicon.ico` (16, 32 and 48 px, from `app/public/icon.png`) is for
+clients that ask for it by name; pages declare the SVG and PNG icons.
 
 Each page has a 1200 × 630 share card in `static/og/<slug>.png`, defined in
 `src/lib/og.ts`: the page's headline over its real app window (a live scene, or

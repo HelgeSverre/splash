@@ -2,9 +2,12 @@
 	// The top of a comparison page: title, the neutral intro, and when it was checked.
 	import type { Comparison } from '../compare/types.ts';
 	import { date } from '../compare/date.ts';
+	import JsonLd, { breadcrumbs } from './JsonLd.svelte';
 
 	let { c, sources }: { c: Comparison; sources: number } = $props();
 </script>
+
+<JsonLd data={breadcrumbs([{ name: 'Splash', path: '/' }, { name: 'Compare', path: '/vs' }, { name: c.name, path: `/vs/${c.slug}` }])} />
 
 <header class="head">
 	<div class="glow" aria-hidden="true"></div>

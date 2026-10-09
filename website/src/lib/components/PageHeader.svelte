@@ -2,6 +2,7 @@
 	// The top of a feature page.
 	import type { Snippet } from 'svelte';
 	import Seo from './Seo.svelte';
+	import JsonLd, { breadcrumbs } from './JsonLd.svelte';
 	import { FEATURES } from '../site';
 
 	let { slug, children }: { slug: string; children: Snippet } = $props();
@@ -9,6 +10,7 @@
 </script>
 
 <Seo title="{feature.name} · Splash" description={feature.description} card={slug} />
+<JsonLd data={breadcrumbs([{ name: 'Splash', path: '/' }, { name: feature.name, path: `/features/${slug}` }])} />
 
 <header class="head">
 	<div class="glow" aria-hidden="true"></div>

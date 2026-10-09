@@ -9,6 +9,7 @@
 	import CodeBlock from '#lib/components/CodeBlock.svelte';
 	import AcpTrace from '#lib/components/AcpTrace.svelte';
 	import Seo from '#lib/components/Seo.svelte';
+	import JsonLd from '#lib/components/JsonLd.svelte';
 	import { ACP_URL, SITE_NAME, SITE_URL } from '#lib/site.ts';
 	import { VERSION } from '#lib/releases.ts';
 
@@ -37,8 +38,6 @@
 			}
 		]
 	};
-	// `<` is escaped so the JSON can never close the script element early.
-	const jsonLd = `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}<\/script>`;
 
 	const principles = [
 		{ title: 'No accounts', text: 'Splash never installs agents or signs in to them. Each CLI keeps its own login, on your machine.' },
@@ -49,7 +48,7 @@
 </script>
 
 <Seo title="Splash · Run coding agents side by side" {description} card="home" />
-<svelte:head>{@html jsonLd}</svelte:head>
+<JsonLd data={ld} />
 
 <Hero />
 
