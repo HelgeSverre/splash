@@ -500,10 +500,12 @@ mod tests {
         let (generation, master) = {
             let map = terms.map.lock();
             let term = map.get("t1").unwrap();
-            (
-                term.state.generation,
-                term.master.lock().take().expect("ConPTY master"),
-            )
+            let generation = term.state.generation;
+            let master = {
+                let mut held = term.master.lock();
+                held.take().expect("ConPTY master")
+            };
+            (generation, master)
         };
 
         terms.open("t1", &dir, 100, 30, |_, _| {}).unwrap();
