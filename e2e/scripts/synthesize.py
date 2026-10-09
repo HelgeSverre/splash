@@ -29,10 +29,14 @@ def handshake():
 def turn(prompt, updates, stop="end_turn", t=10_000):
     rows = [{"t": t, "dir": "out", "line": {"jsonrpc": "2.0", "id": "prompt-1", "method": "session/prompt",
                                              "params": {"sessionId": SID, "prompt": [{"type": "text", "text": prompt}]}}}]
-    for i, u in enumerate(updates, 1):
-        rows.append({"t": t + i * 40, "dir": "in", "line": {"jsonrpc": "2.0", "method": "session/update",
-                                                            "params": {"sessionId": SID, "update": u}}})
-    rows.append({"t": t + (len(updates) + 1) * 40, "dir": "in",
+    # An update comes 40 ms after the previous one, or (ms, update) for a longer
+    # gap (kept when a test replays at recorded speed: world.agents.speed(agent, 1)).
+    for u in updates:
+        gap, u = u if isinstance(u, tuple) else (40, u)
+        t += gap
+        rows.append({"t": t, "dir": "in", "line": {"jsonrpc": "2.0", "method": "session/update",
+                                                   "params": {"sessionId": SID, "update": u}}})
+    rows.append({"t": t + 40, "dir": "in",
                  "line": {"jsonrpc": "2.0", "id": "prompt-1", "result": {"stopReason": stop}}})
     return rows
 
@@ -82,4 +86,65 @@ def write(name, rows):
     print(path.relative_to(ROOT))
 
 
+# A reply with three kinds of diagram and one fence mermaid can't parse. The
+# first fence arrives in two chunks with a 4 s pause between them: while it is
+# open, the transcript must show it as code, not a half-drawn diagram.
+FLOW_OPEN = (
+    "Here is the path a prompt takes through Splash, from the composer to the agent and back.\n\n"
+    "```mermaid\nflowchart LR\n"
+    '  C["Composer"] --> S["Session store"]\n'
+    '  S --> A{"Agent running?"}\n'
+)
+FLOW_CLOSE = (
+    '  A -->|"yes"| P["session/prompt over ACP"]\n'
+    '  A -->|"no"| L["Launch the adapter"]\n'
+    "  L --> P\n"
+    '  P --> U["session/update stream"]\n'
+    '  U --> T["Transcript"]\n'
+    "```\n\n"
+)
+SEQUENCE = (
+    "Each turn is one request with streamed updates:\n\n"
+    "```mermaid\nsequenceDiagram\n"
+    "    participant U as User\n"
+    "    participant S as Splash\n"
+    "    participant A as Agent (ACP)\n"
+    "    U->>S: prompt\n"
+    "    S->>A: session/prompt\n"
+    "    A-->>S: agent_message_chunk, repeated\n"
+    "    A-->>S: tool_call, tool_call_update\n"
+    "    S-->>U: transcript entries\n"
+    "    A-->>S: result: end_turn\n"
+    "```\n\n"
+)
+STATES = (
+    "And the states a session moves through:\n\n"
+    "```mermaid\nstateDiagram-v2\n"
+    "    [*] --> starting\n"
+    "    starting --> idle: session/new\n"
+    "    idle --> running: prompt sent\n"
+    "    running --> awaiting_permission: permission request\n"
+    "    awaiting_permission --> running: answered\n"
+    "    running --> idle: end_turn\n"
+    "    running --> exited: agent died\n"
+    "    exited --> [*]\n"
+    "```\n\n"
+)
+BROKEN = (
+    "One mermaid cannot parse, so its source shows instead:\n\n"
+    "```mermaid\nflowchart LR\n  A --> B -->\n```\n\n"
+    "That is the whole loop."
+)
+
+MERMAID = handshake() + turn("Draw how a prompt gets from the composer to the agent", [
+    say(FLOW_OPEN),
+    (4000, say(FLOW_CLOSE)),
+    say(SEQUENCE),
+    say(STATES),
+    say(BROKEN),
+    {"sessionUpdate": "usage_update", "used": 28000, "size": 200000, "cost": {"amount": 0.18, "currency": "USD"}},
+])
+
+
 write("plan_edit", PLAN_EDIT)
+write("mermaid", MERMAID)

@@ -2,7 +2,7 @@
 // use exists in the app, so a typo or a removed attribute fails here rather than
 // as a timeout; and spec files find elements only through e2e/support. Ids are
 // spelled out as `testId(scope, "id")` in e2e/support and `data-testid="id"` in
-// the app.
+// the app (its components, and the HTML lib/markdown.ts builds).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
@@ -18,7 +18,7 @@ function files(dir: string, ext: RegExp): string[] {
 }
 
 const defined = new Set<string>();
-for (const file of [...files(join(repo, "app/src"), /\.svelte$/), join(repo, "src/server/login.html")])
+for (const file of [...files(join(repo, "app/src"), /\.(svelte|ts)$/), join(repo, "src/server/login.html")])
   for (const [, id] of readFileSync(file, "utf8").matchAll(/data-testid="([a-z0-9-]+)"/g)) defined.add(id);
 
 const missing: string[] = [];

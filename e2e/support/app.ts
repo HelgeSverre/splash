@@ -342,6 +342,27 @@ export class App {
     return testId(this.transcript, "tool", kind ? { "tool-kind": kind } : {});
   }
 
+  /** Diagram blocks (```mermaid fences) in the transcript; `data-status` is
+   * pending, rendering, ready or error, `data-view` diagram or source. */
+  diagrams(status?: "pending" | "rendering" | "ready" | "error") {
+    return testId(this.transcript, "markdown-mermaid", status ? { status } : {});
+  }
+  /** A diagram block's parts: the drawn SVG, the fence's text, the error line, and the bar's buttons. */
+  diagram(block: Locator) {
+    return {
+      svg: testId(block, "markdown-mermaid-diagram").locator("svg"),
+      source: testId(block, "markdown-mermaid-source"),
+      error: testId(block, "markdown-mermaid-error"),
+      sourceToggle: testId(block, "markdown-mermaid-toggle"),
+      sizeToggle: testId(block, "markdown-mermaid-size"),
+    };
+  }
+  /** Code blocks in an agent message that are not diagrams (an open fence while streaming is one). */
+  get codeBlocks() {
+    // raw selector: the markdown renderer's <pre> has no test id; what's under test is that the fence is plain code.
+    return this.entries("agent").locator("pre.syntax:not(.mermaid-source)");
+  }
+
   /** The plan's steps, all or in one state (`completed`, `in_progress`, `pending`). */
   planItems(status?: "completed" | "in_progress" | "pending") {
     return testId(this.entries("plan"), "plan-item", status ? { status } : {});

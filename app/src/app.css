@@ -65,6 +65,19 @@
   --syn-tag: #8ab4f8;
   --syn-meta: #f28fad;
 
+  /* Diagrams (```mermaid fences in agent messages, lib/mermaid.ts): fills
+     mixed from the accent on the code surface, the way ChatGPT draws them. */
+  --diagram-surface: var(--surface);
+  --diagram-node: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  --diagram-node-border: color-mix(in srgb, var(--accent) 42%, var(--surface));
+  --diagram-decision: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  --diagram-alt: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  --diagram-cluster: color-mix(in srgb, var(--text-2) 5%, var(--surface));
+  --diagram-cluster-border: color-mix(in srgb, var(--text-2) 22%, var(--surface));
+  --diagram-line: color-mix(in srgb, var(--text-2) 50%, var(--surface));
+  --diagram-text: var(--text);
+  --diagram-muted: var(--text-2);
+
   /* Terminal */
   --term-bg: var(--bg);
   --term-fg: var(--text);
