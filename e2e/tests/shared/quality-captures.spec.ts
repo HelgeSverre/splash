@@ -24,10 +24,18 @@ test("conversation, library and missing workspace", async ({ splash }) => {
   await app.newSession({ where: "in_place" });
   await app.prompt("Inspect the calculation demo");
   await app.sideTab("review").click();
+  await expect(bench.noChanges).toHaveAttribute("data-loading", "false");
   await capture(page, `quality-${harness}-conversation`);
   await page.setViewportSize({ width: 900, height: 560 });
   await expect(app.terminalToggle).toBeVisible();
   await capture(page, `quality-${harness}-small-window`);
+  await app.terminalToggle.click();
+  await bench.terminalInput.click();
+  await page.keyboard.type("printf 'isolated demo terminal\\n'");
+  await page.keyboard.press("Enter");
+  await expect(bench.terminalScreen).toContainText("isolated demo terminal");
+  await capture(page, `quality-${harness}-small-window-terminal`);
+  await bench.hideTerminal.click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await app.sideTab("files").click();
   await expect(bench.tree).toBeVisible();
@@ -45,6 +53,7 @@ test("an offline server preserves the conversation draft", async ({ splash }) =>
   const { app, page } = splash;
   await app.newSession({ where: "in_place" });
   await app.prompt("Inspect the calculation demo");
+  await expect(new Workbench(page).noChanges).toHaveAttribute("data-loading", "false");
   await app.composer.fill("Please keep this draft while the connection recovers.");
   await page.route("**/__server/state", (route) => route.abort("connectionrefused"));
   await page.route("**/logout", (route) => route.abort("connectionrefused"));

@@ -5,7 +5,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
 use base64::Engine;
@@ -40,11 +40,17 @@ struct Term {
     child: Box<dyn Child + Send + Sync>,
     tree: crate::procs::ProcessTree,
     buffer: Arc<Mutex<(VecDeque<u8>, u32)>>,
+    reader_done: Arc<AtomicBool>,
+    active: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
 pub struct Terminals {
     map: Mutex<HashMap<String, Term>>,
+    // Event sequence numbers are per service rather than per shell. Clients
+    // only require monotonicity within their session, so harmless gaps avoid
+    // an old shell generation reusing a new shell's sequence numbers.
+    seq: Arc<AtomicU32>,
 }
 
 impl Terminals {
@@ -59,18 +65,26 @@ impl Terminals {
     ) -> Result<TermAttach> {
         let mut map = self.map.lock();
         if let Some(t) = map.get(session) {
-            let _ = t.master.resize(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            });
-            let (buf, seq) = &*t.buffer.lock();
-            let bytes: Vec<u8> = buf.iter().copied().collect();
-            return Ok(TermAttach {
-                scrollback: b64(&bytes),
-                seq: *seq,
-            });
+            if !t.reader_done.load(Ordering::Acquire) {
+                let _ = t.master.resize(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                });
+                let (buf, seq) = &*t.buffer.lock();
+                let bytes: Vec<u8> = buf.iter().copied().collect();
+                return Ok(TermAttach {
+                    scrollback: b64(&bytes),
+                    seq: *seq,
+                });
+            }
+        }
+        if let Some(old) = map.remove(session) {
+            // The reader may have reached EOF before its child is waitable.
+            // Retire it before starting a replacement so late reader events
+            // cannot be published for the new shell generation.
+            retire(old);
         }
 
         let pair = native_pty_system()
@@ -104,10 +118,15 @@ impl Terminals {
         let mut reader = pair.master.try_clone_reader().map_err(io)?;
         let writer = pair.master.take_writer().map_err(io)?;
 
-        let buffer = Arc::new(Mutex::new((VecDeque::with_capacity(SCROLLBACK), 0u32)));
-        let seq = Arc::new(AtomicU32::new(0));
+        let baseline = self.seq.load(Ordering::Acquire);
+        let buffer = Arc::new(Mutex::new((VecDeque::with_capacity(SCROLLBACK), baseline)));
+        let reader_done = Arc::new(AtomicBool::new(false));
+        let active = Arc::new(AtomicBool::new(true));
         {
             let buffer = buffer.clone();
+            let reader_done = reader_done.clone();
+            let active = active.clone();
+            let seq = self.seq.clone();
             let session = session.to_string();
             std::thread::Builder::new()
                 .name(format!("pty-{session}"))
@@ -126,23 +145,30 @@ impl Terminals {
                                     buf.drain(..over);
                                     *last = s;
                                 }
-                                emit(TermEvent {
-                                    session: session.clone(),
-                                    seq: s,
-                                    data: b64(bytes),
-                                    exited: false,
-                                });
+                                if active.load(Ordering::Acquire) {
+                                    emit(TermEvent {
+                                        session: session.clone(),
+                                        seq: s,
+                                        data: b64(bytes),
+                                        exited: false,
+                                    });
+                                }
                             }
                         }
                     }
+                    // Allocate the exit sequence before exposing reader_done:
+                    // a replacement attach uses this as its stale-event floor.
                     let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
                     buffer.lock().1 = s;
-                    emit(TermEvent {
-                        session: session.clone(),
-                        seq: s,
-                        data: String::new(),
-                        exited: true,
-                    });
+                    reader_done.store(true, Ordering::Release);
+                    if active.load(Ordering::Acquire) {
+                        emit(TermEvent {
+                            session: session.clone(),
+                            seq: s,
+                            data: String::new(),
+                            exited: true,
+                        });
+                    }
                 })
                 .map_err(io)?;
         }
@@ -153,12 +179,16 @@ impl Terminals {
                 master: pair.master,
                 child,
                 tree,
-                buffer,
+                buffer: buffer.clone(),
+                reader_done,
+                active,
             },
         );
+        let (buf, seq) = &*buffer.lock();
+        let bytes: Vec<u8> = buf.iter().copied().collect();
         Ok(TermAttach {
-            scrollback: String::new(),
-            seq: 0,
+            scrollback: b64(&bytes),
+            seq: *seq,
         })
     }
 
@@ -184,22 +214,36 @@ impl Terminals {
 
     /// Kill the shell (a new one starts on the next `open`).
     pub fn close(&self, session: &str) {
-        if let Some(mut t) = self.map.lock().remove(session) {
-            t.tree.kill();
-            let _ = t.child.kill();
-            let _ = t.child.wait();
+        let term = self.map.lock().remove(session);
+        if let Some(term) = term {
+            retire(term);
         }
     }
 
-    /// Forget a shell that exited on its own.
+    /// Forget a shell whose reader ended. A newer replacement is retained.
     pub fn reap(&self, session: &str) {
-        let mut map = self.map.lock();
-        if let Some(t) = map.get_mut(session) {
-            if matches!(t.child.try_wait(), Ok(Some(_))) {
-                map.remove(session);
+        let term = {
+            let mut map = self.map.lock();
+            if map
+                .get(session)
+                .is_some_and(|t| t.reader_done.load(Ordering::Acquire))
+            {
+                map.remove(session)
+            } else {
+                None
             }
+        };
+        if let Some(term) = term {
+            retire(term);
         }
     }
+}
+
+fn retire(mut term: Term) {
+    term.active.store(false, Ordering::Release);
+    term.tree.kill();
+    let _ = term.child.kill();
+    let _ = term.child.wait();
 }
 
 fn io(e: impl std::fmt::Display) -> Error {
@@ -260,6 +304,155 @@ mod tests {
             .unwrap();
         assert!(String::from_utf8_lossy(&scroll).contains("splash-42"));
         assert!(again.seq > 0);
+        terms.close("t1");
+    }
+
+    #[test]
+    fn an_exited_shell_is_replaced_on_next_open() {
+        let terms = Terminals::default();
+        let (tx, rx) = mpsc::channel::<TermEvent>();
+        let dir = std::env::temp_dir();
+        terms
+            .open("t1", &dir, 80, 24, move |e| {
+                let _ = tx.send(e);
+            })
+            .unwrap();
+
+        let exit = if cfg!(windows) { "exit\r\n" } else { "exit\n" };
+        if !cfg!(windows) {
+            terms.write("t1", exit).unwrap();
+        }
+
+        let mut exited = false;
+        let mut exit_seq = 0;
+        let mut sent_exit = !cfg!(windows);
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !exited && std::time::Instant::now() < deadline {
+            if let Ok(event) = rx.recv_timeout(Duration::from_millis(200)) {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(event.data)
+                    .unwrap();
+                if cfg!(windows) && !sent_exit && bytes.windows(4).any(|part| part == b"\x1b[6n") {
+                    terms.write("t1", "\x1b[1;1R").unwrap();
+                    terms.write("t1", exit).unwrap();
+                    sent_exit = true;
+                }
+                exited = event.exited;
+                if exited {
+                    exit_seq = event.seq;
+                }
+            }
+        }
+        assert!(exited, "shell did not exit");
+
+        let fresh = terms.open("t1", &dir, 80, 24, |_| {}).unwrap();
+        let scrollback = base64::engine::general_purpose::STANDARD
+            .decode(fresh.scrollback)
+            .unwrap();
+        assert!(
+            !String::from_utf8_lossy(&scrollback).contains("exit"),
+            "reopened dead terminal scrollback"
+        );
+        assert!(fresh.seq >= exit_seq);
+        terms.close("t1");
+    }
+
+    #[test]
+    fn a_late_exit_event_is_stale_after_replacement() {
+        let terms = Terminals::default();
+        let (output_tx, output_rx) = mpsc::channel::<TermEvent>();
+        let (exit_ready_tx, exit_ready_rx) = mpsc::channel::<u32>();
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+        let (late_tx, late_rx) = mpsc::channel::<TermEvent>();
+        let dir = std::env::temp_dir();
+        terms
+            .open("t1", &dir, 80, 24, move |event| {
+                if event.exited {
+                    let _ = exit_ready_tx.send(event.seq);
+                    let _ = release_rx.recv();
+                    let _ = late_tx.send(event);
+                } else {
+                    let _ = output_tx.send(event);
+                }
+            })
+            .unwrap();
+
+        let exit = if cfg!(windows) { "exit\r\n" } else { "exit\n" };
+        if !cfg!(windows) {
+            terms.write("t1", exit).unwrap();
+        }
+
+        let mut sent_exit = !cfg!(windows);
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let exit_seq = loop {
+            if let Ok(seq) = exit_ready_rx.try_recv() {
+                break seq;
+            }
+            assert!(std::time::Instant::now() < deadline, "shell did not exit");
+            if let Ok(event) = output_rx.recv_timeout(Duration::from_millis(200)) {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(event.data)
+                    .unwrap();
+                if cfg!(windows) && !sent_exit && bytes.windows(4).any(|part| part == b"\x1b[6n") {
+                    terms.write("t1", "\x1b[1;1R").unwrap();
+                    terms.write("t1", exit).unwrap();
+                    sent_exit = true;
+                }
+            }
+        };
+
+        // The reader has allocated its exit sequence but has not published it.
+        // A concurrent attach must create a new shell with that sequence as
+        // its floor, so clients discard the delayed old exit event below.
+        let (fresh_tx, fresh_rx) = mpsc::channel::<TermEvent>();
+        let fresh = terms
+            .open("t1", &dir, 80, 24, move |event| {
+                let _ = fresh_tx.send(event);
+            })
+            .unwrap();
+        let scrollback = base64::engine::general_purpose::STANDARD
+            .decode(fresh.scrollback)
+            .unwrap();
+        assert!(
+            !String::from_utf8_lossy(&scrollback).contains("exit"),
+            "reopened dead terminal scrollback"
+        );
+        assert!(fresh.seq >= exit_seq);
+
+        release_tx.send(()).unwrap();
+        let late = late_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(late.exited);
+        assert!(late.seq <= fresh.seq);
+
+        let command = if cfg!(windows) {
+            "echo splash-restarted\r\n"
+        } else {
+            "echo splash-restarted\n"
+        };
+        if !cfg!(windows) {
+            terms.write("t1", command).unwrap();
+        }
+        let mut sent_command = !cfg!(windows);
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let mut live_output = false;
+        while !live_output && std::time::Instant::now() < deadline {
+            if let Ok(event) = fresh_rx.recv_timeout(Duration::from_millis(200)) {
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(event.data)
+                    .unwrap();
+                if cfg!(windows) && !sent_command && bytes.windows(4).any(|part| part == b"\x1b[6n")
+                {
+                    terms.write("t1", "\x1b[1;1R").unwrap();
+                    terms.write("t1", command).unwrap();
+                    sent_command = true;
+                }
+                if String::from_utf8_lossy(&bytes).contains("splash-restarted") {
+                    assert!(event.seq > fresh.seq);
+                    live_output = true;
+                }
+            }
+        }
+        assert!(live_output, "replacement shell did not produce output");
         terms.close("t1");
     }
 }

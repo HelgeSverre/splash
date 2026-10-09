@@ -45,6 +45,18 @@
     }
   });
 
+  // Opening the terminal (or resizing the window) changes the viewport without
+  // changing transcript entries. Keep a reader at the bottom in that case, but
+  // never move someone who deliberately scrolled up to read earlier output.
+  $effect(() => {
+    if (!scroller) return;
+    const observer = new ResizeObserver(() => {
+      if (active && pinned && app.focusEntry === null) scroller!.scrollTop = scroller!.scrollHeight;
+    });
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  });
+
   const agentName = $derived(agentById(session.agent_id)?.name ?? session.agent_id);
   // Nothing said yet: only agent notices or dividers (a new session starting
   // up) still get the centred empty or starting screen, notices above it.

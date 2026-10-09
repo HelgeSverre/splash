@@ -57,11 +57,11 @@ test("the selected side tab stays reachable in a 220px panel", async ({ splash }
 test("a saved terminal height yields to a smaller window and restores after expanding", async ({ splash }) => {
   const { page, app } = splash;
   const bench = new Workbench(page);
-  const constrainedTerminalHeight = splash.harness === "web" ? 197 : 240;
+  const constrainedTerminalHeight = splash.harness === "web" ? 117 : 160;
   await page.evaluate(() => localStorage.setItem("splash.layout", JSON.stringify({
     left: 260, right: 340, bottom: 700, leftOpen: true, rightOpen: true, bottomOpen: true, rightTab: "changes",
   })));
-  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.setViewportSize({ width: 1440, height: 1200 });
   await page.reload();
   await app.waitReady();
   await app.newSession({ where: "in_place" });
@@ -69,6 +69,7 @@ test("a saved terminal height yields to a smaller window and restores after expa
 
   await page.setViewportSize({ width: 900, height: 560 });
   await expect.poll(async () => (await bench.terminal.boundingBox())?.height).toBe(constrainedTerminalHeight);
+  await expect.poll(async () => (await app.transcript.boundingBox())?.height).toBeGreaterThanOrEqual(80);
   const [composer, terminal] = await Promise.all([app.composer.boundingBox(), bench.terminal.boundingBox()]);
   expect(composer).not.toBeNull();
   expect(terminal).not.toBeNull();
@@ -76,7 +77,7 @@ test("a saved terminal height yields to a smaller window and restores after expa
   await app.composer.click();
   await app.send("Composer stays usable above a constrained terminal");
 
-  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.setViewportSize({ width: 1440, height: 1200 });
   await expect.poll(async () => (await bench.terminal.boundingBox())?.height).toBe(700);
 });
 

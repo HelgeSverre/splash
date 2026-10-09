@@ -10,11 +10,15 @@
   // One xterm per session, kept alive while you switch around.
   const instances = new Map<string, Instance>();
   const pending = new Map<string, TermEvent[]>();
+  // Async terminal commands can resolve after a session was removed, or after
+  // a new terminal for the same id replaced the old one. The map identity is
+  // the instance lifetime token; never touch xterm after it stops matching.
+  const isCurrent = (id: string, inst: Instance) => instances.get(id) === inst;
 
   async function sendInput(id: string, inst: Instance) {
-    if (inst.writing) return;
+    if (!isCurrent(id, inst) || inst.writing) return;
     inst.writing = true;
-    while (inst.input) {
+    while (isCurrent(id, inst) && inst.input) {
       const data = inst.input;
       inst.input = "";
       await api.term_write(id, data).catch(() => {});
@@ -62,14 +66,17 @@
     };
   }
 
-  async function attach(id: string, inst: Instance) {
+  async function attach(id: string, inst: Instance): Promise<boolean> {
+    if (!isCurrent(id, inst)) return false;
     inst.fit.fit();
     const a = await api.term_open(id, inst.term.cols, inst.term.rows);
+    if (!isCurrent(id, inst)) return false;
     if (a.scrollback) inst.term.write(decode(a.scrollback));
     inst.lastSeq = a.seq;
     inst.exited = false;
     inst.ready = true;
     drain(id);
+    return true;
   }
 
   function drain(id: string) {
@@ -80,8 +87,10 @@
 
   export async function reconnectTerminals(ids: Set<string>) {
     await Promise.all([...instances].filter(([id, inst]) => ids.has(id) && inst.term.element && !inst.exited).map(async ([id, inst]) => {
+      if (!isCurrent(id, inst)) return;
       inst.ready = false;
       const snapshot = await api.term_open(id, inst.term.cols, inst.term.rows);
+      if (!isCurrent(id, inst)) return;
       inst.term.reset();
       if (snapshot.scrollback) inst.term.write(decode(snapshot.scrollback));
       inst.lastSeq = snapshot.seq;
@@ -107,6 +116,7 @@
     term.loadAddon(fit);
     const inst: Instance = { term, fit, el, lastSeq: 0, exited: false, restarting: false, ready: false, input: "", writing: false };
     term.onData((data) => {
+      if (!isCurrent(id, inst)) return;
       if (inst.exited) {
         // Keep the key that woke the terminal up. Users naturally type a
         // whole command after `exit`; dropping the first chunk made them type
@@ -116,10 +126,12 @@
         inst.restarting = true;
         inst.ready = false;
         term.reset();
-        void attach(id, inst).then(() => {
+        void attach(id, inst).then((attached) => {
+          if (!attached || !isCurrent(id, inst)) return;
           inst.restarting = false;
           void sendInput(id, inst);
         }).catch(() => {
+          if (!isCurrent(id, inst)) return;
           inst.restarting = false;
           term.write("\r\n\x1b[31m[shell could not start · press any key to retry]\x1b[0m\r\n");
         });
@@ -129,7 +141,7 @@
       void sendInput(id, inst);
     });
     term.onResize(({ cols, rows }) => {
-      if (inst.ready) api.term_resize(id, cols, rows).catch(() => {});
+      if (isCurrent(id, inst) && inst.ready) api.term_resize(id, cols, rows).catch(() => {});
     });
     instances.set(id, inst);
     return inst;
@@ -171,9 +183,12 @@
     current = inst;
     const i = inst;
     document.fonts.ready.then(() => {
+      if (!isCurrent(id, i)) return;
       if (fresh) {
         i.term.open(i.el);
-        attach(id, i).then(() => i.term.focus());
+        void attach(id, i).then((attached) => {
+          if (attached && isCurrent(id, i)) i.term.focus();
+        }).catch(() => {});
       } else {
         i.fit.fit();
         i.term.focus();

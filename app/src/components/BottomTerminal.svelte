@@ -19,7 +19,7 @@
   // accounts for the web connection banner instead of assuming the viewport
   // is entirely available to the session.
   const MIN_TERMINAL_HEIGHT = 100;
-  const MIN_WORKBENCH_HEIGHT = 320;
+  const MIN_WORKBENCH_HEIGHT = 400;
   const maxHeight = $derived(Math.max(MIN_TERMINAL_HEIGHT, parentHeight - MIN_WORKBENCH_HEIGHT));
   const bottomHeight = $derived(clamp(layout.bottom, MIN_TERMINAL_HEIGHT, maxHeight));
 

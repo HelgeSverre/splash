@@ -71,14 +71,83 @@ fn free_port() -> u16 {
     listener.local_addr().unwrap().port()
 }
 
-fn http(port: u16, request: &[u8], timeout: Duration) -> Vec<u8> {
+fn complete_response_len(response: &[u8]) -> std::io::Result<Option<usize>> {
+    let Some(headers_end) = response.windows(4).position(|window| window == b"\r\n\r\n") else {
+        return Ok(None);
+    };
+    let headers = std::str::from_utf8(&response[..headers_end]).map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("response headers were not UTF-8: {error}"),
+        )
+    })?;
+    let status = headers
+        .split_whitespace()
+        .nth(1)
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "missing status"))?
+        .parse::<u16>()
+        .map_err(|error| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("invalid response status: {error}"),
+            )
+        })?;
+    if (100..200).contains(&status) || matches!(status, 204 | 304) {
+        return Ok(Some(headers_end + 4));
+    }
+    let length = headers
+        .lines()
+        .find_map(|line| {
+            line.split_once(':')
+                .filter(|(key, _)| key.eq_ignore_ascii_case("content-length"))
+        })
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "response did not include Content-Length",
+            )
+        })?
+        .1
+        .trim()
+        .parse::<usize>()
+        .map_err(|error| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("invalid Content-Length: {error}"),
+            )
+        })?;
+    Ok(Some(headers_end + 4 + length))
+}
+
+fn read_response(stream: &mut TcpStream, timeout: Duration) -> std::io::Result<Vec<u8>> {
+    stream.set_read_timeout(Some(timeout))?;
+    let mut response = Vec::new();
+    loop {
+        if let Some(expected) = complete_response_len(&response)? {
+            if response.len() >= expected {
+                response.truncate(expected);
+                return Ok(response);
+            }
+        }
+        let mut chunk = [0; 1024];
+        let read = stream.read(&mut chunk)?;
+        if read == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "connection closed before a complete response",
+            ));
+        }
+        response.extend_from_slice(&chunk[..read]);
+    }
+}
+
+fn http(port: u16, request: &[u8], timeout: Duration, phase: &str) -> Vec<u8> {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
-    stream.set_read_timeout(Some(timeout)).unwrap();
     stream.write_all(request).unwrap();
     stream.shutdown(std::net::Shutdown::Write).unwrap();
-    let mut response = Vec::new();
-    stream.read_to_end(&mut response).unwrap();
-    response
+    read_response(&mut stream, timeout).unwrap_or_else(|error| {
+        panic!("{phase}: incomplete HTTP response after {timeout:?}: {error}")
+    })
 }
 
 fn status(response: &[u8]) -> u16 {
@@ -116,6 +185,15 @@ fn header(response: &[u8], name: &str) -> String {
         })
         .map(|(_, value)| value.trim().to_owned())
         .unwrap()
+}
+
+fn list_sessions_request(port: u16, cookie: &str, ipc: &str, client: &str) -> Vec<u8> {
+    let mut request = format!(
+        "POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: {client}\r\nContent-Type: application/msgpack\r\nContent-Length: 1\r\n\r\n"
+    )
+    .into_bytes();
+    request.push(0x90); // MessagePack's empty argument array.
+    request
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -419,6 +497,7 @@ fn idle_event_polls_leave_capacity_for_commands() {
         )
         .as_bytes(),
         Duration::from_secs(2),
+        "login before capacity test",
     );
     assert_eq!(status(&login), 204);
     let cookie = header(&login, "set-cookie")
@@ -433,12 +512,27 @@ fn idle_event_polls_leave_capacity_for_commands() {
         )
         .as_bytes(),
         Duration::from_secs(2),
+        "read server state before capacity test",
     );
     assert_eq!(status(&state), 200);
     let ipc = serde_json::from_slice::<serde_json::Value>(body(&state)).unwrap()["token"]
         .as_str()
         .unwrap()
         .to_owned();
+
+    // The first command initializes the store. Run it before the long polls
+    // so a slow clean Windows setup cannot look like permit starvation.
+    let warm_command = http(
+        port,
+        &list_sessions_request(port, &cookie, &ipc, "capacity-warmup"),
+        Duration::from_secs(8),
+        "warm list_sessions before event polls",
+    );
+    assert_eq!(
+        status(&warm_command),
+        200,
+        "warm list_sessions failed before any event poll was open"
+    );
 
     // A long poll occupies a worker until an event arrives. More clients than
     // the old shared 32-worker pool must still leave command capacity.
@@ -452,13 +546,11 @@ fn idle_event_polls_leave_capacity_for_commands() {
         let event_status = event_status.clone();
         polls.push(std::thread::spawn(move || {
             let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
-            stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
             let request = format!("GET /__events HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: poll-{client}\r\nContent-Length: 0\r\n\r\n");
             stream.write_all(request.as_bytes()).unwrap();
             stream.shutdown(std::net::Shutdown::Write).unwrap();
             started.send(()).unwrap();
-            let mut response = Vec::new();
-            if stream.read_to_end(&mut response).is_ok() && !response.is_empty() {
+            if let Ok(response) = read_response(&mut stream, Duration::from_secs(3)) {
                 let _ = event_status.send(status(&response));
             }
         }));
@@ -483,10 +575,17 @@ fn idle_event_polls_leave_capacity_for_commands() {
         }
     }
 
-    let mut command_request = format!("POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: command\r\nContent-Type: application/msgpack\r\nContent-Length: 1\r\n\r\n").into_bytes();
-    command_request.push(0x90); // MessagePack's empty argument array.
-    let command = http(port, &command_request, Duration::from_secs(2));
-    assert_eq!(status(&command), 200);
+    let command = http(
+        port,
+        &list_sessions_request(port, &cookie, &ipc, "capacity-command"),
+        Duration::from_secs(2),
+        "list_sessions after confirmed event-pool saturation",
+    );
+    assert_eq!(
+        status(&command),
+        200,
+        "list_sessions was rejected after the event pool was proven full"
+    );
 
     server.0.kill().unwrap();
     server.0.wait().unwrap();

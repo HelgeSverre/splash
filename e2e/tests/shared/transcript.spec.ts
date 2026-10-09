@@ -240,6 +240,24 @@ test("session controls remain reachable in a narrow centre pane", async ({ splas
   expect(boxes.every((box) => box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 900 && box.y + box.height <= 560)).toBe(true);
 });
 
+test("resizing the terminal follows a pinned transcript but preserves a reader's position", async ({ splash }) => {
+  const { app, page } = splash;
+  await page.setViewportSize({ width: 900, height: 560 });
+  await app.newSession({ where: "in_place" });
+  await app.prompt("Inspect the calculation demo");
+
+  const distanceFromBottom = () => app.transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight);
+  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(2);
+
+  await app.terminalToggle.click();
+  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(2);
+
+  await app.transcript.evaluate((element) => { element.scrollTop = 0; });
+  await expect.poll(() => app.transcript.evaluate((element) => element.scrollTop)).toBe(0);
+  await app.terminalToggle.click();
+  await expect.poll(() => app.transcript.evaluate((element) => element.scrollTop)).toBe(0);
+});
+
 test("context use and cost are shown and kept across a restart", async ({ splash }) => {
   const { app } = splash;
   await app.newSession({ where: "in_place" });

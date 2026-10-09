@@ -48,12 +48,25 @@ test("keeps the final choice when an earlier matching save fails", async ({ spla
   const firstHeld = new Promise<void>((resolve) => { releaseFirst = resolve; });
   let firstStarted: (() => void) | undefined;
   const startedFirst = new Promise<void>((resolve) => { firstStarted = resolve; });
+  let releaseSecond: (() => void) | undefined;
+  const secondHeld = new Promise<void>((resolve) => { releaseSecond = resolve; });
+  let secondStarted: (() => void) | undefined;
+  const startedSecond = new Promise<void>((resolve) => { secondStarted = resolve; });
   let writes = 0;
   await page.route("**/__cmd/set_setting", async (route) => {
-    if (++writes !== 1) return route.continue();
-    firstStarted!();
-    await firstHeld;
-    await route.abort("connectionreset");
+    switch (++writes) {
+      case 1:
+        firstStarted!();
+        await firstHeld;
+        await route.abort("connectionreset");
+        return;
+      case 2:
+        secondStarted!();
+        await secondHeld;
+        return route.continue();
+      default:
+        return route.continue();
+    }
   });
 
   // The first and last choices are both off. Its failure must not undo the
@@ -63,6 +76,13 @@ test("keeps the final choice when an earlier matching save fails", async ({ spla
   await settings.notify.click();
   await settings.notify.click();
   releaseFirst!();
+
+  // Hold the next save so this observes the first failure's rollback. The old
+  // value comparison sees the matching final off value and incorrectly resets
+  // the switch to its last confirmed on state.
+  await startedSecond;
+  await expect(settings.notify).not.toBeChecked();
+  releaseSecond!();
 
   await expect.poll(() => db.setting("notify")).toBe("off");
   await expect(settings.notify).not.toBeChecked();
