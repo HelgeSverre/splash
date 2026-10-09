@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
-use crate::git::{git, head_sha, resolves};
+use crate::git::{checked_head_sha, git, resolves};
 
 /// `feat: Fix the login bug!` → `fix-the-login-bug`.
 pub fn slug(text: &str, max: usize) -> String {
@@ -29,8 +29,8 @@ pub struct Created {
 
 /// `git worktree add -b <branch> <dest> HEAD`, retrying the branch name if taken.
 pub fn create(repo: &Path, dest: &Path, branch: &str) -> Result<Created> {
-    let base_sha =
-        head_sha(repo).ok_or_else(|| Error::Git("the repository has no commits yet".into()))?;
+    let base_sha = checked_head_sha(repo)?
+        .ok_or_else(|| Error::Git("the repository has no commits yet".into()))?;
     create_from(repo, dest, branch, &base_sha)
 }
 
@@ -84,7 +84,7 @@ pub fn remove(repo: &Path, dest: &Path, force: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::is_dirty;
+    use crate::git::{head_sha, is_dirty};
 
     #[test]
     fn slugs() {
@@ -161,5 +161,31 @@ mod tests {
         // The branch survives.
         assert!(git(&repo, &["rev-parse", "--verify", "splash/demo"]).is_ok());
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn creating_a_worktree_from_an_unborn_repository_explains_the_problem() {
+        let root = std::env::temp_dir().join(crate::store::new_id("unborn-wt"));
+        let repo = root.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        git(&repo, &["init", "-q"]).unwrap();
+
+        let err = create(&repo, &root.join("wt"), "splash/demo")
+            .err()
+            .unwrap();
+        assert_eq!(err.to_string(), "the repository has no commits yet");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn creating_a_worktree_from_a_missing_directory_preserves_the_git_error() {
+        let root = std::env::temp_dir().join(crate::store::new_id("missing-wt"));
+        let err = create(&root.join("missing"), &root.join("wt"), "splash/demo")
+            .err()
+            .unwrap();
+
+        assert!(matches!(err, Error::Git(ref text) if text.starts_with("git:")));
+        assert_ne!(err.to_string(), "the repository has no commits yet");
     }
 }

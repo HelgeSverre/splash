@@ -20,7 +20,20 @@ bucket=$(node -p "require(process.argv[1]).s3_bucket || ''" "$resources")
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 archive="packages-${label}-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
-(cd "$packages_dir" && COPYFILE_DISABLE=1 tar --no-xattrs -czf "$tmpdir/$archive" .)
+# GitHub Actions delivers artifacts as ZIP files, which do not preserve the
+# executable bit of the AppImage. The release payload's AppRun permissions are
+# still asserted inside packaging/smoke-linux.sh; this restores only the
+# transport-lost outer launch bit before that ordinary-user smoke test.
+appimages=("$packages_dir"/*.AppImage)
+[[ -f "${appimages[0]}" && ${#appimages[@]} -eq 1 ]] || {
+  echo "Expected exactly one AppImage in $packages_dir." >&2
+  exit 1
+}
+chmod 0755 "${appimages[0]}"
+# Archive package files rather than `.`. A tar entry for `.` carries the local
+# directory's UID/mode and would overwrite the prepared remote staging
+# directory, making the UID 1001 execution check unable to traverse it.
+(cd "$packages_dir" && COPYFILE_DISABLE=1 tar --no-xattrs -czf "$tmpdir/$archive" -- ./*)
 aws s3 cp "$tmpdir/$archive" "s3://$bucket/packages/$archive" \
   --profile "$profile" --region "$region" --sse AES256 --only-show-errors
 url=$(aws s3 presign "s3://$bucket/packages/$archive" --expires-in 21600 --profile "$profile" --region "$region")
@@ -33,7 +46,11 @@ const shell = [
   'exec 9>/opt/splash-quality/quality.lock',
   'flock -n 9 || { echo "A quality run is already using this runner." >&2; exit 75; }',
   'cd /opt/splash-quality/workspace',
-  'install -d -o ubuntu -g ubuntu /opt/splash-quality/packages /opt/splash-quality/artifacts',
+  // The package is executed as UID 1001 in the container; retain traversal
+  // permissions even if a previous local tar transfer created this directory.
+  'install -d -m 0755 -o ubuntu -g ubuntu /opt/splash-quality/packages /opt/splash-quality/artifacts',
+  'chown ubuntu:ubuntu /opt/splash-quality/packages /opt/splash-quality/artifacts',
+  'chmod 0755 /opt/splash-quality/packages /opt/splash-quality/artifacts',
   'rm -rf /opt/splash-quality/packages/*',
   `curl --fail --location --silent --show-error ${quote(url)} -o /tmp/splash-packages.tar.gz`,
   'tar -xzf /tmp/splash-packages.tar.gz -C /opt/splash-quality/packages',

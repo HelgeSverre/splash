@@ -52,7 +52,11 @@ tests, exercises the authenticated server, and verifies native webview readiness
 Docker's outer AppArmor and seccomp profiles allow the namespaces required by
 WebKit. WebKit's own sandbox remains enabled. Package smoke installs the finished
 DEB through apt before testing it, and runs all application checks as a fresh
-ordinary user with isolated temporary data.
+ordinary user with isolated temporary data. GitHub Actions downloads package
+artifacts as ZIP files, which lose an AppImage's outer executable bit; the
+package helper restores that one transport-lost bit before upload. The smoke
+image still verifies the final AppImage's internal launcher permissions and
+executes it as an ordinary user.
 
 ## Cleanup
 

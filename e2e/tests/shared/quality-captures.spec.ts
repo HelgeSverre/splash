@@ -55,7 +55,9 @@ test("agent history actions menu", async ({ splash }) => {
   const { app, page, world, harness } = splash;
   historyAgents(world);
   const history = new History(app);
+  const bench = new Workbench(page);
   await history.importSession("Fix the subtract sign", world.repo);
+  await expect(bench.noChanges).toHaveAttribute("data-loading", "false");
   await history.openMenu();
   await capture(page, `quality-${harness}-history-actions-menu`);
   await history.menu.press("Escape");
@@ -76,6 +78,7 @@ test("agent history actions menu", async ({ splash }) => {
   await history.closeDialog.click();
   await history.fork("review");
   await expect(app.composer).toHaveValue(/Review the work in the parent conversation\./);
+  await expect(bench.noChanges).toHaveAttribute("data-loading", "false");
   await capture(page, `quality-${harness}-history-fork-review`);
 });
 
