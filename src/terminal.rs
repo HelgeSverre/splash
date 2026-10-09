@@ -271,6 +271,23 @@ mod tests {
         count
     }
 
+    fn terminal_state(terms: &Terminals, session: &str) -> String {
+        let mut map = terms.map.lock();
+        let Some(term) = map.get_mut(session) else {
+            return "missing".into();
+        };
+        let child = match term.child.try_wait() {
+            Ok(Some(status)) => format!("exited {status:?}"),
+            Ok(None) => "running".into(),
+            Err(error) => format!("wait error {error}"),
+        };
+        format!(
+            "reader_done={}, active={}, child={child}",
+            term.reader_done.load(Ordering::Acquire),
+            term.active.load(Ordering::Acquire),
+        )
+    }
+
     #[test]
     fn a_shell_echoes_and_reattaches_with_scrollback() {
         let terms = Terminals::default();
@@ -338,6 +355,7 @@ mod tests {
         let exit = if cfg!(windows) { "exit\r\n" } else { "exit\n" };
         let mut exited = false;
         let mut exit_seq = 0;
+        let mut output = String::new();
         let mut query_tail = Vec::new();
         let mut sent_exit = false;
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
@@ -346,6 +364,7 @@ mod tests {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(event.data)
                     .unwrap();
+                output.push_str(&String::from_utf8_lossy(&bytes));
                 let queries = cursor_queries(&mut query_tail, &bytes);
                 if cfg!(windows) {
                     for _ in 0..queries {
@@ -364,7 +383,11 @@ mod tests {
                 }
             }
         }
-        assert!(exited, "shell did not exit");
+        assert!(
+            exited,
+            "shell did not exit (sent_exit={sent_exit}, {}, output={output:?})",
+            terminal_state(&terms, "t1"),
+        );
 
         let fresh = terms.open("t1", &dir, 80, 24, |_| {}).unwrap();
         let scrollback = base64::engine::general_purpose::STANDARD
@@ -401,16 +424,22 @@ mod tests {
         let exit = if cfg!(windows) { "exit\r\n" } else { "exit\n" };
         let mut query_tail = Vec::new();
         let mut sent_exit = false;
+        let mut output = String::new();
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         let exit_seq = loop {
             if let Ok(seq) = exit_ready_rx.try_recv() {
                 break seq;
             }
-            assert!(std::time::Instant::now() < deadline, "shell did not exit");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "shell did not exit (sent_exit={sent_exit}, {}, output={output:?})",
+                terminal_state(&terms, "t1"),
+            );
             if let Ok(event) = output_rx.recv_timeout(Duration::from_millis(200)) {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(event.data)
                     .unwrap();
+                output.push_str(&String::from_utf8_lossy(&bytes));
                 let queries = cursor_queries(&mut query_tail, &bytes);
                 if cfg!(windows) {
                     for _ in 0..queries {

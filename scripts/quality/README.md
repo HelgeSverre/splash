@@ -22,9 +22,12 @@ audit's local setup. Sync and package smoke require `instance_id` and
 and `instance_profile_name`. Those resources must all belong to the same audit.
 Cleanup also requires an independent exact-ID guard: set
 `SPLASH_QUALITY_EXPECTED_INSTANCE_ID` to the instance ID you intend to delete;
-it must exactly equal the ledger's `instance_id` before the script makes any AWS
-call. The cleanup script verifies the instance `Name`, `Purpose`, and `ManagedBy`
-tags and accepts root-volume deletion only when AWS reports `InvalidVolume.NotFound`.
+it must exactly equal the ledger's `instance_id`. Set
+`SPLASH_QUALITY_EXPECTED_ACCOUNT_ID` to the expected AWS account. Before mutation,
+the script requires its effective profile and region to match the ledger, confirms
+the active STS account, and verifies the exact instance Name, Purpose, ManagedBy,
+VPC, and root-volume mapping. It accepts root-volume deletion only when AWS reports
+`InvalidVolume.NotFound`.
 
 Local dependencies are AWS CLI, Node.js, Git, Bash, and tar. Run from the
 worktree. The source snapshot excludes ignored files and build output. The
@@ -62,5 +65,6 @@ into the audit ledger.
 
 ```sh
 SPLASH_QUALITY_EXPECTED_INSTANCE_ID=i-0bb6fc0108eded5ed \
+SPLASH_QUALITY_EXPECTED_ACCOUNT_ID=147654942040 \
   scripts/quality/remote-docker-cleanup.sh --execute
 ```

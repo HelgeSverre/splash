@@ -25,17 +25,25 @@ profile_name=$(read_field instance_profile_name)
 bucket=$(read_field s3_bucket)
 root_volume_id=$(read_field root_volume_id)
 ledger_name=$(read_field name)
+ledger_profile=$(read_field profile)
+ledger_region=$(read_field region)
 expected_instance_id=${SPLASH_QUALITY_EXPECTED_INSTANCE_ID:-}
+expected_account_id=${SPLASH_QUALITY_EXPECTED_ACCOUNT_ID:-}
 
-for value in "$instance_id" "$vpc_id" "$subnet_id" "$route_table_id" "$igw_id" "$sg_id" "$role_name" "$profile_name" "$bucket" "$root_volume_id" "$ledger_name" "$expected_instance_id"; do
+for value in "$instance_id" "$vpc_id" "$subnet_id" "$route_table_id" "$igw_id" "$sg_id" "$role_name" "$profile_name" "$bucket" "$root_volume_id" "$ledger_name" "$ledger_profile" "$ledger_region" "$expected_instance_id" "$expected_account_id"; do
   [[ -n "$value" ]] || { echo "Ledger is incomplete; refusing cleanup." >&2; exit 1; }
 done
 [[ "$expected_instance_id" == "$instance_id" ]] || { echo "SPLASH_QUALITY_EXPECTED_INSTANCE_ID does not match the ledger; refusing cleanup." >&2; exit 1; }
+[[ "$profile" == "$ledger_profile" ]] || { echo "AWS_PROFILE does not match the ledger; refusing cleanup." >&2; exit 1; }
+[[ "$region" == "$ledger_region" ]] || { echo "AWS_REGION does not match the ledger; refusing cleanup." >&2; exit 1; }
+
+account_id=$(aws sts get-caller-identity --profile "$profile" --query Account --output text)
+[[ "$account_id" == "$expected_account_id" ]] || { echo "SPLASH_QUALITY_EXPECTED_ACCOUNT_ID does not match the active AWS account; refusing cleanup." >&2; exit 1; }
 
 # Verify the exact instance is one created for this audit before terminating it.
-tags=$(aws ec2 describe-instances --profile "$profile" --region "$region" --instance-ids "$instance_id" \
-  --query 'Reservations[0].Instances[0].Tags' --output json)
-node -e 'const tags=JSON.parse(process.argv[1]); const values=Object.fromEntries(tags.map(t=>[t.Key,t.Value])); if(values.Purpose !== "SplashQualityAudit" || values.ManagedBy !== "Codex" || values.Name !== `${process.argv[2]}-runner`) process.exit(1)' "$tags" "$ledger_name" \
+instance=$(aws ec2 describe-instances --profile "$profile" --region "$region" --instance-ids "$instance_id" \
+  --query 'Reservations[0].Instances[0].{VpcId:VpcId,Tags:Tags,RootVolumeId:BlockDeviceMappings[?DeviceName==`/dev/sda1`].Ebs.VolumeId | [0]}' --output json)
+node -e 'const instance=JSON.parse(process.argv[1]); const values=Object.fromEntries(instance.Tags.map(t=>[t.Key,t.Value])); if(values.Purpose !== "SplashQualityAudit" || values.ManagedBy !== "Codex" || values.Name !== `${process.argv[2]}-runner` || instance.VpcId !== process.argv[3] || instance.RootVolumeId !== process.argv[4]) process.exit(1)' "$instance" "$ledger_name" "$vpc_id" "$root_volume_id" \
   || { echo "Refusing: instance is not tagged as this audit runner." >&2; exit 1; }
 
 echo "Terminating only audit instance $instance_id"
