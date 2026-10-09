@@ -6,7 +6,7 @@
 
   // `input` holds keys typed while a write is in flight: writes go one at a
   // time so the shell gets them in order (each is its own request).
-  type Instance = { term: Terminal; fit: FitAddon; el: HTMLDivElement; lastSeq: number; exited: boolean; ready: boolean; input: string; writing: boolean };
+  type Instance = { term: Terminal; fit: FitAddon; el: HTMLDivElement; lastSeq: number; exited: boolean; restarting: boolean; ready: boolean; input: string; writing: boolean };
   // One xterm per session, kept alive while you switch around.
   const instances = new Map<string, Instance>();
   const pending = new Map<string, TermEvent[]>();
@@ -105,12 +105,24 @@
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    const inst: Instance = { term, fit, el, lastSeq: 0, exited: false, ready: false, input: "", writing: false };
+    const inst: Instance = { term, fit, el, lastSeq: 0, exited: false, restarting: false, ready: false, input: "", writing: false };
     term.onData((data) => {
       if (inst.exited) {
+        // Keep the key that woke the terminal up. Users naturally type a
+        // whole command after `exit`; dropping the first chunk made them type
+        // it all again after the fresh shell appeared.
+        inst.input += data;
+        if (inst.restarting) return;
+        inst.restarting = true;
         inst.ready = false;
         term.reset();
-        attach(id, inst);
+        void attach(id, inst).then(() => {
+          inst.restarting = false;
+          void sendInput(id, inst);
+        }).catch(() => {
+          inst.restarting = false;
+          term.write("\r\n\x1b[31m[shell could not start · press any key to retry]\x1b[0m\r\n");
+        });
         return;
       }
       inst.input += data;
@@ -125,6 +137,17 @@
 
   export function focusTerminal(id: string) {
     instances.get(id)?.term.focus();
+  }
+
+  /** Release a terminal whose session left the client. Switching sessions
+   * deliberately keeps its terminal alive; removing a session must not. */
+  export function dropTerminal(id: string) {
+    const inst = instances.get(id);
+    if (!inst) return;
+    instances.delete(id);
+    pending.delete(id);
+    inst.term.dispose();
+    inst.el.remove();
   }
 </script>
 

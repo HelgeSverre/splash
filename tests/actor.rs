@@ -1,7 +1,7 @@
 //! The session actor against `fake-acp` replaying recorded fixtures.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use splash::acp::actor::{self, SessionCmd, SessionSpec, Sink, Status};
@@ -64,15 +64,66 @@ impl Recorder {
     fn last_status(&self) -> Option<Status> {
         self.statuses.lock().last().copied()
     }
+
+    fn diagnostics(&self) -> String {
+        format!(
+            "statuses: {:?}, methods: {:?}, entries: {:?}",
+            *self.statuses.lock(),
+            *self.methods.lock(),
+            self.entries()
+        )
+    }
+}
+
+/// Wait for an external fixture without yielding an idle paused Tokio runtime.
+/// A single long-lived blocking task keeps Tokio's auto-advance inhibited
+/// while the actor handles process I/O on the test runtime.
+async fn wait_for_file(path: std::path::PathBuf, timeout: Duration) -> bool {
+    tokio::task::spawn_blocking(move || {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if path.exists() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        path.exists()
+    })
+    .await
+    .unwrap()
+}
+
+async fn wait_for_method(rec: Arc<Recorder>, method: &'static str, timeout: Duration) -> bool {
+    tokio::task::spawn_blocking(move || {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if rec.methods.lock().iter().any(|seen| seen == method) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        rec.methods.lock().iter().any(|seen| seen == method)
+    })
+    .await
+    .unwrap()
 }
 
 fn fake_agent(fixture: &str) -> &'static AgentSpec {
+    fake_agent_with(fixture, &[])
+}
+
+fn fake_agent_with(fixture: &str, flags: &[&'static str]) -> &'static AgentSpec {
     let program: &'static str =
         Box::leak(env!("CARGO_BIN_EXE_fake-acp").to_string().into_boxed_str());
     let path: &'static str = Box::leak(
         format!("{}/fixtures/{fixture}.jsonl", env!("CARGO_MANIFEST_DIR")).into_boxed_str(),
     );
-    let args: &'static [&'static str] = Box::leak(vec![path].into_boxed_slice());
+    let args: &'static [&'static str] = Box::leak(
+        std::iter::once(path)
+            .chain(flags.iter().copied())
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
+    );
     Box::leak(Box::new(AgentSpec {
         id: "fake",
         name: "Fake",
@@ -342,6 +393,68 @@ async fn a_missing_program_reports_an_error() {
         .entries()
         .iter()
         .any(|e| matches!(e, Entry::Error { text } if text.contains("not found"))));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_new_session_that_never_responds_times_out() {
+    let release = std::env::temp_dir().join(splash::store::new_id("splash-init-release"));
+    let ready = release.with_extension("ready");
+    let release_flag: &'static str =
+        Box::leak(release.to_string_lossy().into_owned().into_boxed_str());
+    let rec = Arc::new(Recorder::default());
+    let _tx = actor::start(
+        SessionSpec {
+            key: "hung-new".into(),
+            agent: fake_agent_with(
+                "claude/read",
+                &["--wait-initialize", release_flag, "--hang-new"],
+            ),
+            cwd: std::env::temp_dir(),
+            extra_args: vec![],
+            resume: None,
+            history: vec![],
+            additional_directories: vec![],
+            source: Default::default(),
+        },
+        rec.clone() as Arc<dyn Sink>,
+    );
+
+    // The fixture is an external process, so wait in real time without
+    // advancing Tokio's paused clock. It pauses initialize until we have spent
+    // most of the startup budget, then leaves session/new unanswered. That
+    // proves the two requests share one deadline. The wait itself holds one
+    // blocking task for its whole lifetime, keeping Tokio from auto-advancing
+    // through an accidental idle gap on slower native runners.
+    assert!(
+        wait_for_file(ready.clone(), Duration::from_secs(10)).await,
+        "fixture never received initialize; {}",
+        rec.diagnostics()
+    );
+    tokio::time::advance(Duration::from_secs(120)).await;
+    std::fs::write(&release, "continue").unwrap();
+    assert!(
+        wait_for_method(rec.clone(), "session/new", Duration::from_secs(10)).await,
+        "fixture never received session/new; {}",
+        rec.diagnostics()
+    );
+
+    tokio::time::advance(Duration::from_secs(61)).await;
+    for _ in 0..100 {
+        if rec.last_status() == Some(Status::Error) {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(rec.last_status(), Some(Status::Error));
+    assert!(
+        rec.entries().iter().any(
+            |entry| matches!(entry, Entry::Error { text } if text.contains("Creating a new conversation timed out"))
+        ),
+        "entries: {:?}",
+        rec.entries()
+    );
+    let _ = std::fs::remove_file(release);
+    let _ = std::fs::remove_file(ready);
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -16,6 +16,21 @@ with tempfile.TemporaryDirectory(prefix='splash-desktop-') as directory:
             for _ in range(600):
                 if marker.exists():
                     assert marker.read_text() == 'frontend-ready'
+                    screenshot = os.environ.get('SPLASH_SMOKE_SCREENSHOT')
+                    if screenshot:
+                        # Frontend readiness is emitted before the compositor's
+                        # next paint; let the Xvfb root window receive it.
+                        time.sleep(1)
+                        import gi
+                        gi.require_version('Gdk', '3.0')
+                        from gi.repository import Gdk
+
+                        root = Gdk.get_default_root_window()
+                        image = Gdk.pixbuf_get_from_window(root, 0, 0, root.get_width(), root.get_height())
+                        if image is None:
+                            raise RuntimeError('Could not capture the desktop root window')
+                        image.savev(screenshot, 'png', [], [])
+                        print(f'Captured native desktop screenshot: {screenshot}')
                     print('Native desktop renderer loaded, IPC round-trip and initial render passed')
                     break
                 if process.poll() is not None: raise RuntimeError(f'Desktop exited {process.returncode}')

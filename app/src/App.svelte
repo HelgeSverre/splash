@@ -57,6 +57,14 @@
 
   const session = $derived(currentSession());
   const sessionId = $derived(session?.id);
+  let workbenchWidth = $state(window.innerWidth);
+  const sideVisible = $derived(!!session && app.view.kind === "session" && layout.rightOpen);
+  // Preserve saved sizes while reserving room for the conversation at the
+  // desktop's minimum window size. Expanding the window restores those sizes.
+  const leftMax = $derived(Math.max(200, Math.min(420, workbenchWidth - 361 - (sideVisible ? 221 : 0))));
+  const leftWidth = $derived(clamp(layout.left, 200, leftMax));
+  const rightMax = $derived(Math.max(220, Math.min(720, workbenchWidth - (layout.leftOpen ? leftWidth + 1 : 0) - 361)));
+  const rightWidth = $derived(clamp(layout.right, 220, rightMax));
 
   // Watch the open session's folder (Changes, Files and open tabs follow it).
   let watched: string | undefined;
@@ -74,15 +82,16 @@
   });
 </script>
 
-<div class="workbench" data-testid="app" data-ready={routeInstalled} style:grid-template-columns={layout.leftOpen ? `${layout.left}px 1px minmax(0, 1fr)` : "minmax(0, 1fr)"}>
+<div class="workbench" data-testid="app" data-ready={routeInstalled} bind:clientWidth={workbenchWidth} style:grid-template-columns={layout.leftOpen ? `${leftWidth}px 1px minmax(0, 1fr)` : "minmax(0, 1fr)"}>
   {#if layout.leftOpen}
     <div class="left"><Sidebar /></div>
-    <Splitter axis="x" label="Resize sidebar" value={layout.left} min={200} max={420} onmove={(d) => (layout.left = clamp(layout.left + d, 200, 420))} onend={saveLayout} />
+    <Splitter axis="x" label="Resize sidebar" value={leftWidth} min={200} max={leftMax} onmove={(d) => (layout.left = clamp(leftWidth + d, 200, leftMax))} onend={saveLayout} />
   {/if}
   <main>
     {#if serverMode}<ServerConnection />{/if}
+    <div class="workbench-body">
     <div class="top">
-      <div class="center">
+      <div class="center" data-testid="workbench-center">
         {#if app.view.kind === "library"}
           <SessionLibrary />
         {:else if app.view.kind === "attention"}
@@ -102,13 +111,14 @@
         {/if}
       </div>
       {#if session && app.view.kind === "session" && layout.rightOpen}
-        <Splitter axis="x" label="Resize side panel" value={layout.right} min={220} max={720} onmove={(d) => (layout.right = clamp(layout.right - d, 220, 720))} onend={saveLayout} />
-        <div class="right" style:width="{layout.right}px"><RightPanel {session} /></div>
+        <Splitter axis="x" label="Resize side panel" value={rightWidth} min={220} max={rightMax} onmove={(d) => (layout.right = clamp(rightWidth - d, 220, rightMax))} onend={saveLayout} />
+        <div class="right" data-testid="workbench-side" style:width="{rightWidth}px"><RightPanel {session} /></div>
       {/if}
     </div>
     {#if session && app.view.kind === "session" && layout.bottomOpen}
       <BottomTerminal {session} />
     {/if}
+    </div>
   </main>
 </div>
 
@@ -132,6 +142,7 @@
   .workbench { height: 100%; display: grid; }
   .left { min-width: 0; min-height: 0; }
   main { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+  .workbench-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .top { flex: 1; min-height: 0; display: flex; }
   .center { flex: 1; min-width: 0; min-height: 0; }
   .right { flex: none; min-width: 0; min-height: 0; }

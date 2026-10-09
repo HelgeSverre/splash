@@ -2,6 +2,9 @@
 // tab. Kept in localStorage, so they're the same next launch.
 import { tick } from "svelte";
 import { focusSession } from "./focus";
+import { restoredLayout } from "./layout-values";
+export type { SideTab } from "./layout-values";
+import type { SideTab } from "./layout-values";
 
 const saved = (() => {
   try {
@@ -11,17 +14,7 @@ const saved = (() => {
   }
 })();
 
-export type SideTab = "changes" | "files" | "details" | "review";
-
-export const layout = $state({
-  left: saved.left ?? 260,
-  right: saved.right ?? 340,
-  bottom: saved.bottom ?? 260,
-  leftOpen: saved.leftOpen ?? true,
-  rightOpen: saved.rightOpen ?? true,
-  bottomOpen: saved.bottomOpen ?? false,
-  rightTab: (saved.rightTab ?? "changes") as SideTab,
-});
+export const layout = $state(restoredLayout(saved));
 
 export function saveLayout() {
   try {

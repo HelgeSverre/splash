@@ -45,7 +45,13 @@
   const existing = $derived(preview ? app.sessions.find((s) => s.agent_id === preview?.agent_id && s.agent_session_id === preview?.session_id && (!s.launch_args || s.launch_args === agentById(s.agent_id)?.extra_args)) : undefined);
   $effect(() => { if (!knownAgent && available.length) knownAgent = available[0].id; });
   $effect(() => { if (!knownCwd && app.projects.length) knownCwd = app.projects[0].path; });
-  function clearPreview() { version++; preview = null; busy = ""; error = ""; }
+  function clearPreview() {
+    // Changing the discovery scope must not make an in-flight import look
+    // finished. Its result would otherwise navigate to a conversation from
+    // the old scope after the user has started browsing a new one.
+    if (busy) return;
+    version++; preview = null; error = "";
+  }
   async function discover(refresh = false) {
     const pending = [...sources];
     const scope = directory;
@@ -67,21 +73,27 @@
   }
   async function add() {
     if (!preview || busy) return;
+    const request = ++version;
+    const pending = preview;
     busy = "Saving local copy…"; error = "";
-    try { const session = await api.import_session(preview.token); applySession(session); if (alive) await openSession(session.id); }
-    catch (e) { if (alive) error = errorMessage(e); }
-    finally { if (alive) busy = ""; }
+    try {
+      const session = await api.import_session(pending.token);
+      if (!alive || request !== version) return;
+      applySession(session);
+      await openSession(session.id);
+    } catch (e) { if (alive && request === version) error = errorMessage(e); }
+    finally { if (alive && request === version) busy = ""; }
   }
   const when = (value: string) => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : value;
 </script>
 
 <form onsubmit={(e) => { e.preventDefault(); discover(); }}>
   <div class="filters">
-    <label>Agent<select class="field" data-testid="external-agent" bind:value={agent} onchange={clearPreview}><option value="">All installed agents</option>{#each available as a}<option data-testid="external-agent-option" data-agent={a.id} value={a.id}>{a.name}</option>{/each}</select></label>
-    <label>Folders<select class="field" data-testid="external-folder" bind:value={folder} onchange={clearPreview}><option value="">All folders</option>{#each app.projects as p}<option value={p.path}>{p.name}</option>{/each}<option value="custom">Choose another folder</option></select></label>
-    {#if folder === "custom"}<label class="grow">Working directory<input class="field" required bind:value={cwd} oninput={clearPreview} placeholder="/absolute/path/to/project" /></label>{/if}
-    <button class="btn primary" data-testid="external-find" disabled={loading || !available.length || (folder === "custom" && !cwd.trim())}>Find sessions</button>
-    {#if loaded}<button class="btn" type="button" data-testid="external-refresh" disabled={loading} onclick={() => discover(true)}>Refresh lists</button>{/if}
+    <label>Agent<select class="field" data-testid="external-agent" disabled={!!busy} bind:value={agent} onchange={clearPreview}><option value="">All installed agents</option>{#each available as a}<option data-testid="external-agent-option" data-agent={a.id} value={a.id}>{a.name}</option>{/each}</select></label>
+    <label>Folders<select class="field" data-testid="external-folder" disabled={!!busy} bind:value={folder} onchange={clearPreview}><option value="">All folders</option>{#each app.projects as p}<option value={p.path}>{p.name}</option>{/each}<option value="custom">Choose another folder</option></select></label>
+    {#if folder === "custom"}<label class="grow">Working directory<input class="field" required disabled={!!busy} bind:value={cwd} oninput={clearPreview} placeholder="/absolute/path/to/project" /></label>{/if}
+    <button class="btn primary" data-testid="external-find" disabled={!!busy || loading || !available.length || (folder === "custom" && !cwd.trim())}>Find sessions</button>
+    {#if loaded}<button class="btn" type="button" data-testid="external-refresh" disabled={!!busy || loading} onclick={() => discover(true)}>Refresh lists</button>{/if}
   </div>
 </form>
 <p class="summary">Browse saved conversations across your agents. Preview a conversation before adding its history and workspace folders.</p>

@@ -5,7 +5,9 @@ export type Readiness = { tone: "ok" | "warn" | "err" | "none"; label: string };
 
 export function readiness(a: AgentStatus): Readiness {
   if (!a.installed) return { tone: "err", label: "not installed" };
-  if (!a.runner_ok) return { tone: "err", label: "npx missing" };
+  // Native agents do not necessarily run through npx (for example, Vibe uses
+  // `vibe-acp`). Use the actual launch program so the recovery action is clear.
+  if (!a.runner_ok) return { tone: "err", label: `${a.launch.split(/\s+/, 1)[0] || "ACP launcher"} missing` };
   if (a.auth === "logged_out") return { tone: "err", label: "signed out" };
   if (a.probe && !a.probe.ok) return { tone: "warn", label: "probe failed" };
   if (a.probe?.ok) return { tone: "ok", label: "ready" };

@@ -155,6 +155,40 @@ test.describe("Open from agent", () => {
     expect(db.sessions()).toHaveLength(1);
   });
 
+  test("keeps the selected agent history stable while an import is saving", async ({ splash }) => {
+    const { app, page, world } = splash;
+    const history = new History(app);
+    await history.open();
+    await history.find({ agent: "claude", folder: world.repo });
+    await history.show("Fix the subtract sign");
+
+    let releaseImport!: () => void;
+    const importHeld = new Promise<void>((resolve) => (releaseImport = resolve));
+    let importStarted = false;
+    await page.route("**/__cmd/import_session", async (route) => {
+      importStarted = true;
+      await importHeld;
+      await route.continue();
+    });
+
+    try {
+      await history.importButton("add").click();
+      await expect.poll(() => importStarted).toBe(true);
+
+      // Filter changes used to clear the busy state, which allowed another
+      // preview while this request could still open the old conversation.
+      await expect(history.agentFilter).toBeDisabled();
+      await expect(history.folderFilter).toBeDisabled();
+      await expect(history.findButton).toBeDisabled();
+      await expect(history.refreshListsButton).toBeDisabled();
+    } finally {
+      releaseImport();
+    }
+
+    await expect(app.title).toHaveText("Fix the subtract sign");
+    await app.expectStatus("exited");
+  });
+
   test("an agent with newer activity updates the local copy and its search index", async ({ splash }) => {
     const { app, page, world, db } = splash;
     const history = new History(app);

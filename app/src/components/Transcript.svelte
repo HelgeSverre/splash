@@ -8,7 +8,7 @@
   import { agentById, app } from "../lib/sessions.svelte";
   import { pendingPermission } from "../lib/transcripts.svelte";
 
-  let { session, entries, loading }: { session: SessionView; entries: Entry[]; loading: boolean } = $props();
+  let { session, entries, loading, active = true }: { session: SessionView; entries: Entry[]; loading: boolean; active?: boolean } = $props();
 
   let scroller: HTMLDivElement | undefined = $state();
   let pinned = true;
@@ -25,7 +25,7 @@
     void entries.length;
     void (last && "text" in last ? last.text.length : 0);
     void (last && last.kind === "tool" ? last.status : "");
-    if (!pinned || app.focusEntry !== null) return;
+    if (!active || !pinned || app.focusEntry !== null) return;
     tick().then(() => scroller && (scroller.scrollTop = scroller.scrollHeight));
   });
 

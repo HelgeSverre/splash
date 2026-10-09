@@ -18,7 +18,8 @@ function cycleSession(step: number) {
   const list = orderedSessions();
   if (!list.length) return false;
   const i = list.findIndex((s) => s.id === currentId());
-  openSession(list[(i + step + list.length) % list.length].id);
+  const next = i < 0 ? (step > 0 ? 0 : list.length - 1) : (i + step + list.length) % list.length;
+  openSession(list[next].id);
 }
 
 // The palette's entries. Not registered with the runtime: it would open them on

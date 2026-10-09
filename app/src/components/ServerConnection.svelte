@@ -5,7 +5,7 @@
 <div class="server-connection" data-testid="server-connection" data-status={connection.status} class:offline={connection.status === 'offline' || connection.status === 'auth'}>
   <div><strong data-testid="server-name">{connection.name || 'Splash server'}</strong><span role="status" data-testid="server-status">{connection.status === 'online' ? 'Connected · files and agents run on this server' : connection.status === 'syncing' ? 'Restoring your workspace…' : connection.status === 'connecting' ? 'Connecting…' : connection.status === 'auth' ? 'Sign in again to reconnect' : 'Connection lost · reconnecting'}</span></div>
   {#if connection.status === 'auth'}<button class="btn sm" data-testid="server-sign-in" onclick={() => location.reload()}>Sign in</button>
-  {:else if connection.status === 'offline'}<button class="btn sm" data-testid="server-retry" onclick={checkConnection}>Retry connection</button>
+  {:else if connection.status === 'offline'}<button class="btn sm" data-testid="server-retry" disabled={connection.checking} onclick={checkConnection}>{connection.checking ? 'Checking…' : 'Retry connection'}</button>
   {:else}<button class="btn sm ghost" data-testid="server-sign-out" onclick={() => signOut().catch(showError)}>Sign out</button>{/if}
   {#if connection.error}<p data-testid="server-error">{connection.error}</p>{/if}
 </div>

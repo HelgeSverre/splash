@@ -145,6 +145,10 @@ export class Settings {
   get refresh() {
     return testId(this.current, "settings-agent-refresh");
   }
+  /** Refresh detection and the free handshake for every installed agent. */
+  get refreshAll() {
+    return testId(this.current, "settings-agents-refresh");
+  }
   /** A link on an agent's page to its skills, commands or MCP servers; `data-count` is how many. */
   link(sub: AgentSubPage) {
     return testId(this.current, "settings-agent-link", { page: sub });

@@ -15,10 +15,12 @@
   import { openSettings } from "../lib/customize.svelte";
   import { showError } from "../lib/system";
   import { api } from "../bindings";
+  import { serverUnavailable } from "../lib/server.svelte";
 
   let showArchived: Record<string, boolean> = $state({});
 
   async function addFolder() {
+    if (serverUnavailable()) return;
     const p = await pickFolder();
     if (p) app.newSession = { projectId: p.id };
   }
@@ -97,7 +99,7 @@
 
   <div class="section t-section">
     <span>Projects</span>
-    <IconButton data-testid="sidebar-add-project" title="Add a project folder" size="sm" icon="plus" onclick={addFolder} />
+    <IconButton data-testid="sidebar-add-project" title="Add a project folder" size="sm" icon="plus" disabled={serverUnavailable()} onclick={addFolder} />
   </div>
 
   <nav>
@@ -155,7 +157,7 @@
         {/if}
       </div>
     {:else}
-      <div class="empty-projects"><AddButton data-testid="sidebar-add-project-empty" label="Add a project folder" onclick={addFolder} /></div>
+      <div class="empty-projects"><AddButton data-testid="sidebar-add-project-empty" label="Add a project folder" disabled={serverUnavailable()} onclick={addFolder} /></div>
     {/each}
   </nav>
 

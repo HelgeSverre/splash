@@ -10,13 +10,18 @@
   import { api, type SessionView } from "../bindings";
   import { openTab } from "../lib/tabs.svelte";
   import { workspace } from "../lib/workspace.svelte";
+  import { rel } from "../lib/paths";
   import { load } from "../lib/load.svelte";
 
   let { session, path }: { session: SessionView; path: string } = $props();
   let mode: "unified" | "split" = $state((localStorage.getItem("splash.diffMode") as "unified" | "split") ?? "unified");
   let full = $state(false);
 
-  const touched = $derived(workspace(session.id).touched[path]);
+  // Tool calls tend to use an absolute path while the watcher reports paths
+  // relative to the session folder. Keep the reload key in the watcher's
+  // namespace so an already-open tool diff stays current.
+  const relPath = $derived(rel(path, session.cwd));
+  const touched = $derived(workspace(session.id).touched[relPath]);
 
   const res = load(() => {
     void touched;
@@ -39,7 +44,7 @@
       <SegmentedControl data-testid="diff-layout" label="Diff layout" value={mode} onchange={setMode}
         options={[{ value: "unified", label: "Unified" }, { value: "split", label: "Split" }]} />
       <Checkbox data-testid="diff-whole-file" bind:checked={full} label="Whole file" />
-      {#if diff?.new !== null}<button class="btn sm ghost" data-testid="diff-open-file" onclick={() => openTab({ kind: "file", path })}>Open file</button>{/if}
+      {#if diff && diff.new !== null}<button class="btn sm ghost" data-testid="diff-open-file" onclick={() => openTab({ kind: "file", path })}>Open file</button>{/if}
     {/snippet}
   </Toolbar>
   <div class="content">

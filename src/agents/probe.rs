@@ -47,18 +47,26 @@ pub async fn probe(spec: &AgentSpec, extra_args: &[String]) -> AgentProbe {
         probed_at: crate::store::now(),
         ..Default::default()
     };
-    let scratch = std::env::temp_dir().join("splash-probe");
-    let _ = std::fs::create_dir_all(&scratch);
+    // Refresh all probes agents concurrently. A distinct cwd keeps adapters
+    // which write project state from seeing another agent's handshake.
+    let scratch = std::env::temp_dir().join(crate::store::new_id("splash-probe"));
+    if let Err(e) = std::fs::create_dir_all(&scratch) {
+        out.error = Some(format!("couldn't create temporary probe folder: {e}"));
+        return out;
+    }
 
-    let (conn, process) = match transport::spawn(spec, &scratch, extra_args, Arc::new(|_, _| {})) {
-        Ok(pair) => pair,
-        Err(e) => {
-            out.error = Some(e.to_string());
-            return out;
-        }
-    };
+    let (conn, mut process) =
+        match transport::spawn(spec, &scratch, extra_args, Arc::new(|_, _| {})) {
+            Ok(pair) => pair,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&scratch);
+                out.error = Some(e.to_string());
+                return out;
+            }
+        };
     let commands: Arc<Mutex<Vec<SlashCommand>>> = Arc::default();
     let result: Arc<Mutex<Option<(Value, Value)>>> = Arc::default();
+    let session_dir = scratch.clone();
 
     let run = agent_client_protocol::Client
         .builder()
@@ -90,7 +98,7 @@ pub async fn probe(spec: &AgentSpec, extra_args: &[String]) -> AgentProbe {
                     .block_task()
                     .await?;
                 let session = cx
-                    .send_request(NewSessionRequest::new(scratch.clone()))
+                    .send_request(NewSessionRequest::new(session_dir))
                     .block_task()
                     .await?;
                 // Commands arrive as a notification shortly after session/new.
@@ -109,8 +117,12 @@ pub async fn probe(spec: &AgentSpec, extra_args: &[String]) -> AgentProbe {
         });
 
     let outcome = tokio::time::timeout(Duration::from_secs(180), run).await;
-    let stderr = process.stderr_tail();
     process.kill();
+    if let Some(child) = process.child.as_mut() {
+        let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
+    }
+    process.drain_stderr().await;
+    let stderr = process.stderr_tail();
     match outcome {
         Err(_) => out.error = Some("timed out after 180s".into()),
         Ok(Err(e)) => {
@@ -156,5 +168,6 @@ pub async fn probe(spec: &AgentSpec, extra_args: &[String]) -> AgentProbe {
         out.commands = commands.lock().clone();
     }
     out.duration_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let _ = std::fs::remove_dir_all(&scratch);
     out
 }

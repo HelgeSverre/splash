@@ -12,6 +12,7 @@
   import { showError } from "../../lib/system";
   import { readiness, transportLabel } from "../../lib/agents";
   import { ago } from "../../lib/format";
+  import { serverUnavailable } from "../../lib/server.svelte";
   import { api } from "../../bindings";
 
   let { id }: { id: string } = $props();
@@ -21,13 +22,14 @@
   let probing = $state(false);
 
   async function probe() {
+    if (serverUnavailable()) return;
     probing = true;
     await api.probe_agent(id).catch(showError);
     probing = false;
   }
 
   async function saveArgs(value: string) {
-    if (!a || value.trim() === a.extra_args) return;
+    if (!a || serverUnavailable() || value.trim() === a.extra_args) return;
     await api.set_agent_args(id, value).catch(showError);
   }
 
@@ -48,7 +50,7 @@
       {/snippet}
       {#snippet actions()}
         <StatusBadge data-testid="settings-agent-status" data-agent={a.id} tone={r.tone} label={r.label} />
-        <IconButton data-testid="settings-agent-refresh" title="Refresh {a.name}" icon="refresh" loading={probing} disabled={!a.installed} onclick={probe} />
+        <IconButton data-testid="settings-agent-refresh" title="Refresh {a.name}" icon="refresh" loading={probing} disabled={!a.installed || serverUnavailable()} onclick={probe} />
       {/snippet}
     </PageHeader>
 
@@ -66,7 +68,7 @@
       <SettingsRow data-testid="settings-row" data-key="login" label="Login" value={login} />
       <SettingsRow data-testid="settings-row" data-key="launch" label="Launch" value={[a.extra_args, a.launch].filter(Boolean).join(" ")} mono />
       <SettingsRow data-testid="settings-row" data-key="extra-args" label="Extra arguments" desc="Placed before the ACP arguments.">
-        <input class="field sm args" data-testid="settings-extra-args" value={a.extra_args} placeholder="e.g. --verbose" aria-label="Extra arguments"
+        <input class="field sm args" data-testid="settings-extra-args" value={a.extra_args} placeholder="e.g. --verbose" aria-label="Extra arguments" disabled={serverUnavailable()}
           onblur={(e) => saveArgs(e.currentTarget.value)} onkeydown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
       </SettingsRow>
     </SettingsGroup>

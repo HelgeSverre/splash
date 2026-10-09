@@ -162,6 +162,20 @@ export class App {
   get dialogFolders() {
     return testId(this.newSessionDialog, "new-session-folders");
   }
+  /** Guidance shown before any project folder has been added. */
+  get dialogProjectEmpty() {
+    return testId(this.newSessionDialog, "new-session-project-empty");
+  }
+  /** Guidance and route to Settings when no detected agent can start. */
+  get dialogAgentEmpty() {
+    return testId(this.newSessionDialog, "new-session-agent-empty");
+  }
+  get dialogConfigureAgents() {
+    return testId(this.newSessionDialog, "new-session-configure-agents");
+  }
+  get dialogAddFolder() {
+    return testId(this.newSessionDialog, "new-session-add-folder");
+  }
   get dialogStart() {
     return testId(this.newSessionDialog, "new-session-start");
   }

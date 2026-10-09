@@ -90,6 +90,34 @@ impl TranscriptSnapshot {
     }
 }
 
+/// Settle a checkpointed entry whose actor no longer exists.
+///
+/// Actor checkpoints can be written between an update and the terminal ACP
+/// message. Once that actor is gone, leaving that transient state in a cold
+/// transcript would show a permanent spinner or unanswered permission.
+/// Returns whether the entry changed so a live [`Transcript`] can persist its
+/// recovery on the next flush.
+pub fn settle_interrupted_entry(entry: &mut Entry) -> bool {
+    match entry {
+        Entry::Agent { streaming, .. } | Entry::Thought { streaming, .. } if *streaming => {
+            *streaming = false;
+            true
+        }
+        Entry::Tool { status, .. } if status == "pending" || status == "in_progress" => {
+            *status = "failed".into();
+            true
+        }
+        Entry::Permission {
+            resolution: resolution @ None,
+            ..
+        } => {
+            *resolution = Some("cancelled".into());
+            true
+        }
+        _ => false,
+    }
+}
+
 /// What an update did besides touching entries.
 #[derive(Debug, Default, PartialEq)]
 pub struct Effects {
@@ -127,6 +155,10 @@ impl Transcript {
     }
 
     /// Rebuild from persisted entries (versions restart at 1).
+    ///
+    /// Entries are checkpointed while a turn is live. If Splash did not get a
+    /// chance to stop the actor cleanly, that checkpoint cannot keep claiming
+    /// the old process is still streaming after a relaunch.
     pub fn restore(entries: Vec<Entry>) -> Self {
         let mut t = Self::new();
         for (i, e) in entries.iter().enumerate() {
@@ -135,8 +167,15 @@ impl Transcript {
             }
         }
         t.versions = vec![1; entries.len()];
-        t.turn_start = entries.len();
         t.entries = entries;
+        for i in 0..t.entries.len() {
+            if settle_interrupted_entry(&mut t.entries[i]) {
+                // Persist the recovered state on the actor's first flush so a
+                // later retry does not recover the same stale checkpoint.
+                t.touch(i);
+            }
+        }
+        t.turn_start = t.entries.len();
         t
     }
 
@@ -190,10 +229,14 @@ impl Transcript {
             }
         }
         // Tools the agent never finished (cancel, crash) shouldn't spin forever.
-        let stop_status = if stop_reason == "cancelled" {
-            "failed"
-        } else {
+        // Only the normal completion signal proves a pending tool completed.
+        // Cancellation, a disconnected agent, refusal, or any future terminal
+        // reason leave the tool outcome unknown, which the UI represents as
+        // failed instead of a misleading green check.
+        let stop_status = if stop_reason == "end_turn" {
             "completed"
+        } else {
+            "failed"
         };
         for i in self.turn_start..self.entries.len() {
             if let Entry::Tool { status, .. } = &mut self.entries[i] {
@@ -818,6 +861,68 @@ mod tests {
         assert!(m.apply(&append(0, 3, "c")));
         assert_eq!(m.entries[0], agent("abc"));
         assert_eq!(m.versions, vec![3, 1]);
+    }
+
+    #[test]
+    fn an_interrupted_turn_marks_unfinished_tools_as_failed() {
+        let mut transcript = Transcript::new();
+        transcript.begin_turn("check the app");
+        transcript.apply(&serde_json::json!({
+            "sessionUpdate": "tool_call",
+            "toolCallId": "running-command",
+            "status": "in_progress",
+        }));
+
+        transcript.end_turn("error", 42.0);
+
+        assert!(matches!(
+            &transcript.entries()[1],
+            Entry::Tool { status, .. } if status == "failed"
+        ));
+    }
+
+    #[test]
+    fn restoring_an_interrupted_checkpoint_settles_live_entries() {
+        let mut transcript = Transcript::restore(vec![
+            Entry::Agent {
+                text: "partial".into(),
+                streaming: true,
+            },
+            Entry::Tool {
+                id: "running-command".into(),
+                title: "Run tests".into(),
+                tool_kind: "execute".into(),
+                status: "in_progress".into(),
+                locations: vec![],
+                content: vec![],
+                input: None,
+                output: None,
+            },
+            Entry::Permission {
+                request_id: "permission-1".into(),
+                title: "Allow command".into(),
+                tool_id: None,
+                options: vec![],
+                resolution: None,
+            },
+        ]);
+
+        assert!(matches!(
+            &transcript.entries()[0],
+            Entry::Agent {
+                streaming: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            &transcript.entries()[1],
+            Entry::Tool { status, .. } if status == "failed"
+        ));
+        assert!(matches!(
+            &transcript.entries()[2],
+            Entry::Permission { resolution: Some(resolution), .. } if resolution == "cancelled"
+        ));
+        assert_eq!(transcript.take_unsaved(false).len(), 3);
     }
 }
 

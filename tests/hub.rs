@@ -12,7 +12,7 @@ use splash::acp::actor::{Sink, Status};
 use splash::acp::model::{Entry, SessionMeta, Usage};
 use splash::agents::registry::{AgentSpec, AuthCheck, Transport};
 use splash::hub::Hub;
-use splash::store::{new_id, Isolation};
+use splash::store::{new_id, now, Isolation, SessionRecord, Store};
 
 fn temp(prefix: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(new_id(prefix));
@@ -653,6 +653,114 @@ async fn an_agent_that_exits_mid_turn_needs_recovery_with_its_exit_and_stderr() 
     hub.sessions.delete(id, false).await.unwrap();
     let _ = std::fs::remove_dir_all(data);
     let _ = std::fs::remove_dir_all(repo);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cold_hub_renders_interrupted_checkpoints_as_settled() {
+    let data = temp("cold-checkpoint");
+    let store = Store::open(&data.join("splash.db")).await.unwrap();
+    let project = store
+        .add_project("/tmp/cold-checkpoint", "cold-checkpoint", false)
+        .await
+        .unwrap();
+    let record = SessionRecord {
+        id: new_id("s"),
+        project_id: project.id,
+        agent_id: "fake".into(),
+        title: "Interrupted session".into(),
+        cwd: "/tmp/cold-checkpoint".into(),
+        isolation: Isolation::InPlace,
+        branch: None,
+        base_sha: None,
+        agent_session_id: None,
+        archived: false,
+        created_at: now(),
+        updated_at: now(),
+        usage: None,
+        external: false,
+        launch_args: None,
+        attention: None,
+        source: Default::default(),
+        additional_directories: vec![],
+        parent_id: None,
+        title_override: false,
+    };
+    store.insert_session(&record).await.unwrap();
+    store.queue_entries(
+        &record.id,
+        vec![
+            (
+                0,
+                Entry::Agent {
+                    text: "partial response".into(),
+                    streaming: true,
+                },
+            ),
+            (
+                1,
+                Entry::Tool {
+                    id: "running-command".into(),
+                    title: "Run tests".into(),
+                    tool_kind: "execute".into(),
+                    status: "in_progress".into(),
+                    locations: vec![],
+                    content: vec![],
+                    input: None,
+                    output: None,
+                },
+            ),
+            (
+                2,
+                Entry::Permission {
+                    request_id: "permission-1".into(),
+                    title: "Allow command".into(),
+                    tool_id: None,
+                    options: vec![],
+                    resolution: None,
+                },
+            ),
+        ],
+    );
+    store.settle().await;
+    drop(store);
+
+    // This fresh hub has not started an actor. Opening the transcript must not
+    // make a stale checkpoint appear live while it waits to be reconnected.
+    let (hub, lookups) = hub(&data, "claude/read");
+    let snapshot = hub.sessions.transcript(&record.id).await.unwrap();
+    assert!(matches!(
+        &snapshot.entries[0],
+        Entry::Agent {
+            streaming: false,
+            ..
+        }
+    ));
+    assert!(matches!(
+        &snapshot.entries[1],
+        Entry::Tool { status, .. } if status == "failed"
+    ));
+    assert!(matches!(
+        &snapshot.entries[2],
+        Entry::Permission { resolution: Some(resolution), .. } if resolution == "cancelled"
+    ));
+    assert_eq!(lookups.load(Ordering::SeqCst), 0, "reading stays cold");
+    let stored = hub
+        .core
+        .store()
+        .await
+        .unwrap()
+        .entries(&record.id)
+        .await
+        .unwrap();
+    assert!(matches!(
+        &stored[0],
+        Entry::Agent {
+            streaming: true,
+            ..
+        }
+    ));
+
+    let _ = std::fs::remove_dir_all(data);
 }
 
 #[tokio::test(flavor = "multi_thread")]

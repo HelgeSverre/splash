@@ -12,7 +12,35 @@ use std::{
 pub mod folders;
 
 const MAX_BODY: u64 = 2 * 1024 * 1024;
+const MAX_COMMAND_REQUESTS: usize = 32;
+// Event requests are deliberately long-lived. Keep their finite pool separate
+// so a set of open browser tabs never prevents a command from reaching Splash.
+const MAX_EVENT_REQUESTS: usize = 16;
 const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+
+struct RequestPermits {
+    commands: Arc<tokio::sync::Semaphore>,
+    events: Arc<tokio::sync::Semaphore>,
+}
+
+impl RequestPermits {
+    fn new() -> Self {
+        Self {
+            commands: Arc::new(tokio::sync::Semaphore::new(MAX_COMMAND_REQUESTS)),
+            events: Arc::new(tokio::sync::Semaphore::new(MAX_EVENT_REQUESTS)),
+        }
+    }
+
+    fn try_acquire(&self, url: &str) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        let path = url.split_once('?').map_or(url, |(path, _)| path);
+        let permits = if path == "/__events" {
+            &self.events
+        } else {
+            &self.commands
+        };
+        permits.clone().try_acquire_owned().ok()
+    }
+}
 
 #[derive(Debug)]
 pub struct Options {
@@ -381,9 +409,9 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error + Send + Sy
         options.port,
         options.data_dir.join("server.token").display()
     );
-    let permits = Arc::new(tokio::sync::Semaphore::new(32));
+    let permits = RequestPermits::new();
     for mut req in server.incoming_requests() {
-        let Ok(permit) = permits.clone().try_acquire_owned() else {
+        let Some(permit) = permits.try_acquire(req.url()) else {
             let _ = req.respond(
                 tiny_http::Response::from_string("Too many concurrent requests")
                     .with_status_code(503),
@@ -426,4 +454,25 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error + Send + Sy
         });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_polls_cannot_exhaust_command_capacity() {
+        let permits = RequestPermits::new();
+        let polls: Vec<_> = (0..MAX_EVENT_REQUESTS)
+            .map(|_| {
+                permits
+                    .try_acquire("/__events?wait=1")
+                    .expect("event capacity")
+            })
+            .collect();
+
+        assert!(permits.try_acquire("/__events").is_none());
+        assert!(permits.try_acquire("/__cmd/list_sessions").is_some());
+        drop(polls);
+    }
 }

@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, OnceCell};
 
 use super::{blocking, split_args, warm_env, workspace, Core, Error, Result};
 use crate::acp::actor::{self, SessionCmd, SessionSpec, Sink, Status};
-use crate::acp::map::{Change, TranscriptSnapshot};
+use crate::acp::map::{settle_interrupted_entry, Change, TranscriptSnapshot};
 use crate::acp::model::{Entry, SessionMeta};
 use crate::acp::transport::Dir;
 use crate::git;
@@ -398,10 +398,9 @@ impl Sessions {
             Some(args) => args.clone(),
             None => store.extra_args(agent.id).await?,
         });
-        self.mirrors.lock().insert(
-            id.to_string(),
-            TranscriptSnapshot::from_history(history.clone()),
-        );
+        self.mirrors
+            .lock()
+            .insert(id.to_string(), settled_snapshot(history.clone()));
         Ok(SessionSpec {
             key: id.to_string(),
             agent,
@@ -423,9 +422,14 @@ impl Sessions {
         let store = self.store().await?;
         if !self.mirrors.lock().contains_key(id) {
             let entries = store.entries(id).await?;
+            // Do not write recovery here: a concurrent ensure_live may have
+            // just claimed the actor, whose Transcript::restore owns a safe
+            // persisted recovery. A cold reader only needs honest display
+            // state, and can safely settle its private mirror.
             self.mirrors
                 .lock()
-                .insert(id.to_string(), TranscriptSnapshot::from_history(entries));
+                .entry(id.to_string())
+                .or_insert_with(|| settled_snapshot(entries));
         }
         Ok(self.mirrors.lock().get(id).cloned().unwrap_or_default())
     }
@@ -696,6 +700,16 @@ impl Sessions {
             w.remove(id);
         }
     }
+}
+
+/// Turn an on-disk checkpoint into a truthful display snapshot without
+/// mutating the store. Actor startup performs the durable equivalent through
+/// `Transcript::restore`, after it has claimed the live session.
+fn settled_snapshot(mut entries: Vec<Entry>) -> TranscriptSnapshot {
+    for entry in &mut entries {
+        settle_interrupted_entry(entry);
+    }
+    TranscriptSnapshot::from_history(entries)
 }
 
 impl Sink for Sessions {

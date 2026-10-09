@@ -26,6 +26,7 @@
     walk("");
     return out;
   });
+  const error = $derived(w.treeErrors[""]);
   let lastRow: string | null = $state(null);
   const stop = $derived(lastRow && visible.includes(lastRow) ? lastRow : visible[0]);
 
@@ -46,7 +47,9 @@
   }
 </script>
 
-{#if (w.tree[""] ?? []).length}
+{#if error}
+  <EmptyState data-testid="file-tree-error" icon="alert" title="Couldn't read this folder" detail={error} error />
+{:else if (w.tree[""] ?? []).length}
   <div class="tree" data-testid="file-tree" role="tree" aria-label="Files" tabindex="-1" {onkeydown}>
     {#each w.tree[""] ?? [] as e (e.path)}
       <TreeNode session={session.id} entry={e} depth={0} {changed} {stop} onstop={(path) => (lastRow = path)} />
