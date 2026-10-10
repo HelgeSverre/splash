@@ -2,6 +2,7 @@ pub use self::custom_stream::CustomStream;
 pub use self::equal_reader::EqualReader;
 pub use self::fused_reader::FusedReader;
 pub use self::messages_queue::MessagesQueue;
+pub(crate) use self::refined_tcp_stream::ReadTimeout;
 pub use self::refined_tcp_stream::RefinedTcpStream;
 pub use self::sequential::{SequentialReader, SequentialReaderBuilder};
 pub use self::sequential::{SequentialWriter, SequentialWriterBuilder};

@@ -8,10 +8,12 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     sync::Arc,
+    time::Duration,
 };
 pub mod folders;
 
 const MAX_BODY: u64 = 2 * 1024 * 1024;
+const BODY_READ_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_COMMAND_REQUESTS: usize = 32;
 // Event requests are deliberately long-lived. Keep their finite pool separate
 // so a set of open browser tabs never prevents a command from reaching Splash.
@@ -411,7 +413,22 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error + Send + Sy
     );
     let permits = RequestPermits::new();
     for mut req in server.incoming_requests() {
+        let body_can_block = req.body_can_block();
+        if body_can_block
+            && req
+                .set_body_read_timeout(Some(BODY_READ_INACTIVITY_TIMEOUT))
+                .is_err()
+        {
+            req.abort_body();
+            continue;
+        }
         let Some(permit) = permits.try_acquire(req.url()) else {
+            if body_can_block {
+                // Drop does drain incomplete EqualReaders for HTTP keep-alive.
+                // Close the read side first so that cleanup cannot stall this
+                // accept loop behind a rejected partial body.
+                req.abort_body();
+            }
             let _ = req.respond(
                 tiny_http::Response::from_string("Too many concurrent requests")
                     .with_status_code(503),
@@ -429,7 +446,19 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error + Send + Sy
                 .read_to_end(&mut body)
                 .is_err()
             {
+                if body_can_block {
+                    req.abort_body();
+                    let _ = req.respond(tiny_http::Response::empty(408));
+                }
                 return;
+            }
+            // Take returns Ok after reaching its limit even when EqualReader
+            // still has declared bytes. Keep the timeout active and close the
+            // read side so its keep-alive drain cannot block on that remainder.
+            if body.len() as u64 > MAX_BODY && body_can_block {
+                req.abort_body();
+            } else if body_can_block {
+                let _ = req.set_body_read_timeout(None);
             }
             let mut builder = Request::builder()
                 .method(req.method().as_str())

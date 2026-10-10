@@ -1,6 +1,7 @@
 use std::io::Result as IoResult;
 use std::io::{Read, Write};
 use std::net::{Shutdown, SocketAddr};
+use std::time::Duration;
 
 use crate::connection::Connection;
 #[cfg(any(feature = "ssl-openssl", feature = "ssl-rustls"))]
@@ -52,6 +53,17 @@ impl Stream {
             Stream::Https(ssl_stream) => ssl_stream.shutdown(how),
         }
     }
+
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> IoResult<()> {
+        match self {
+            Stream::Http(connection) => connection.set_read_timeout(timeout),
+            #[cfg(any(feature = "ssl-openssl", feature = "ssl-rustls"))]
+            Stream::Https(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "read timeouts are unavailable for TLS streams",
+            )),
+        }
+    }
 }
 
 impl Read for Stream {
@@ -88,6 +100,21 @@ pub struct RefinedTcpStream {
     close_write: bool,
 }
 
+#[derive(Clone)]
+pub(crate) struct ReadTimeout {
+    stream: Stream,
+}
+
+impl ReadTimeout {
+    pub(crate) fn set(&self, timeout: Option<Duration>) -> IoResult<()> {
+        self.stream.set_read_timeout(timeout)
+    }
+
+    pub(crate) fn abort(&mut self) -> IoResult<()> {
+        self.stream.shutdown(Shutdown::Read)
+    }
+}
+
 impl RefinedTcpStream {
     pub(crate) fn new<S>(stream: S) -> (RefinedTcpStream, RefinedTcpStream)
     where
@@ -120,6 +147,12 @@ impl RefinedTcpStream {
 
     pub(crate) fn peer_addr(&mut self) -> IoResult<Option<SocketAddr>> {
         self.stream.peer_addr()
+    }
+
+    pub(crate) fn read_timeout(&self) -> ReadTimeout {
+        ReadTimeout {
+            stream: self.stream.clone(),
+        }
     }
 }
 

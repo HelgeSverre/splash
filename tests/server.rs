@@ -187,13 +187,25 @@ fn header(response: &[u8], name: &str) -> String {
         .unwrap()
 }
 
-fn list_sessions_request(port: u16, cookie: &str, ipc: &str, client: &str) -> Vec<u8> {
+fn command_request(
+    port: u16,
+    cookie: &str,
+    ipc: &str,
+    client: &str,
+    command: &str,
+    body: &[u8],
+) -> Vec<u8> {
     let mut request = format!(
-        "POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: {client}\r\nContent-Type: application/msgpack\r\nContent-Length: 1\r\n\r\n"
+        "POST /__cmd/{command} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: {client}\r\nContent-Type: application/msgpack\r\nContent-Length: {}\r\n\r\n",
+        body.len()
     )
     .into_bytes();
-    request.push(0x90); // MessagePack's empty argument array.
+    request.extend_from_slice(body);
     request
+}
+
+fn list_sessions_request(port: u16, cookie: &str, ipc: &str, client: &str) -> Vec<u8> {
+    command_request(port, cookie, ipc, client, "list_sessions", &[0x90])
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -592,5 +604,272 @@ fn idle_event_polls_leave_capacity_for_commands() {
     for poll in polls {
         poll.join().unwrap();
     }
+    std::fs::remove_dir_all(data).unwrap();
+}
+
+#[test]
+fn incomplete_bodies_expire_without_breaking_a_long_event_connection() {
+    const PARTIAL_BODIES: usize = 32;
+
+    let data = std::env::temp_dir().join(splash::store::new_id("splash-server-body-timeout"));
+    let port = free_port();
+    let mut server = ServerProcess(
+        Command::new(env!("CARGO_BIN_EXE_splash-server"))
+            .args(["--port", &port.to_string(), "--data-dir"])
+            .arg(&data)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "server did not start");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let token = loop {
+        match std::fs::read_to_string(data.join("server.token")) {
+            Ok(token) => break token.trim().to_owned(),
+            Err(_) => std::thread::sleep(Duration::from_millis(10)),
+        }
+    };
+    let login = http(
+        port,
+        format!(
+            "POST /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{token}",
+            token.len()
+        )
+        .as_bytes(),
+        Duration::from_secs(2),
+        "login before body timeout test",
+    );
+    let cookie = header(&login, "set-cookie")
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+    let state = http(
+        port,
+        format!(
+            "GET /__server/state HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nCookie: {cookie}\r\n\r\n"
+        )
+        .as_bytes(),
+        Duration::from_secs(2),
+        "read server state before body timeout test",
+    );
+    let ipc = serde_json::from_slice::<serde_json::Value>(body(&state)).unwrap()["token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let warm = http(
+        port,
+        &list_sessions_request(port, &cookie, &ipc, "body-timeout-warmup"),
+        Duration::from_secs(8),
+        "warm list_sessions before incomplete bodies",
+    );
+    assert_eq!(status(&warm), 200);
+
+    // Fully read a streaming body on this connection first. The event poll
+    // below proves that the body timeout is cleared before tiny_http waits for
+    // the next keep-alive request header.
+    let mut event = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    event
+        .write_all(
+            format!(
+                "POST /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: keep-alive\r\nContent-Length: 1025\r\n\r\n{}",
+                "x".repeat(1025)
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let completed_body = read_response(&mut event, Duration::from_secs(2))
+        .expect("response after complete streaming body");
+    assert_eq!(status(&completed_body), 401);
+    event
+        .write_all(
+            format!(
+                "GET /__events HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: body-timeout-event\r\nContent-Length: 0\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    let mut partials = Vec::new();
+    for client in 0..PARTIAL_BODIES {
+        let mut partial = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let framing = if client + 1 == PARTIAL_BODIES {
+            "Transfer-Encoding: chunked\r\n"
+        } else if client + 2 == PARTIAL_BODIES {
+            "Expect: 100-continue\r\nContent-Length: 1\r\n"
+        } else {
+            "Content-Length: 1025\r\n"
+        };
+        partial
+            .write_all(
+                format!(
+                    "POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: body-timeout-{client}\r\nContent-Type: application/msgpack\r\n{framing}\r\n"
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        partials.push(partial);
+    }
+
+    let saturation_deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        let command = http(
+            port,
+            &list_sessions_request(port, &cookie, &ipc, "body-timeout-saturated"),
+            Duration::from_secs(1),
+            "list_sessions while incomplete bodies occupy command capacity",
+        );
+        if status(&command) == 503 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < saturation_deadline,
+            "incomplete bodies did not occupy command capacity"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    // The server's ten-second body inactivity timeout must release permits even
+    // when the clients keep their connections open.
+    std::thread::sleep(Duration::from_secs(11));
+    let expired =
+        read_response(&mut partials[0], Duration::from_secs(2)).expect("timed-out upload response");
+    assert_eq!(status(&expired), 408);
+    let recovered = http(
+        port,
+        &list_sessions_request(port, &cookie, &ipc, "body-timeout-recovered"),
+        Duration::from_secs(2),
+        "list_sessions after incomplete bodies expired",
+    );
+    assert_eq!(status(&recovered), 200);
+    drop(partials);
+
+    // Reaching Take's body-size cap is still a partial EqualReader body. The
+    // declared length is intentionally absurd: after aborting the read side,
+    // tiny_http cleanup must use a bounded buffer instead of allocating the
+    // remaining declared size or waiting for one more byte.
+    let mut oversized = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let oversized_body = vec![0; 2 * 1024 * 1024 + 1];
+    oversized
+        .write_all(
+            format!(
+                "POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: body-timeout-oversized\r\nContent-Type: application/msgpack\r\nContent-Length: {}\r\n\r\n",
+                usize::MAX
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    oversized.write_all(&oversized_body).unwrap();
+    let oversized_response = read_response(&mut oversized, Duration::from_secs(2))
+        .expect("response after over-limit partial body");
+    assert_eq!(status(&oversized_response), 413);
+    let recovered_after_oversize = http(
+        port,
+        &list_sessions_request(port, &cookie, &ipc, "body-timeout-after-oversize"),
+        Duration::from_secs(2),
+        "list_sessions after over-limit partial body",
+    );
+    assert_eq!(status(&recovered_after_oversize), 200);
+
+    // One command must be rejected when 33 incomplete streaming bodies race
+    // for the 32 command slots. If the prior over-limit request leaked a
+    // permit during EqualReader cleanup, two requests are rejected here.
+    let mut admission_checks = Vec::new();
+    for client in 0..33 {
+        let mut partial = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        partial
+            .write_all(
+                format!(
+                    "POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: body-timeout-admission-{client}\r\nContent-Type: application/msgpack\r\nContent-Length: 1025\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        admission_checks.push(std::thread::spawn(move || {
+            read_response(&mut partial, Duration::from_secs(2))
+                .ok()
+                .map(|response| status(&response))
+        }));
+    }
+    let admission_statuses = admission_checks
+        .into_iter()
+        .map(|check| check.join().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        admission_statuses
+            .iter()
+            .filter(|status| status.is_some())
+            .count(),
+        1,
+        "only the 33rd incomplete body should be rejected immediately: {admission_statuses:?}"
+    );
+    assert_eq!(
+        admission_statuses.into_iter().flatten().collect::<Vec<_>>(),
+        [503]
+    );
+    let recovery_deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        let command = http(
+            port,
+            &list_sessions_request(port, &cookie, &ipc, "body-timeout-final-recovery"),
+            Duration::from_secs(1),
+            "list_sessions after admission-check clients disconnected",
+        );
+        if status(&command) == 200 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < recovery_deadline,
+            "command capacity did not recover after admission-check clients disconnected"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    // The event request has been open longer than the body timeout. A project
+    // event must still arrive, and its keep-alive connection must accept a
+    // subsequent state request.
+    let project = data.join("event-project");
+    std::fs::create_dir_all(&project).unwrap();
+    let add_project = rmp_serde::to_vec(&(project.to_string_lossy(),)).unwrap();
+    let added = http(
+        port,
+        &command_request(
+            port,
+            &cookie,
+            &ipc,
+            "body-timeout-add-project",
+            "add_project",
+            &add_project,
+        ),
+        Duration::from_secs(2),
+        "add project after body timeout",
+    );
+    assert_eq!(status(&added), 200);
+    let events = read_response(&mut event, Duration::from_secs(2)).expect("long event response");
+    assert_eq!(status(&events), 200);
+    event
+        .write_all(
+            format!(
+                "GET /__server/state HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nCookie: {cookie}\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    event.shutdown(std::net::Shutdown::Write).unwrap();
+    let state_after_event = read_response(&mut event, Duration::from_secs(2))
+        .expect("state request after long event response");
+    assert_eq!(status(&state_after_event), 200);
+
+    server.0.kill().unwrap();
+    server.0.wait().unwrap();
     std::fs::remove_dir_all(data).unwrap();
 }
