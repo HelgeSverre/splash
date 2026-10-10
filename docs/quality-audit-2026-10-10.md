@@ -66,7 +66,7 @@ test installation on a machine without that runtime.
 | Frontend and server client | `just frontend` passed; all 15 `app/tests/*.test.ts` tests passed; the freshly built headless server passed `scripts/test-server-http.py`. |
 | macOS server archive | The macOS arm64 server archive from application snapshot `a18f842` passed checksum verification and the HTTP smoke with a fresh HOME/data directory and `/usr/bin:/bin` PATH. |
 | Browser workflows | The final local suite passed 267 tests with nine intentional skips. All 30 project tests also passed separately, including moved-folder recovery in both harnesses. |
-| Native matrix | [CI run 38006450744](https://github.com/HelgeSverre/splash/actions/runs/38006450744), at application snapshot `a18f842`, passed all ten jobs: macOS arm64/x64, Windows MSVC, Ubuntu x64, desktop and headless builds, native renderer readiness, browser flows and package smoke. Each cumulative [stacked PR](https://github.com/HelgeSverre/splash/pull/6) repeats this matrix. |
+| Native matrix | [CI run 38006450744](https://github.com/HelgeSverre/splash/actions/runs/38006450744), at application snapshot `a18f842`, passed all ten jobs: macOS arm64/x64, Windows MSVC, Ubuntu x64, desktop and headless builds, native renderer readiness, browser flows and package smoke. Each cumulative stacked PR repeats this matrix; [the final timeout PR checks](https://github.com/HelgeSverre/splash/pull/7/checks) cover the completed stack. |
 | Clean native x64 Docker | Rust terminal tests, default/headless checks, 18 terminal/workbench browser flows and native renderer/IPC readiness passed. A separate full run passed 263 browser tests with nine skips. |
 | Linux packages | CI packages from application snapshot `a18f842` passed checksum verification, fresh apt dependency installation, extracted-AppImage/raw-DEB/installed-DEB native renderer readiness and isolated server HTTP checks. AppImage internal executable modes were checked before ordinary-user execution. |
 | Normal AppImage launch | The CI AppImage from application snapshot `a18f842` also passed direct FUSE-mounted launch in a fresh Ubuntu 24.04 container, with `libfuse2t64`, `fuse3`, `/dev/fuse`, UID 1001 and a fresh TMPDIR. No extraction flag/environment override or WebKit sandbox override was used. |
@@ -126,7 +126,8 @@ managed worktree. Review is split into six draft stacked PRs, in this review and
 [terminal and layout #3](https://github.com/HelgeSverre/splash/pull/3),
 [client recovery #4](https://github.com/HelgeSverre/splash/pull/4),
 [history and workbench #5](https://github.com/HelgeSverre/splash/pull/5), and
-[validation and evidence #6](https://github.com/HelgeSverre/splash/pull/6), followed by the focused HTTP timeout fix on `feature/quality-6-request-timeouts`.
+[validation and evidence #6](https://github.com/HelgeSverre/splash/pull/6), and
+[HTTP request timeouts #7](https://github.com/HelgeSverre/splash/pull/7).
 Merge commits preserve stack ancestry; retarget the next PR to `main` after
 its predecessor merges. Squash or rebase merges require restacking descendants.
 Nothing has been merged as part of the audit. The original checkout and its existing edits were left alone.
