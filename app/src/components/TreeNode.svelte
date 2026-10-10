@@ -25,6 +25,7 @@
   const w = $derived(workspace(session));
   const open = $derived(!!w.expanded[entry.path]);
   const children = $derived(w.tree[entry.path]);
+  const error = $derived(w.treeErrors[entry.path]);
   const mark = $derived(changed[entry.path]);
   const dirty = $derived(entry.is_dir && Object.keys(changed).some((p) => p.startsWith(entry.path + "/")));
 
@@ -69,7 +70,9 @@
   <span class="name" class:dir={entry.is_dir} class:dirty class:d={mark === "D"}>{entry.name}</span>
   {#if mark}<ChangeMark status={mark} />{/if}
 </button>
-{#if open && children}
+{#if open && error}
+  <p class="load-error" role="status" style:padding-left="calc(var(--gutter-side) + {(depth + 1) * 12}px)">Couldn't read folder: {error}</p>
+{:else if open && children}
   {#each children as child (child.path)}
     <Self {session} entry={child} depth={depth + 1} {changed} {stop} {onstop} />
   {/each}
@@ -84,4 +87,5 @@
   /* A file's change shows in its mark; a folder has none, so its name carries it. */
   .name.dirty { color: var(--modified-fg); }
   .name.d { color: var(--muted); text-decoration: line-through; }
+  .load-error { margin: 2px var(--gutter-side) 4px; color: var(--del-fg); font-size: var(--fs-xs); overflow-wrap: anywhere; }
 </style>

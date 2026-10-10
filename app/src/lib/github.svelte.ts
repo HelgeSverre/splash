@@ -23,6 +23,9 @@ let catalogRequest: Promise<void> | null = null;
 export const sourceKey = (source: Source) => `${source.repository}:${source.kind}`;
 export const itemKey = (item: GithubItem) => `${item.repository}:${item.id}`;
 export const kindsFor = (feed: Feed): GithubKind[] => feed === "all" ? ["issue", "pull_request", "branch", "activity"] : feed === "needs_me" ? ["issue", "pull_request"] : [feed];
+/** Stop the current batch when GitHub rejects requests globally. */
+export const isGithubAccessFailure = (error: string) => /rate limit|abuse|authenticate|authentication|gh auth login|bad credentials|http 401/i.test(error);
+export const canCreateIssue = () => !!github.catalog?.repositories.some(repository => repository.has_issues && !repository.archived);
 
 export async function loadCatalog(refresh = false) {
   if (catalogRequest) return catalogRequest;
@@ -72,7 +75,7 @@ export async function loadSources(sources: Source[], mode: "initial" | "refresh"
         const error = errorMessage(e);
         github.pages[key] = { items: previous?.items ?? [], next_cursor: previous?.next_cursor ?? null, loaded: previous?.loaded ?? false, syncedAt: previous?.syncedAt ?? 0, error };
         // Don't hammer the remaining repositories after GitHub asks us to stop.
-        if (/rate limit|abuse|authenticate|authentication|gh auth login/i.test(error)) { github.paused = true; index = queue.length; }
+        if (isGithubAccessFailure(error)) { github.paused = true; index = queue.length; }
       } finally { if (run === generation) github.completed++; }
     }
   }));
@@ -81,6 +84,7 @@ export async function loadSources(sources: Source[], mode: "initial" | "refresh"
 
 export function stopLoading() { generation++; github.loading = false; github.paused = true; }
 export function newIssue(repository = "") {
+  if (!canCreateIssue()) return;
   if (!github.draft.title && !github.draft.body) github.draft.repository = repository;
   github.issueOpen = true;
 }

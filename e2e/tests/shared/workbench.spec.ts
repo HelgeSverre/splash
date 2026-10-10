@@ -1,6 +1,6 @@
 // The workbench around a session: edits and plans in the transcript, the
 // Changes and Files tabs, diff and file tabs, the RPC log, the terminal.
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "../../fixtures.ts";
 import { Review, Workbench } from "../../support/views.ts";
@@ -72,6 +72,20 @@ test.describe("an agent that plans and edits", () => {
     await new Review(page).reviewAllChanges.click();
     await expect(app.sessionTab("diff")).toHaveCount(2);
   });
+
+  test("a diff opened from an agent's absolute path follows later edits", async ({ splash }) => {
+    const { app, page, db } = splash;
+    const id = await app.newSession({ where: "worktree" });
+    await app.prompt("Add a multiply function with a test");
+    const { cwd } = db.session(id)!;
+
+    const edit = app.tools("edit").first();
+    await app.toolDiffPath(app.toolDiffs(edit)).click();
+    await expect(app.sessionTab("diff", join(cwd, "calc.py"))).toHaveAttribute("aria-selected", "true");
+
+    writeFileSync(join(cwd, "calc.py"), readFileSync(join(cwd, "calc.py"), "utf8").replace("return a * b", "return a * 99"));
+    await expect(new Workbench(page).pane).toContainText("return a * 99", { timeout: 15_000 });
+  });
 });
 
 test("the Changes tab follows the files without a refresh", async ({ splash }) => {
@@ -91,6 +105,20 @@ test("the Changes tab follows the files without a refresh", async ({ splash }) =
   await bench.changes("README.md").click();
   await expect(bench.diffDeleted).toBeVisible();
   await expect(bench.openFile).toHaveCount(0);
+});
+
+test("the Files tab reports a workspace folder that disappears", async ({ splash }) => {
+  const { app, page, db } = splash;
+  const id = await app.newSession({ where: "in_place" });
+  const { cwd } = db.session(id)!;
+  const bench = new Workbench(page);
+  await app.sideTab("files").click();
+  await expect(bench.tree).toBeVisible();
+
+  renameSync(cwd, `${cwd}-gone`);
+  await bench.refreshSidePanel.click();
+  await expect(bench.fileTreeError).toBeVisible();
+  await expect(bench.fileTreeError).toContainText("Couldn't read this folder");
 });
 
 test("the file tree opens files and changed files as diffs", async ({ splash }) => {

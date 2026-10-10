@@ -1,7 +1,7 @@
 import { api, type ActionsFilters, type ActionsRun, type ActionsWorkflow } from "../bindings";
 import { errorMessage } from "./format";
 import { prefs } from "./prefs.svelte";
-import { github } from "./github.svelte";
+import { github, isGithubAccessFailure } from "./github.svelte";
 
 export function repositorySelection(): string[] | null {
   try { const value: unknown = JSON.parse(prefs["github.repositories"] ?? "null"); return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : null; } catch { return null; }
@@ -34,7 +34,7 @@ export async function loadActions(repositories: string[], tab: string, filters: 
         if (run !== generation) return;
         const error = errorMessage(e);
         actions.pages[repository] = { runs:previous?.runs ?? [],workflows:previous?.workflows ?? [],next:previous?.next ?? null,loaded:previous?.loaded ?? false,synced:previous?.synced ?? 0,error };
-        if (/rate limit|abuse|authenticate|authentication|gh auth login/i.test(error)) { actions.paused = true; index = queue.length; }
+        if (isGithubAccessFailure(error)) { actions.paused = true; index = queue.length; }
       } finally { if (run === generation) actions.completed++; }
     }
   }));

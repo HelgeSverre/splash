@@ -124,6 +124,19 @@ test("GitHub opened while Splash is still starting stays open", async ({ splash 
   await view.loaded(15);
 });
 
+test("GitHub does not offer issue creation when the account has no issue-capable repositories", async ({ splash }) => {
+  const { app, page, world } = splash;
+  const gh = new FakeGithub(world);
+  const view = new GithubView(page);
+  gh.update((scenario) => {
+    for (const repository of scenario.repositories) repository.has_issues = false;
+  });
+
+  await app.openNav("github");
+  await expect(view.account).toHaveText("@octocat");
+  await expect(view.newIssue).toBeDisabled();
+});
+
 test("the repository picker narrows the scope, and a saved view brings it back", async ({ splash }) => {
   const { app, page, db } = splash;
   const view = new GithubView(page);
@@ -197,6 +210,30 @@ test("a feed that fails is reported, and retrying it fills the gap", async ({ sp
   await expect(view.failures).toHaveCount(0);
   await expect(view.item("e2e-labs/widgets", 8)).toBeVisible();
   expect(feeds(gh).filter((f) => f === "e2e-labs/widgets pullRequests")).toHaveLength(2);
+});
+
+test("expired GitHub credentials pause the remaining feed requests and can be retried", async ({ splash }) => {
+  const { app, page, world } = splash;
+  const gh = new FakeGithub(world);
+  const view = new GithubView(page);
+  // Four requests begin concurrently. Keep the three non-failing requests in
+  // flight while the first response tells Splash that the saved token expired.
+  gh.fail(/^graphql issues e2e\/demo$/, "gh: HTTP 401: Bad credentials");
+  gh.delay(/^graphql (pullRequests|refs) e2e\/demo$|^repos\/e2e\/demo\/events\?/, 3);
+
+  await app.openNav("github");
+  await expect(view.synced(3, 15)).toBeVisible();
+  await expect(view.failures).toHaveAttribute("data-count", "1");
+  await expect(view.resume).toBeVisible();
+  // Once authentication has failed, no queued repository feeds should run.
+  expect(feeds(gh)).toHaveLength(3);
+  expect(gh.rest(/\/events\?/)).toHaveLength(1);
+
+  gh.heal();
+  gh.update((scenario) => (scenario.delays = []));
+  await view.resume.click();
+  await view.loaded(15);
+  await expect(view.item("e2e/demo", 12)).toBeVisible();
 });
 
 test("items are marked read or unread, and snoozed until tomorrow or new activity", async ({ splash }) => {

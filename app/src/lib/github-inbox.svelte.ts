@@ -1,6 +1,6 @@
 import { api, type GithubItem, type GithubSearch } from "../bindings";
 import { prefs } from "./prefs.svelte";
-import { github, itemKey, sourceKey, type Source, type PageState } from "./github.svelte";
+import { github, isGithubAccessFailure, itemKey, sourceKey, type Source, type PageState } from "./github.svelte";
 import { showError } from "./system";
 import { errorMessage } from "./format";
 
@@ -48,7 +48,7 @@ export async function searchGithub(sources: Source[], filters: GithubSearch, sig
         if (run !== generation) return;
         const error = errorMessage(e);
         search.pages[key] = { items: previous?.items ?? [], next_cursor: previous?.next_cursor ?? null, loaded: previous?.loaded ?? false, error, syncedAt: previous?.syncedAt ?? 0 };
-        if (/rate limit|abuse|authenticate|authentication|gh auth login/i.test(error)) { search.paused = true; index = queue.length; }
+        if (isGithubAccessFailure(error)) { search.paused = true; index = queue.length; }
       } finally { if (run === generation) search.completed++; }
     }
   }));
