@@ -88,7 +88,7 @@
             {#if typeof f.value === "boolean"}
               <div class="v"><Tag tone={f.value ? "ok" : "default"}>{f.value ? "on" : "off"}</Tag></div>
             {:else if list}
-              <div class="v chips">{#each list as item (item)}<Tag data-testid="doc-preview-chip">{item}</Tag>{/each}</div>
+              <div class="v chips">{#each list as item}<Tag data-testid="doc-preview-chip">{item}</Tag>{/each}</div>
             {:else if typeof f.value === "string"}
               <div class="v text">{f.value}</div>
             {:else}

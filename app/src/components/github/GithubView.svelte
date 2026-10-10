@@ -1,7 +1,7 @@
 <script lang="ts">
   import { openActions } from "../../lib/route.svelte";
   import { onMount, untrack, tick } from "svelte";
-  import { github, loadCatalog, loadSources, stopLoading, sourceKey, itemKey, kindsFor, itemIcon, itemStatus, needsMe, ago, newIssue, type Feed } from "../../lib/github.svelte";
+  import { github, canCreateIssue, loadCatalog, loadSources, stopLoading, sourceKey, itemKey, kindsFor, itemIcon, itemStatus, needsMe, ago, newIssue, type Feed } from "../../lib/github.svelte";
   import { selectMatching } from "../../lib/github-model";
   import { accountKey, parse, persist, initializeInbox, unread, snoozed, markRead, search, searchGithub, stopSearch } from "../../lib/github-inbox.svelte";
   import { prefs, setPref } from "../../lib/prefs.svelte";
@@ -107,7 +107,7 @@
 </script>
 
 <div class="github-view" data-testid="github-view">
-  <header><IconButton icon="monitor" title="Toggle sidebar" onclick={toggleLeft} /><Icon name="github" size={16} /><h1 class="t-pane-title">GitHub</h1><span class="spacer"></span><button class="btn ghost sm" onclick={openActions}>Actions</button>{#if github.catalog}<span class="account t-meta" data-testid="github-account">@{github.catalog.login}</span>{/if}<IconButton data-testid="github-refresh" icon="refresh" title="Refresh GitHub" onclick={refresh} disabled={github.catalogLoading || busy} /><button class="btn primary sm" data-testid="github-new-issue" onclick={() => newIssue(selected?.repository ?? (scoped.length === 1 ? scoped[0].full_name : ""))} disabled={!github.catalog}><Icon name="plus" size={12} />New issue</button></header>
+  <header><IconButton icon="monitor" title="Toggle sidebar" onclick={toggleLeft} /><Icon name="github" size={16} /><h1 class="t-pane-title">GitHub</h1><span class="spacer"></span><button class="btn ghost sm" onclick={openActions}>Actions</button>{#if github.catalog}<span class="account t-meta" data-testid="github-account">@{github.catalog.login}</span>{/if}<IconButton data-testid="github-refresh" icon="refresh" title="Refresh GitHub" onclick={refresh} disabled={github.catalogLoading || busy} /><button class="btn primary sm" data-testid="github-new-issue" onclick={() => newIssue(selected?.repository ?? (scoped.length === 1 ? scoped[0].full_name : ""))} disabled={!canCreateIssue()}><Icon name="plus" size={12} />New issue</button></header>
   {#if !github.catalog}
     <EmptyState icon="github" loading={github.catalogLoading} title={github.catalogLoading ? "Loading your GitHub repositories…" : "Connect your GitHub account"} detail="Splash uses GitHub CLI. Run gh auth login --hostname github.com, then retry. Private and organization repositories require access through that login.">
       {#if github.catalogError}<p class="error" role="alert">{github.catalogError}</p>{/if}<button class="btn" onclick={() => loadCatalog(true)} disabled={github.catalogLoading}>Retry</button>

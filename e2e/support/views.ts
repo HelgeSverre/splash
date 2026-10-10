@@ -181,6 +181,10 @@ export class Workbench {
   get tree() {
     return testId(this.page, "file-tree");
   }
+  /** A folder listing that failed, rather than a real empty folder. */
+  get fileTreeError() {
+    return testId(this.page, "file-tree-error");
+  }
   get refreshSidePanel() {
     return testId(this.page, "side-panel-refresh");
   }

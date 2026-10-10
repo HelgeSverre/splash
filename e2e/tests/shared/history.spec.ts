@@ -155,6 +155,40 @@ test.describe("Open from agent", () => {
     expect(db.sessions()).toHaveLength(1);
   });
 
+  test("keeps the selected agent history stable while an import is saving", async ({ splash }) => {
+    const { app, page, world } = splash;
+    const history = new History(app);
+    await history.open();
+    await history.find({ agent: "claude", folder: world.repo });
+    await history.show("Fix the subtract sign");
+
+    let releaseImport!: () => void;
+    const importHeld = new Promise<void>((resolve) => (releaseImport = resolve));
+    let importStarted = false;
+    await page.route("**/__cmd/import_session", async (route) => {
+      importStarted = true;
+      await importHeld;
+      await route.continue();
+    });
+
+    try {
+      await history.importButton("add").click();
+      await expect.poll(() => importStarted).toBe(true);
+
+      // Filter changes used to clear the busy state, which allowed another
+      // preview while this request could still open the old conversation.
+      await expect(history.agentFilter).toBeDisabled();
+      await expect(history.folderFilter).toBeDisabled();
+      await expect(history.findButton).toBeDisabled();
+      await expect(history.refreshListsButton).toBeDisabled();
+    } finally {
+      releaseImport();
+    }
+
+    await expect(app.title).toHaveText("Fix the subtract sign");
+    await app.expectStatus("exited");
+  });
+
   test("an agent with newer activity updates the local copy and its search index", async ({ splash }) => {
     const { app, page, world, db } = splash;
     const history = new History(app);
@@ -260,11 +294,48 @@ test.describe("Open from agent", () => {
 });
 
 test.describe("a saved conversation", () => {
+  test("history actions use an accessible overflow menu", async ({ splash }) => {
+    const { app, world, page } = splash;
+    const history = new History(app);
+    await history.importSession("Fix the subtract sign", world.repo);
+
+    await history.menuTrigger.press("ArrowDown");
+    await expect(history.menu).toHaveAttribute("role", "menu");
+    await expect(history.refreshButton).toBeFocused();
+    await history.menu.press("End");
+    await expect(history.manageButton).toBeFocused();
+    await history.menu.press("Home");
+    await expect(history.refreshButton).toBeFocused();
+    await history.menu.press("Escape");
+    await expect(history.menu).toBeHidden();
+    await expect(history.menuTrigger).toBeFocused();
+
+    await history.openMenu();
+    await history.manageButton.click();
+    await expect(history.dialog("manage")).toBeVisible();
+    await history.closeDialog.click();
+    await expect(history.menuTrigger).toBeFocused();
+
+    await history.openMenu();
+    await history.forkButton.click();
+    await expect(history.dialog("fork")).toBeVisible();
+    await history.closeDialog.click();
+    await expect(history.menuTrigger).toBeFocused();
+
+    await page.setViewportSize({ width: 900, height: 560 });
+    await history.openMenu();
+    const box = await history.menu.boundingBox();
+    expect(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 900 && box.y + box.height <= 560).toBe(true);
+    await app.transcript.click({ position: { x: 4, y: 4 } });
+    await expect(history.menu).toBeHidden();
+  });
+
   test("refreshes from the agent, keeping a rename, and survives a failed refresh", async ({ splash }) => {
-    const { app, world, db } = splash;
+    const { app, world, db, page } = splash;
     const history = new History(app);
     const id = await history.importSession("Fix the subtract sign", world.repo);
     await expect(history.bar).toHaveAttribute("data-sync", "synced");
+    await history.openMenu();
     await expect(history.refreshButton).toBeEnabled();
     await app.title.click();
     await app.ui.modalInput.fill("Subtract notes");
@@ -283,7 +354,16 @@ test.describe("a saved conversation", () => {
     await app.sessionRow("Subtract notes").click();
     await expect(history.bar).toHaveAttribute("data-sync", "outdated");
 
+    let releaseRefresh!: () => void;
+    const refreshHeld = new Promise<void>((resolve) => (releaseRefresh = resolve));
+    await page.route("**/__cmd/refresh_session_history", async (route) => {
+      await refreshHeld;
+      await route.continue();
+    }, { times: 1 });
+    await history.openMenu();
     await history.refreshButton.click();
+    await expect(history.busy).toHaveText("Refreshing history…");
+    releaseRefresh();
     await expect(history.notice).toHaveText("History refreshed from the agent.");
     await expect(app.entries("agent").last()).toContainText("The docstring now spells out the argument order.");
     await expect(app.transcript).not.toContainText("a minus b");
@@ -297,6 +377,7 @@ test.describe("a saved conversation", () => {
     expect(world.agents.requests("claude", "session/prompt")).toEqual([]);
 
     world.agents.flags("claude", "--fail-load");
+    await history.openMenu();
     await history.refreshButton.click();
     const error = history.barError;
     await expect(error).toContainText("Claude Code history request failed");
@@ -311,6 +392,7 @@ test.describe("a saved conversation", () => {
     const history = new History(app);
     const parent = await history.importSession("Fix the subtract sign", world.repo);
 
+    await history.openMenu();
     await history.forkButton.click();
     await expect(history.dialog("fork")).toBeVisible();
     await expect(history.dialogTitle).toHaveText("Fix the subtract sign");
@@ -390,6 +472,7 @@ test.describe("a saved conversation", () => {
     await expect(history.bar).toHaveAttribute("data-sync", "deleted");
     await expect(app.composer).toBeDisabled();
     await expect(app.composer).toHaveAttribute("placeholder", "Agent history was deleted. This local copy is read-only.");
+    await history.openMenu();
     await expect(history.refreshButton).toHaveCount(0);
     await expect(history.forkButton).toHaveCount(0);
     await expect(app.continueButton).toHaveCount(0);

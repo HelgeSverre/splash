@@ -214,28 +214,47 @@ export class History {
     const bar = this.bar;
     return testId(bar, "history-parent");
   }
+  /** The overflow trigger beside Agent history. */
+  get menuTrigger() {
+    return testId(this.bar, "history-menu-trigger");
+  }
+  /** The open history-actions menu. */
+  get menu() {
+    return testId(this.bar, "history-menu");
+  }
+  get menuItems() {
+    return testId(this.menu, "history-menu-item");
+  }
+  menuItem(action: "disconnect" | "capabilities" | "refresh" | "fork" | "manage") {
+    return testId(this.menu, "history-menu-item", { action });
+  }
+  /** Open the history-actions menu before interacting with one of its actions. */
+  async openMenu() {
+    await this.menuTrigger.click();
+    await expect(this.menu).toBeVisible();
+  }
   get disconnectButton() {
-    const bar = this.bar;
-    return testId(bar, "history-disconnect");
+    return this.menuItem("disconnect");
   }
   /** Refresh from agent. */
   get refreshButton() {
-    const bar = this.bar;
-    return testId(bar, "history-refresh");
+    return this.menuItem("refresh");
   }
   /** Fork conversation. */
   get forkButton() {
-    const bar = this.bar;
-    return testId(bar, "history-fork");
+    return this.menuItem("fork");
   }
   get manageButton() {
-    const bar = this.bar;
-    return testId(bar, "history-manage");
+    return this.menuItem("manage");
   }
   /** What the last action did. */
   get notice() {
     const bar = this.bar;
     return testId(bar, "history-notice");
+  }
+  /** Announced while a history action is in flight after its menu closes. */
+  get busy() {
+    return testId(this.bar, "history-busy");
   }
   /** Why the last action failed. */
   get barError() {
@@ -244,6 +263,7 @@ export class History {
   }
 
   async disconnect() {
+    await this.openMenu();
     await this.disconnectButton.click();
     await expect(this.notice).toHaveText("Agent disconnected. Your local history is saved.");
     await this.app.expectStatus("exited");
@@ -323,12 +343,14 @@ export class History {
 
   /** Open Manage history. */
   async manage() {
+    await this.openMenu();
     await this.manageButton.click();
     await expect(this.dialog("manage")).toBeVisible();
   }
 
   /** Fork the open session into a separate conversation, or one prepared for review. */
   async fork(kind: "separate" | "review") {
+    await this.openMenu();
     await this.forkButton.click();
     await this.forkAction(kind).click();
     await expect(this.dialog("fork")).toBeHidden();
