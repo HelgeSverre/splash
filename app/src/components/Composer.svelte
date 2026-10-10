@@ -83,11 +83,12 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
+    // Older WebKit can deliver the Enter used to confirm an IME candidate
+    // after compositionend. keyCode 229 still identifies that keystroke.
+    // Check before SlashMenu so a partial command cannot be completed either.
+    if (e.isComposing || e.keyCode === 229) return;
     if (menu?.keydown(e)) return;
     if (e.key === "Enter" && !e.shiftKey) {
-      // Older WebKit can deliver the Enter used to confirm an IME candidate
-      // after compositionend. keyCode 229 still identifies that keystroke.
-      if (e.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       send();
     }
