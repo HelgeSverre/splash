@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use std::sync::mpsc::Sender;
 
-use crate::util::{EqualReader, FusedReader, ReadTimeout};
+use crate::util::{EqualReader, FusedReader, ReadTimeout, ReadTimeoutLease};
 use crate::{HTTPVersion, Header, Method, Response, StatusCode};
 use chunked_transfer::Decoder;
 use std::time::Duration;
@@ -81,11 +81,53 @@ pub struct Request {
     notify_when_responded: Option<Sender<()>>,
 
     read_timeout: Option<ReadTimeout>,
+
+    // The body reader and this request share the lease. The reader clears it
+    // before it releases a streaming connection to a pipelined request.
+    body_timeout: Option<ReadTimeoutLease>,
+
 }
 
 struct NotifyOnDrop<R> {
     sender: Sender<()>,
     inner: R,
+}
+
+struct ClearTimeoutOnEof<R> {
+    inner: R,
+    body_timeout: ReadTimeoutLease,
+}
+
+impl<R> ClearTimeoutOnEof<R> {
+    fn new(inner: R, body_timeout: ReadTimeoutLease) -> Self {
+        Self {
+            inner,
+            body_timeout,
+        }
+    }
+}
+
+impl<R: Read> Read for ClearTimeoutOnEof<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read = self.inner.read(buf)?;
+        if read == 0 {
+            self.body_timeout.complete()?;
+        }
+        Ok(read)
+    }
+}
+
+fn clear_timeout_on_eof<R>(
+    reader: R,
+    body_timeout: Option<ReadTimeoutLease>,
+) -> Box<dyn Read + Send + 'static>
+where
+    R: Read + Send + 'static,
+{
+    match body_timeout {
+        Some(body_timeout) => Box::new(ClearTimeoutOnEof::new(reader, body_timeout)),
+        None => Box::new(reader),
+    }
 }
 
 impl<R: Read> Read for NotifyOnDrop<R> {
@@ -194,12 +236,15 @@ where
     let body_can_block = connection_upgrade
         || transfer_encoding.is_some()
         || content_length.is_some_and(|length| length > 0 && (length > 1024 || expects_continue));
+    let body_timeout = body_can_block
+        .then(|| read_timeout.as_ref().map(ReadTimeout::lease))
+        .flatten();
 
     // we wrap `source_data` around a reading whose nature depends on the transfer-encoding and
     // content-length headers
     let reader = if connection_upgrade {
         // if we have a `Connection: upgrade`, always keeping the whole reader
-        Box::new(source_data) as Box<dyn Read + Send + 'static>
+        clear_timeout_on_eof(source_data, body_timeout.clone())
     } else if let Some(content_length) = content_length {
         if content_length == 0 {
             Box::new(io::empty()) as Box<dyn Read + Send + 'static>
@@ -225,12 +270,18 @@ where
             Box::new(Cursor::new(buffer)) as Box<dyn Read + Send + 'static>
         } else {
             let (data_reader, _) = EqualReader::new(source_data, content_length); // TODO:
-            Box::new(FusedReader::new(data_reader)) as Box<dyn Read + Send + 'static>
+            Box::new(FusedReader::new(clear_timeout_on_eof(
+                data_reader,
+                body_timeout.clone(),
+            ))) as Box<dyn Read + Send + 'static>
         }
     } else if transfer_encoding.is_some() {
         // if a transfer-encoding was specified, then "chunked" is ALWAYS applied
         // over the message (RFC2616 #3.6)
-        Box::new(FusedReader::new(Decoder::new(source_data))) as Box<dyn Read + Send + 'static>
+        Box::new(FusedReader::new(clear_timeout_on_eof(
+            Decoder::new(source_data),
+            body_timeout.clone(),
+        ))) as Box<dyn Read + Send + 'static>
     } else {
         // if we have neither a Content-Length nor a Transfer-Encoding,
         // assuming that we have no data
@@ -252,6 +303,7 @@ where
         must_send_continue: expects_continue,
         notify_when_responded: None,
         read_timeout,
+        body_timeout,
     })
 }
 
@@ -400,9 +452,17 @@ impl Request {
     ///
     /// The timeout affects incoming bytes only. Callers should clear it after
     /// consuming the body so idle keep-alive connections are not timed out.
+    /// Dropping a request does not clear it, because a later request on the
+    /// same connection may already have armed its own timeout.
     pub fn set_body_read_timeout(&mut self, timeout: Option<Duration>) -> IoResult<()> {
-        if let Some(read_timeout) = &self.read_timeout {
-            read_timeout.set(timeout)
+        if let Some(body_timeout) = &self.body_timeout {
+            match timeout {
+                Some(timeout) => match body_timeout.arm(timeout) {
+                    Ok(()) => Ok(()),
+                    Err(error) => Err(error),
+                },
+                None => body_timeout.clear(),
+            }
         } else {
             Ok(())
         }
@@ -414,7 +474,15 @@ impl Request {
     /// its remaining bytes, while leaving the response writer available.
     pub fn abort_body(&mut self) {
         if let Some(read_timeout) = &mut self.read_timeout {
-            let _ = read_timeout.abort();
+            let result = if let Some(body_timeout) = &self.body_timeout {
+                match body_timeout.abort() {
+                    Ok(true) | Err(_) => read_timeout.abort(),
+                    Ok(false) => Ok(()),
+                }
+            } else {
+                Ok(())
+            };
+            let _ = result;
         }
     }
 
@@ -537,10 +605,9 @@ impl Drop for Request {
             }
         }
         // EqualReader drains unfinished data when dropped to support HTTP
-        // keep-alive. Drop it before clearing a request-scoped inactivity
-        // timeout so a timed-out body cannot block cleanup indefinitely.
+        // keep-alive. The caller owns clearing its timeout after successful
+        // consumption; doing so here can clear a newer request's timeout.
         drop(self.data_reader.take());
-        let _ = self.set_body_read_timeout(None);
     }
 }
 
@@ -553,6 +620,14 @@ impl<T> ReadWrite for T where T: Read + Write {}
 #[cfg(test)]
 mod tests {
     use super::Request;
+    use super::{ClearTimeoutOnEof, FusedReader};
+    use crate::connection::Connection;
+    use crate::util::RefinedTcpStream;
+    use crate::{Response, Server};
+    use std::io::{ErrorKind, Read, Write};
+    use std::net::{Shutdown, TcpStream};
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     #[test]
     fn must_be_send() {
@@ -561,5 +636,240 @@ mod tests {
         fn bar(rq: &Request) {
             f(rq);
         }
+    }
+
+    fn assert_older_request_drop_keeps_newer_body_timeout(
+        first_request: &[u8],
+        expected_first_body: &[u8],
+    ) {
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let address = server.server_addr().to_ip().unwrap();
+        let mut client = TcpStream::connect(address).unwrap();
+        client.write_all(first_request).unwrap();
+        client
+            .write_all(b"POST /second HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1025\r\n\r\n")
+            .unwrap();
+
+        let mut first = server
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .expect("first request was not received");
+        let mut completed_body = Vec::new();
+        first.as_reader().read_to_end(&mut completed_body).unwrap();
+        assert_eq!(completed_body, expected_first_body);
+        let mut second = server
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .expect("second request was not received");
+        second
+            .set_body_read_timeout(Some(Duration::from_millis(50)))
+            .unwrap();
+        drop(first);
+
+        let (result_tx, result_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut body = [0];
+            let _ = result_tx.send(second.as_reader().read(&mut body));
+        });
+        let result = match result_rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(result) => result,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                client.shutdown(Shutdown::Write).unwrap();
+                result_rx
+                    .recv_timeout(Duration::from_secs(1))
+                    .expect("body read did not stop after client disconnect")
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => panic!("body reader disconnected"),
+        };
+        assert!(matches!(
+            result
+                .expect_err("newer body read completed without a timeout")
+                .kind(),
+            ErrorKind::TimedOut | ErrorKind::WouldBlock
+        ));
+    }
+
+    #[test]
+    fn dropping_a_completed_request_keeps_the_newer_body_timeout() {
+        assert_older_request_drop_keeps_newer_body_timeout(
+            b"POST /first HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1\r\n\r\nx",
+            b"x",
+        );
+    }
+
+    #[test]
+    fn dropping_an_untimed_request_keeps_the_newer_body_timeout() {
+        assert_older_request_drop_keeps_newer_body_timeout(
+            b"GET /first HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n",
+            b"",
+        );
+    }
+
+    #[test]
+    fn failed_body_timeout_arm_still_aborts_after_an_explicit_clear() {
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let address = server.server_addr().to_ip().unwrap();
+        let mut client = TcpStream::connect(address).unwrap();
+        client
+            .write_all(b"POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1025\r\n\r\n")
+            .unwrap();
+
+        let mut request = server
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .expect("upload request was not received");
+        assert_eq!(
+            request
+                .set_body_read_timeout(Some(Duration::ZERO))
+                .unwrap_err()
+                .kind(),
+            ErrorKind::InvalidInput
+        );
+        request.set_body_read_timeout(None).unwrap();
+        request.abort_body();
+        assert_eq!(
+            request.as_reader().read(&mut [0]).unwrap_err().kind(),
+            ErrorKind::ConnectionAborted
+        );
+
+        client
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        request.respond(Response::empty(408)).unwrap();
+        let mut response = [0; 12];
+        client.read_exact(&mut response).unwrap();
+        assert_eq!(&response[..8], b"HTTP/1.1");
+    }
+
+    #[test]
+    fn completing_a_streaming_request_cannot_clear_the_next_body_timeout() {
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let address = server.server_addr().to_ip().unwrap();
+        let mut client = TcpStream::connect(address).unwrap();
+        let first_body = vec![b'x'; 1025];
+        client
+            .write_all(b"POST /first HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1025\r\n\r\n")
+            .unwrap();
+        client.write_all(&first_body).unwrap();
+        client
+            .write_all(b"POST /second HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1025\r\n\r\n")
+            .unwrap();
+
+        let mut first = server
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .expect("first request was not received");
+        first
+            .set_body_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+
+        let (eof_tx, eof_rx) = mpsc::channel();
+        let (clear_tx, clear_rx) = mpsc::channel();
+        let (cleared_tx, cleared_rx) = mpsc::channel();
+        let (abort_tx, abort_rx) = mpsc::channel();
+        let (aborted_tx, aborted_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut body = Vec::new();
+            first.as_reader().read_to_end(&mut body).unwrap();
+            assert_eq!(body.len(), 1025);
+            eof_tx.send(()).unwrap();
+            clear_rx.recv().unwrap();
+            first.set_body_read_timeout(None).unwrap();
+            cleared_tx.send(()).unwrap();
+            abort_rx.recv().unwrap();
+            first.abort_body();
+            aborted_tx.send(()).unwrap();
+        });
+        eof_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("first streaming body did not complete");
+
+        let mut second = server
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .expect("second request was not received after first EOF");
+        second
+            .set_body_read_timeout(Some(Duration::from_millis(50)))
+            .unwrap();
+        clear_tx.send(()).unwrap();
+        cleared_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("first request did not clear its timeout");
+        abort_tx.send(()).unwrap();
+        aborted_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("first request did not finish its stale abort");
+
+        let (result_tx, result_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut body = [0];
+            let _ = result_tx.send(second.as_reader().read(&mut body));
+        });
+        let result = match result_rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(result) => result,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                client.shutdown(Shutdown::Write).unwrap();
+                result_rx
+                    .recv_timeout(Duration::from_secs(1))
+                    .expect("second body read did not stop after client disconnect")
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => panic!("second body reader disconnected"),
+        };
+        assert!(matches!(
+            result
+                .expect_err("newer body read completed without a timeout")
+                .kind(),
+            ErrorKind::TimedOut | ErrorKind::WouldBlock
+        ));
+    }
+
+    #[test]
+    fn streaming_eof_clears_timeout_before_releasing_its_reader() {
+        struct EofOnRead(mpsc::Sender<()>);
+
+        impl Read for EofOnRead {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        impl Drop for EofOnRead {
+            fn drop(&mut self) {
+                self.0.send(()).unwrap();
+            }
+        }
+
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(address).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        let (mut parser, _) = RefinedTcpStream::new(Connection::from(server));
+        let lease = parser.read_timeout().lease();
+        lease.arm(Duration::from_millis(50)).unwrap();
+
+        let (released_tx, released_rx) = mpsc::channel();
+        let mut body = FusedReader::new(ClearTimeoutOnEof::new(EofOnRead(released_tx), lease));
+        let (result_tx, result_rx) = mpsc::channel();
+        let (started_tx, started_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            released_rx.recv().unwrap();
+            started_tx.send(()).unwrap();
+            let mut byte = [0];
+            let _ = result_tx.send(parser.read(&mut byte));
+        });
+
+        assert_eq!(body.read(&mut [0]).unwrap(), 0);
+        started_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("parser did not start after streaming EOF");
+        std::thread::sleep(Duration::from_millis(125));
+        client.write_all(b"x").unwrap();
+        assert_eq!(
+            result_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("parser did not resume after streaming EOF")
+                .unwrap(),
+            1
+        );
     }
 }

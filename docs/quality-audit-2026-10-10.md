@@ -19,7 +19,7 @@ not establish compatibility with authenticated production providers.
 | Interrupted agents | Startup did not share a total timeout across initialize and new/load/resume requests. Stale streaming entries or tools could appear unfinished after restart. | One 180-second startup deadline covers the whole sequence. Actor restoration and cold transcript reads settle interrupted messages, tools, and permissions. Paused-clock actor and fresh-Hub tests cover both paths. Cold reads leave stored checkpoints untouched. |
 | Tool failures | A pending tool could appear completed when the agent failed. | Pending and in-progress tools become failed. Mapper and lifecycle tests cover interrupted states. |
 | HTTP capacity | Idle event polls could occupy the command pool and block ordinary operations. | Event polls have a separate bounded pool. An HTTP test fills that pool, proves overflow, and then completes an authenticated command. |
-| Stalled uploads | An incomplete request body could hold a request permit indefinitely; rejecting it could block cleanup, and declared lengths could cause an oversized drain allocation. | Streaming bodies have a ten-second read inactivity timeout. Timeout and admission rejection close the read side before cleanup; oversized bodies retain the size error without draining forever. Cleanup uses an 8 KiB buffer. The transport regression saturates capacity with declared, chunked and `100-continue` bodies, keeps their sockets open through recovery, checks an oversized body with an extreme declared length, and reuses a complete-upload connection for an event response lasting beyond the timeout. |
+| Stalled uploads | An incomplete request body could hold a request permit indefinitely; rejecting it could block cleanup, and declared lengths could cause an oversized drain allocation. | Streaming bodies have a ten-second read inactivity timeout. Timeout and admission rejection close the read side before cleanup; oversized bodies retain the size error without draining forever. Cleanup uses an 8 KiB buffer. Each body owns its deadline and clears it at EOF before releasing the reader, so older resets or aborts cannot affect a later request. The transport regression saturates capacity with declared, chunked and `100-continue` bodies, keeps their sockets open through recovery, checks an oversized body with an extreme declared length, and reuses a complete-upload connection for an event response lasting beyond the timeout. |
 | Sign out | An HTTP error from logout could be mistaken for an unreachable server. | Transport failures show offline guidance; HTTP failures retain online state and report the response. Unauthorized logout returns to login. Web server tests cover each outcome. |
 | Agent history | Another import action could overlap a pending import; action buttons crowded the history bar. | Import controls stay disabled while saving. History actions open from a vertical ellipsis menu with keyboard navigation and disabled-state guidance. Shared history tests cover imports and menu interactions. |
 | Missing folders | A deleted or moved workspace looked like an empty directory. | Files displays a readable error, including failed nested folders. Rust directory tests and shared workbench tests distinguish absent folders from empty ones. |
@@ -72,7 +72,7 @@ test installation on a machine without that runtime.
 | Normal AppImage launch | The CI AppImage from application snapshot `a18f842` also passed direct FUSE-mounted launch in a fresh Ubuntu 24.04 container, with `libfuse2t64`, `fuse3`, `/dev/fuse`, UID 1001 and a fresh TMPDIR. No extraction flag/environment override or WebKit sandbox override was used. |
 | Windows packages | The CI installer and portable archive from application snapshot `a18f842` passed checksum verification and frontend readiness under a fresh non-admin account. Installation/uninstallation succeeded and user data survived uninstall. |
 | Windows terminal | All four native terminal regressions passed independently on Windows PowerShell 5.1.26100.33451; the same regressions passed on the Windows CI runner. |
-| HTTP transport | All eight server integration tests passed with default and headless features; all 13 vendored HTTP-library tests passed, including native Windows reader timeout and abort/write-half checks. The final held-open upload regression also passed in an isolated Linux amd64 Docker container. Read timeouts are cleared before idle keep-alive/event traffic. |
+| HTTP transport | All eight server integration tests passed with default and headless features; all 18 vendored HTTP-library tests passed locally, including deterministic request-handoff regressions. Native Windows reader timeout and abort/write-half checks also passed. The final held-open upload regression also passed in an isolated Linux amd64 Docker container. Read timeouts are cleared before idle keep-alive/event traffic. |
 | Audit cleanup guard | Mock AWS regressions refuse mismatched instance/account pins and extra or managed/unattached network interfaces before any destructive request; the helper is included in CI. |
 | Documentation captures | Real first-run, populated, minimum-window, history menu/dialog and offline states were captured and inspected; native Linux and Windows captures use finished CI packages. |
 
@@ -100,10 +100,20 @@ That synchronized regression then exposed a Windows transport failure: admitted
 uploads stayed blocked instead of returning 408 after ten seconds. The transport
 now applies the selected timeout immediately before reads on the actual reader
 and shares abort state with cleanup. Native Windows upload recovery and all 13
-vendored transport tests passed in the final matrix. The same held-open upload
+vendored transport tests passed in that matrix. The same held-open upload
 regression passed in an isolated Linux amd64 Docker container against this final
 runtime. No particular socket-clone behavior is treated as a proven cause.
 The native CI lane runs the vendored transport unit tests directly.
+
+A final keep-alive review reproduced a second race: an earlier request could
+clear a later upload's timeout after the body reader was handed off. It could
+also leave the next idle header read with the completed body's deadline; a
+native macOS socket probe confirmed that a late clear does not cancel a receive
+already using that deadline. Each body now holds an owned timeout lease and
+clears it at EOF before releasing its reader. Released leases cannot clear or
+abort a newer request. Deterministic red/green regressions cover completed and
+untimed request disposal, streaming EOF, stale reset/abort and header handoff. A real-socket failed-arm regression verifies that disabling the timer still permits abort cleanup and a 408 response.
+Follow-ups repeat the native matrix in the linked final PR checks.
 
 One long Docker command did not finish its native wrapper phase within its outer
 deadline. That run is not counted as a native success. A bounded fresh native

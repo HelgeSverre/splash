@@ -108,6 +108,7 @@ pub struct RefinedTcpStream {
 struct ReadControl {
     timeout: Option<Duration>,
     aborted: bool,
+    generation: u64,
 }
 
 #[derive(Clone)]
@@ -116,18 +117,65 @@ pub(crate) struct ReadTimeout {
     read_control: Arc<Mutex<ReadControl>>,
 }
 
+#[derive(Clone)]
+pub(crate) struct ReadTimeoutLease {
+    read_timeout: ReadTimeout,
+    state: Arc<Mutex<ReadTimeoutLeaseState>>,
+}
+
+#[derive(Default)]
+enum ReadTimeoutLeaseState {
+    #[default]
+    NeverArmed,
+    Active(u64),
+    ArmFailed,
+    Released,
+}
+
 impl ReadTimeout {
-    pub(crate) fn set(&self, timeout: Option<Duration>) -> IoResult<()> {
-        self.stream.set_read_timeout(timeout)?;
+    pub(crate) fn lease(&self) -> ReadTimeoutLease {
+        ReadTimeoutLease {
+            read_timeout: self.clone(),
+            state: Arc::new(Mutex::new(ReadTimeoutLeaseState::default())),
+        }
+    }
+
+    pub(crate) fn arm(&self, timeout: Duration) -> IoResult<u64> {
         let mut control = self
             .read_control
             .lock()
             .map_err(|_| std::io::Error::other("request read timeout state is poisoned"))?;
-        *control = ReadControl {
-            timeout,
-            aborted: false,
-        };
-        Ok(())
+        self.stream.set_read_timeout(Some(timeout))?;
+        control.generation = control.generation.wrapping_add(1);
+        control.timeout = Some(timeout);
+        control.aborted = false;
+        Ok(control.generation)
+    }
+
+    pub(crate) fn clear_if_current(&self, generation: u64) -> IoResult<bool> {
+        let mut control = self
+            .read_control
+            .lock()
+            .map_err(|_| std::io::Error::other("request read timeout state is poisoned"))?;
+        if control.generation != generation {
+            return Ok(false);
+        }
+        self.stream.set_read_timeout(None)?;
+        control.timeout = None;
+        control.aborted = false;
+        Ok(true)
+    }
+
+    pub(crate) fn abort_if_current(&mut self, generation: u64) -> IoResult<bool> {
+        let mut control = self
+            .read_control
+            .lock()
+            .map_err(|_| std::io::Error::other("request read timeout state is poisoned"))?;
+        if control.generation != generation {
+            return Ok(false);
+        }
+        control.aborted = true;
+        self.stream.shutdown(Shutdown::Read).map(|()| true)
     }
 
     pub(crate) fn abort(&mut self) -> IoResult<()> {
@@ -136,8 +184,78 @@ impl ReadTimeout {
             .lock()
             .map_err(|_| std::io::Error::other("request read timeout state is poisoned"))?;
         control.aborted = true;
-        drop(control);
         self.stream.shutdown(Shutdown::Read)
+    }
+}
+
+impl ReadTimeoutLease {
+    pub(crate) fn arm(&self, timeout: Duration) -> IoResult<()> {
+        let generation = self.read_timeout.arm(timeout);
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| std::io::Error::other("request read timeout lease is poisoned"))?;
+        match generation {
+            Ok(generation) => {
+                *state = ReadTimeoutLeaseState::Active(generation);
+                Ok(())
+            }
+            Err(error) => {
+                *state = ReadTimeoutLeaseState::ArmFailed;
+                Err(error)
+            }
+        }
+    }
+
+    /// Clears an armed socket timeout without completing the body. A later
+    /// abort must still be able to close an unfinished reader.
+    pub(crate) fn clear(&self) -> IoResult<()> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| std::io::Error::other("request read timeout lease is poisoned"))?;
+        let generation = match *state {
+            ReadTimeoutLeaseState::Active(generation) => generation,
+            ReadTimeoutLeaseState::NeverArmed
+            | ReadTimeoutLeaseState::ArmFailed
+            | ReadTimeoutLeaseState::Released => return Ok(()),
+        };
+        self.read_timeout.clear_if_current(generation).map(|_| ())
+    }
+
+    /// Clears the timeout at EOF before releasing the body reader to the next
+    /// pipelined request. Completion makes later cleanup a no-op.
+    pub(crate) fn complete(&self) -> IoResult<()> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| std::io::Error::other("request read timeout lease is poisoned"))?;
+        if let ReadTimeoutLeaseState::Active(generation) = *state {
+            self.read_timeout.clear_if_current(generation)?;
+        }
+        *state = ReadTimeoutLeaseState::Released;
+        Ok(())
+    }
+
+    /// Returns whether a request that never armed this lease must abort the
+    /// socket itself. A released lease belonged to a completed body and must
+    /// never abort a newer pipelined request.
+    pub(crate) fn abort(&self) -> IoResult<bool> {
+        let state = std::mem::replace(
+            &mut *self
+                .state
+                .lock()
+                .map_err(|_| std::io::Error::other("request read timeout lease is poisoned"))?,
+            ReadTimeoutLeaseState::Released,
+        );
+        match state {
+            ReadTimeoutLeaseState::Active(generation) => {
+                let mut read_timeout = self.read_timeout.clone();
+                read_timeout.abort_if_current(generation).map(|_| false)
+            }
+            ReadTimeoutLeaseState::NeverArmed | ReadTimeoutLeaseState::ArmFailed => Ok(true),
+            ReadTimeoutLeaseState::Released => Ok(false),
+        }
     }
 }
 
@@ -243,7 +361,7 @@ mod tests {
         let (server, _) = listener.accept().unwrap();
         let (mut reader, _) = RefinedTcpStream::new(Connection::from(server));
         let controller = reader.read_timeout();
-        controller.set(Some(Duration::from_millis(50))).unwrap();
+        controller.arm(Duration::from_millis(50)).unwrap();
 
         let (result_tx, result_rx) = mpsc::channel();
         std::thread::spawn(move || {
