@@ -4,18 +4,22 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { FIXTURES } from "./paths.ts";
 
-export type AgentId = "claude" | "codex" | "glue" | "pool" | "pi" | "amp";
+export type AgentId = "claude" | "codex" | "glue" | "pool" | "pi" | "amp" | "vibe";
 
 export type Launch = { agent: AgentId; argv: string[]; cwd: string; pid: number };
 export type Request = { id?: number; method?: string; params?: any; result?: any };
 
-const lines = <T>(file: string): T[] =>
-  existsSync(file)
-    ? readFileSync(file, "utf8")
-        .split("\n")
-        .filter((l) => l.trim())
-        .map((l) => JSON.parse(l) as T)
-    : [];
+/** Read newline-delimited JSON records. The writer commits a record with its
+ * trailing newline, so an append observed mid-write is not parsed yet. */
+export const lines = <T>(file: string): T[] => {
+  if (!existsSync(file)) return [];
+  const text = readFileSync(file, "utf8");
+  const committed = text.endsWith("\n") ? text : text.slice(0, text.lastIndexOf("\n") + 1);
+  return committed
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as T);
+};
 
 export class Agents {
   readonly dir: string;

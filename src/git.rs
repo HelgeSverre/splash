@@ -49,6 +49,31 @@ pub fn head_sha(dir: &Path) -> Option<String> {
     git(dir, &["rev-parse", "HEAD"]).ok()
 }
 
+/// Resolve `HEAD`, retaining errors that callers need to present.
+///
+/// `git rev-parse --verify --quiet HEAD` reserves exit status 1 for an
+/// unborn `HEAD`. Other non-zero statuses, including a missing working
+/// directory or a failed Git invocation, remain errors instead of looking
+/// like a new repository.
+pub fn checked_head_sha(dir: &Path) -> Result<Option<String>> {
+    let out = run(dir, &["rev-parse", "--verify", "--quiet", "HEAD"])?;
+    match out.status.code() {
+        Some(0) => Ok(Some(
+            String::from_utf8_lossy(&out.stdout).trim_end().to_string(),
+        )),
+        Some(1) => Ok(None),
+        _ => {
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            let message = if stderr.is_empty() {
+                format!("git rev-parse failed: {}", out.status)
+            } else {
+                stderr
+            };
+            Err(Error::Git(message))
+        }
+    }
+}
+
 pub fn current_branch(dir: &Path) -> Option<String> {
     git(dir, &["rev-parse", "--abbrev-ref", "HEAD"])
         .ok()
