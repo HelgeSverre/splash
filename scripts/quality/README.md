@@ -19,7 +19,14 @@ profile, region, and absolute ledger path. The defaults match the October 2026
 audit's local setup. Sync and package smoke require `instance_id` and
 `s3_bucket` in the ledger. Cleanup additionally requires `vpc_id`, `subnet_id`,
 `route_table_id`, `internet_gateway_id`, `security_group_id`, `iam_role_name`,
-and `instance_profile_name`. Those resources must all belong to the same audit.
+`instance_profile_name`, `root_volume_id`, `name`, `profile`, and `region`.
+Those resources must all belong to the same audit. Provisioning retries must use
+a stable EC2 `--client-token` for the same launch request and preserve every
+returned instance ID in an append-only creation record. If a changed launch
+request needs a new token, record the new instance before replacing the runner
+entry, and retire the earlier audit instance explicitly. Never overwrite the
+only record of a created instance.
+
 Cleanup also requires an independent exact-ID guard: set
 `SPLASH_QUALITY_EXPECTED_INSTANCE_ID` to the instance ID you intend to delete;
 it must exactly equal the ledger's `instance_id`. Set
@@ -56,19 +63,26 @@ ordinary user with isolated temporary data. GitHub Actions downloads package
 artifacts as ZIP files, which lose an AppImage's outer executable bit; the
 package helper restores that one transport-lost bit before upload. The smoke
 image still verifies the final AppImage's internal launcher permissions and
-executes it as an ordinary user.
+executes its extracted AppRun as an ordinary user. This exercises the documented
+fallback for systems without FUSE; normal FUSE mounting needs a separate check.
 
 ## Cleanup
 
 `remote-docker-cleanup.sh` is inert without `--execute`. Before cleanup, verify
 that the ledger contains only resources created for this audit and preserve the
-needed logs and screenshots. Cleanup checks the exact instance's audit tags,
-terminates that instance, then deletes the recorded bucket, network, and IAM
-resources. Never substitute an existing production instance or shared resource
-into the audit ledger.
+needed logs and screenshots. Before any mutation, cleanup checks the exact
+instance's audit tags and its dedicated network. It refuses to proceed if the
+VPC contains a network interface that does not belong to that exact runner.
+After those checks it terminates that instance, then deletes the recorded
+bucket, network, and IAM resources. Never substitute an existing production
+instance or shared resource into the audit ledger.
+
+Set `AUDIT_INSTANCE_ID` and `AUDIT_ACCOUNT_ID` from the values independently
+recorded when creating the runner and verifying the account. Do not populate
+these guards by reading the ledger they are supposed to check.
 
 ```sh
-SPLASH_QUALITY_EXPECTED_INSTANCE_ID=i-0bb6fc0108eded5ed \
-SPLASH_QUALITY_EXPECTED_ACCOUNT_ID=147654942040 \
+SPLASH_QUALITY_EXPECTED_INSTANCE_ID="$AUDIT_INSTANCE_ID" \
+SPLASH_QUALITY_EXPECTED_ACCOUNT_ID="$AUDIT_ACCOUNT_ID" \
   scripts/quality/remote-docker-cleanup.sh --execute
 ```

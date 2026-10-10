@@ -61,6 +61,14 @@ test("agent history actions menu", async ({ splash }) => {
   await history.openMenu();
   await capture(page, `quality-${harness}-history-actions-menu`);
   await history.menu.press("Escape");
+  await app.continueButton.click();
+  await app.expectStatus("idle");
+  await expect(bench.noChanges).toHaveAttribute("data-loading", "false");
+  await history.openMenu();
+  await expect(history.disconnectButton).toBeEnabled();
+  await capture(page, `quality-${harness}-history-actions-connected`);
+  await history.menu.press("Escape");
+  await history.disconnect();
   await history.openMenu();
   await history.refreshButton.click();
   await expect(history.notice).toHaveText("History refreshed from the agent.");

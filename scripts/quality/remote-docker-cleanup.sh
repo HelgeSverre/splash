@@ -41,10 +41,42 @@ account_id=$(aws sts get-caller-identity --profile "$profile" --query Account --
 [[ "$account_id" == "$expected_account_id" ]] || { echo "SPLASH_QUALITY_EXPECTED_ACCOUNT_ID does not match the active AWS account; refusing cleanup." >&2; exit 1; }
 
 # Verify the exact instance is one created for this audit before terminating it.
+# shellcheck disable=SC2016 # The JMESPath filter needs literal backticks.
 instance=$(aws ec2 describe-instances --profile "$profile" --region "$region" --instance-ids "$instance_id" \
   --query 'Reservations[0].Instances[0].{VpcId:VpcId,Tags:Tags,RootVolumeId:BlockDeviceMappings[?DeviceName==`/dev/sda1`].Ebs.VolumeId | [0]}' --output json)
-node -e 'const instance=JSON.parse(process.argv[1]); const values=Object.fromEntries(instance.Tags.map(t=>[t.Key,t.Value])); if(values.Purpose !== "SplashQualityAudit" || values.ManagedBy !== "Codex" || values.Name !== `${process.argv[2]}-runner` || instance.VpcId !== process.argv[3] || instance.RootVolumeId !== process.argv[4]) process.exit(1)' "$instance" "$ledger_name" "$vpc_id" "$root_volume_id" \
+node -e 'const instance=JSON.parse(process.argv[1]); const values=Object.fromEntries(instance.Tags.map(t=>[t.Key,t.Value])); if(values.Purpose !== "SplashQualityAudit" || values.ManagedBy !== "Codex" || values.Name !== process.argv[2] + "-runner" || instance.VpcId !== process.argv[3] || instance.RootVolumeId !== process.argv[4]) process.exit(1)' "$instance" "$ledger_name" "$vpc_id" "$root_volume_id" \
   || { echo "Refusing: instance is not tagged as this audit runner." >&2; exit 1; }
+
+# Do not infer ownership from the VPC alone. A provisioning retry can leave a
+# second runner (or a managed/unattached interface) in the same VPC. Listing
+# these interfaces is read-only and restricted to the ledger VPC; no instance
+# IDs are discovered here and then acted on.
+interfaces=$(aws ec2 describe-network-interfaces --profile "$profile" --region "$region" \
+  --filters "Name=vpc-id,Values=$vpc_id" \
+  --query 'NetworkInterfaces[].{NetworkInterfaceId:NetworkInterfaceId,InstanceId:Attachment.InstanceId,RequesterManaged:RequesterManaged}' --output json)
+node -e 'const interfaces=JSON.parse(process.argv[1]); const expected=process.argv[2]; if(!Array.isArray(interfaces) || interfaces.length===0 || interfaces.some(i => i.RequesterManaged || i.InstanceId !== expected)) process.exit(1)' "$interfaces" "$expected_instance_id" \
+  || { echo "Refusing: ledger VPC has an interface that is not exclusively attached to the audit runner." >&2; exit 1; }
+
+# Validate every ledger network object belongs to the same VPC and that the
+# route table is the one actually associated with the ledger subnet. These are
+# all read-only checks, performed before the first destructive operation.
+subnet=$(aws ec2 describe-subnets --profile "$profile" --region "$region" --subnet-ids "$subnet_id" \
+  --query 'Subnets[0].{SubnetId:SubnetId,VpcId:VpcId}' --output json)
+node -e 'const subnet=JSON.parse(process.argv[1]); if(subnet.SubnetId !== process.argv[2] || subnet.VpcId !== process.argv[3]) process.exit(1)' "$subnet" "$subnet_id" "$vpc_id" \
+  || { echo "Refusing: ledger subnet is not in the audit VPC." >&2; exit 1; }
+
+security_group=$(aws ec2 describe-security-groups --profile "$profile" --region "$region" --group-ids "$sg_id" \
+  --query 'SecurityGroups[0].{GroupId:GroupId,VpcId:VpcId}' --output json)
+node -e 'const group=JSON.parse(process.argv[1]); if(group.GroupId !== process.argv[2] || group.VpcId !== process.argv[3]) process.exit(1)' "$security_group" "$sg_id" "$vpc_id" \
+  || { echo "Refusing: ledger security group is not in the audit VPC." >&2; exit 1; }
+
+route_table=$(aws ec2 describe-route-tables --profile "$profile" --region "$region" --route-table-ids "$route_table_id" --output json)
+association_id=$(node -e 'const table=JSON.parse(process.argv[1]).RouteTables?.[0]; const subnet=process.argv[2], route=process.argv[3], vpc=process.argv[4]; const association=table?.Associations?.find(a => a.SubnetId === subnet && a.Main === false && a.RouteTableAssociationId); if(!table || table.RouteTableId !== route || table.VpcId !== vpc || !association) process.exit(1); process.stdout.write(association.RouteTableAssociationId)' "$route_table" "$subnet_id" "$route_table_id" "$vpc_id") \
+  || { echo "Refusing: ledger route table is not the audit subnet's route table." >&2; exit 1; }
+
+gateway=$(aws ec2 describe-internet-gateways --profile "$profile" --region "$region" --internet-gateway-ids "$igw_id" --output json)
+node -e 'const gateway=JSON.parse(process.argv[1]).InternetGateways?.[0]; if(!gateway || gateway.InternetGatewayId !== process.argv[2] || !gateway.Attachments?.some(a => a.VpcId === process.argv[3])) process.exit(1)' "$gateway" "$igw_id" "$vpc_id" \
+  || { echo "Refusing: ledger internet gateway is not attached to the audit VPC." >&2; exit 1; }
 
 echo "Terminating only audit instance $instance_id"
 aws ec2 terminate-instances --profile "$profile" --region "$region" --instance-ids "$instance_id" >/dev/null
@@ -74,11 +106,7 @@ echo "Deleting only audit source bucket $bucket"
 aws s3 rm "s3://$bucket" --recursive --profile "$profile" --region "$region" --only-show-errors
 aws s3api delete-bucket --profile "$profile" --region "$region" --bucket "$bucket"
 
-association_id=$(aws ec2 describe-route-tables --profile "$profile" --region "$region" --route-table-ids "$route_table_id" \
-  --query 'RouteTables[0].Associations[?Main==`false`].RouteTableAssociationId | [0]' --output text)
-if [[ -n "$association_id" && "$association_id" != None ]]; then
-  aws ec2 disassociate-route-table --profile "$profile" --region "$region" --association-id "$association_id" >/dev/null
-fi
+aws ec2 disassociate-route-table --profile "$profile" --region "$region" --association-id "$association_id" >/dev/null
 aws ec2 delete-route-table --profile "$profile" --region "$region" --route-table-id "$route_table_id"
 aws ec2 delete-subnet --profile "$profile" --region "$region" --subnet-id "$subnet_id"
 aws ec2 detach-internet-gateway --profile "$profile" --region "$region" --internet-gateway-id "$igw_id" --vpc-id "$vpc_id"
