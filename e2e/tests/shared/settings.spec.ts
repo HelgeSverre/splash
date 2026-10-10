@@ -43,7 +43,7 @@ test.describe("agents", () => {
     // The handshake ran in a scratch folder, and is kept.
     const probe = world.agents.launches("claude");
     expect(probe).toHaveLength(1);
-    expect(probe[0].cwd).toBe(join(world.tmp, "splash-probe"));
+    expect(probe[0].cwd.startsWith(join(world.tmp, "splash-probe_"))).toBe(true);
     expect(world.agents.requests("claude", "session/prompt")).toEqual([]);
     const saved = () => db.query<{ data: string }>("SELECT data FROM agent_probes WHERE agent_id = 'claude'").map((r) => JSON.parse(r.data));
     await expect.poll(saved).toEqual([expect.objectContaining({ ok: true, agent_name: "Claude Agent", agent_version: "0.81.1", load_session: true })]);
