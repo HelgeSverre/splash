@@ -66,13 +66,13 @@ test installation on a machine without that runtime.
 | Frontend and server client | `just frontend` passed; all 15 `app/tests/*.test.ts` tests passed; the freshly built headless server passed `scripts/test-server-http.py`. |
 | macOS server archive | The macOS arm64 server archive from application snapshot `a18f842` passed checksum verification and the HTTP smoke with a fresh HOME/data directory and `/usr/bin:/bin` PATH. |
 | Browser workflows | The final local suite passed 267 tests with nine intentional skips. All 30 project tests also passed separately, including moved-folder recovery in both harnesses. |
-| Native matrix | [CI run 38006450744](https://github.com/HelgeSverre/splash/actions/runs/38006450744), at application snapshot `a18f842`, passed all ten jobs: macOS arm64/x64, Windows MSVC, Ubuntu x64, desktop and headless builds, native renderer readiness, browser flows and package smoke. Each cumulative stacked PR repeats this matrix; [the final timeout PR checks](https://github.com/HelgeSverre/splash/pull/7/checks) cover the completed stack. |
+| Native matrix | [CI run 38016031569](https://github.com/HelgeSverre/splash/actions/runs/38016031569), at application snapshot `139ea111`, passed all ten jobs: macOS arm64/x64, Windows MSVC, Ubuntu x64, desktop and headless builds, native renderer readiness, browser flows and package smoke. The five preceding cumulative PRs also passed all 50 jobs. [The final PR checks](https://github.com/HelgeSverre/splash/pull/7/checks) show its current review head. |
 | Clean native x64 Docker | Rust terminal tests, default/headless checks, 18 terminal/workbench browser flows and native renderer/IPC readiness passed. A separate full run passed 263 browser tests with nine skips. |
 | Linux packages | CI packages from application snapshot `a18f842` passed checksum verification, fresh apt dependency installation, extracted-AppImage/raw-DEB/installed-DEB native renderer readiness and isolated server HTTP checks. AppImage internal executable modes were checked before ordinary-user execution. |
 | Normal AppImage launch | The CI AppImage from application snapshot `a18f842` also passed direct FUSE-mounted launch in a fresh Ubuntu 24.04 container, with `libfuse2t64`, `fuse3`, `/dev/fuse`, UID 1001 and a fresh TMPDIR. No extraction flag/environment override or WebKit sandbox override was used. |
 | Windows packages | The CI installer and portable archive from application snapshot `a18f842` passed checksum verification and frontend readiness under a fresh non-admin account. Installation/uninstallation succeeded and user data survived uninstall. |
 | Windows terminal | All four native terminal regressions passed independently on Windows PowerShell 5.1.26100.33451; the same regressions passed on the Windows CI runner. |
-| HTTP transport | All eight server integration tests passed with default and headless features; all 11 vendored HTTP-library tests passed. Read timeouts apply while streaming bodies are consumed and are cleared before idle keep-alive/event traffic. |
+| HTTP transport | All eight server integration tests passed with default and headless features; all 13 vendored HTTP-library tests passed, including native Windows reader timeout and abort/write-half checks. The final held-open upload regression also passed in an isolated Linux amd64 Docker container. Read timeouts are cleared before idle keep-alive/event traffic. |
 | Audit cleanup guard | Mock AWS regressions refuse mismatched instance/account pins and extra or managed/unattached network interfaces before any destructive request; the helper is included in CI. |
 | Documentation captures | Real first-run, populated, minimum-window, history menu/dialog and offline states were captured and inspected; native Linux and Windows captures use finished CI packages. |
 
@@ -99,9 +99,11 @@ with that synchronization fix; runtime code was unchanged.
 That synchronized regression then exposed a Windows transport failure: admitted
 uploads stayed blocked instead of returning 408 after ten seconds. The transport
 now applies the selected timeout immediately before reads on the actual reader
-and shares abort state with cleanup. Native Windows validation of this follow-up
-is pending; no particular socket-clone behavior is treated as a proven cause.
-The native CI lane also runs the vendored transport unit tests directly.
+and shares abort state with cleanup. Native Windows upload recovery and all 13
+vendored transport tests passed in the final matrix. The same held-open upload
+regression passed in an isolated Linux amd64 Docker container against this final
+runtime. No particular socket-clone behavior is treated as a proven cause.
+The native CI lane runs the vendored transport unit tests directly.
 
 One long Docker command did not finish its native wrapper phase within its outer
 deadline. That run is not counted as a native success. A bounded fresh native
