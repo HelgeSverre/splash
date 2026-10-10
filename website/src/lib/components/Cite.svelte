@@ -15,13 +15,19 @@
 <style>
 	.cite {
 		display: inline-flex;
-		gap: 2px;
-		margin-left: 3px;
+		margin-left: 1px;
 		vertical-align: super;
 		line-height: 0;
 		font: var(--fw-medium) 10.5px var(--font-mono);
 	}
+	/* A 24 × 24 px tap target around each small number; the negative margins
+	   keep it from growing the line. */
 	a {
+		min-width: 24px;
+		padding: 5px 0;
+		margin: -5px 0;
+		line-height: 14px;
+		text-align: center;
 		color: var(--muted);
 		text-decoration: none;
 	}

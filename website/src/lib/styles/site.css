@@ -21,6 +21,10 @@
 	--site-hairline: rgba(255, 255, 255, 0.06);
 	/* Text selection on yellow surfaces: a darker yellow under black text. */
 	--site-select-on-accent: #a67c00;
+
+	/* The app's --muted (#6b6f76) is 3.4–3.9:1 on the site's surfaces; small
+	   labels need 4.5:1. This one is 4.5–5.3:1 and still below --text-2. */
+	--muted: #80848b;
 }
 
 /* The app locks the page (full-height panes, no text selection). A website scrolls. */

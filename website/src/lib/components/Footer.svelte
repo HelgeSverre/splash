@@ -19,8 +19,8 @@
 		{#if COMPARISON_LINKS.length}
 			<nav aria-label="Comparisons">
 				<h2>Comparisons</h2>
-				{#each COMPARISON_LINKS as c (c.slug)}<a href="/vs/{c.slug}">vs {c.name}</a>{/each}
-				<a class="all" href="/vs">All comparisons →</a>
+				{#each COMPARISON_LINKS.filter((c) => c.featured) as c (c.slug)}<a href="/vs/{c.slug}">vs {c.name}</a>{/each}
+				<a class="all" href="/vs">All {COMPARISON_LINKS.length} comparisons →</a>
 			</nav>
 		{/if}
 		<nav aria-label="Project">

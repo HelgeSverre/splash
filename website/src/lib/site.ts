@@ -6,20 +6,62 @@ export const RELEASES_URL = `${REPO}/releases`;
 export const ISSUES_URL = `${REPO}/issues`;
 export const ACP_URL = 'https://agentclientprotocol.com';
 
-/** Comparison pages (/vs/<slug>), in footer order. Their data is in src/lib/compare. */
-export const COMPARISON_LINKS: { slug: string; name: string }[] = [
-	{ slug: 'claude-desktop', name: 'Claude Code Desktop' },
-	{ slug: 'codeg', name: 'Codeg' },
-	{ slug: 'codex-app', name: 'ChatGPT desktop app' },
-	{ slug: 'conductor', name: 'Conductor' },
-	{ slug: 'emdash', name: 'Emdash' },
-	{ slug: 'jean', name: 'Jean' },
-	{ slug: 'kepler', name: 'Kepler' },
-	{ slug: 'orca', name: 'Orca' },
-	{ slug: 'paseo', name: 'Paseo' },
-	{ slug: 'soloterm', name: 'Solo' },
-	{ slug: 'superset', name: 'Superset' },
-	{ slug: 't3-code', name: 'T3 Code' }
+/**
+ * Comparison pages (/vs/<slug>), alphabetical. Their data is in src/lib/compare.
+ * `group` sorts the /vs hub: an agent or IDE maker's own app, or an independent
+ * app. `featured` ones are also linked from the footer.
+ */
+export type ComparisonLink = { slug: string; name: string; group: 'vendor' | 'app'; featured?: true };
+export const COMPARISON_LINKS: ComparisonLink[] = [
+	{ slug: 'agent-orchestrator', name: 'Agent Orchestrator', group: 'app' },
+	{ slug: 'agent-teams', name: 'Agent Teams AI', group: 'app' },
+	{ slug: 'agentgrid', name: 'AgentGrid', group: 'app' },
+	{ slug: 'aionui', name: 'AionUi', group: 'app' },
+	{ slug: 'atlas-agents', name: 'Atlas', group: 'app' },
+	{ slug: 'augment-intent', name: 'Intent', group: 'app' },
+	{ slug: 'automaker', name: 'Automaker', group: 'app' },
+	{ slug: 'baton', name: 'Baton', group: 'app' },
+	{ slug: 'bb', name: 'bb', group: 'app' },
+	{ slug: 'cate', name: 'Cate', group: 'app' },
+	{ slug: 'ccgui', name: 'ccgui', group: 'app' },
+	{ slug: 'claude-desktop', name: 'Claude Code Desktop', group: 'vendor', featured: true },
+	{ slug: 'cmux', name: 'cmux', group: 'app' },
+	{ slug: 'codeg', name: 'Codeg', group: 'app' },
+	{ slug: 'codelayer', name: 'HumanLayer', group: 'app' },
+	{ slug: 'codelegate', name: 'Codelegate', group: 'app' },
+	{ slug: 'codex-app', name: 'ChatGPT desktop app', group: 'vendor', featured: true },
+	{ slug: 'conductor', name: 'Conductor', group: 'app', featured: true },
+	{ slug: 'emdash', name: 'Emdash', group: 'app' },
+	{ slug: 'github-copilot-app', name: 'GitHub Copilot app', group: 'vendor', featured: true },
+	{ slug: 'golutra', name: 'Golutra', group: 'app' },
+	{ slug: 'happy', name: 'Happy', group: 'app' },
+	{ slug: 'jean', name: 'Jean', group: 'app' },
+	{ slug: 'kepler', name: 'Kepler', group: 'app' },
+	{ slug: 'kimi-code', name: 'Kimi Code Desktop', group: 'vendor' },
+	{ slug: 'kiro-crew', name: 'Kiro Crew', group: 'vendor' },
+	{ slug: 'maestro', name: 'Maestro', group: 'app' },
+	{ slug: 'monocode', name: 'MonoCode', group: 'app' },
+	{ slug: 'munder-difflin', name: 'Munder Difflin', group: 'app' },
+	{ slug: 'nezha', name: 'Nezha', group: 'app' },
+	{ slug: 'nodeterm', name: 'nodeterm', group: 'app' },
+	{ slug: 'opencode-desktop', name: 'OpenCode Desktop', group: 'vendor' },
+	{ slug: 'orca', name: 'Orca', group: 'app', featured: true },
+	{ slug: 'org-2', name: 'ORG-2', group: 'app' },
+	{ slug: 'paseo', name: 'Paseo', group: 'app' },
+	{ slug: 'piebald', name: 'Piebald', group: 'vendor' },
+	{ slug: 'polyscope', name: 'Polyscope', group: 'app' },
+	{ slug: 'poolside', name: 'Poolside Assistant for desktop', group: 'vendor' },
+	{ slug: 'shikigami', name: 'Shikigami', group: 'app' },
+	{ slug: 'soloterm', name: 'Solo', group: 'app', featured: true },
+	{ slug: 'supacode', name: 'Supacode', group: 'app' },
+	{ slug: 'superset', name: 'Superset', group: 'app' },
+	{ slug: 'synara', name: 'Synara', group: 'app' },
+	{ slug: 't3-code', name: 'T3 Code', group: 'app' },
+	{ slug: 'verdent', name: 'Verdent', group: 'vendor' },
+	{ slug: 'xum', name: 'Xum', group: 'app' },
+	{ slug: 'zed-delta', name: 'Delta', group: 'app' },
+	{ slug: 'zenflow', name: 'Zenflow', group: 'app' },
+	{ slug: 'zeron', name: 'Zeron', group: 'app' }
 ];
 
 /** `summary` is the nav menu line, `title` the page's H1, `description` its search snippet. */

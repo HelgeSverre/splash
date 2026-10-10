@@ -30,7 +30,7 @@
 {:else if fallback}
 	{@render fallback()}
 {:else}
-	<div class="loading" aria-label="Loading the live demo"><span class="spinner"></span></div>
+	<div class="loading" role="status" aria-label="Loading the live demo"><span class="spinner"></span></div>
 {/if}
 
 <style>

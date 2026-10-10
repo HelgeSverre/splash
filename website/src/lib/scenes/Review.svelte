@@ -28,7 +28,7 @@
 	<div class="review">
 		<div class="diff">
 			<Tabs items={files.map((f, i) => ({ id: String(i), label: f.path.split('/').pop() ?? f.path, prefix: '±' }))} {active} prefix="review-scene" label="Changed files" onselect={(i) => (active = i)} />
-			<div class="pane">
+			<div class="pane" role="tabpanel" id="review-scene-panel-{active}" aria-labelledby="review-scene-tab-{active}">
 				{#if files[Number(active)]}
 					{#key files[Number(active)].path}<DiffTab {session} path={files[Number(active)].path} />{/key}
 				{/if}

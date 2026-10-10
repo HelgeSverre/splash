@@ -16,7 +16,11 @@ export default defineConfig({
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 				runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 			},
-			adapter: adapter({ fallback: '404.html' })
+			adapter: adapter({ fallback: '404.html' }),
+			// Pages with live scenes pull in ~30 small component stylesheets, and on a
+			// phone each one delays the first paint. Inline the small ones; the large
+			// shared ones stay cached files.
+			inlineStyleThreshold: 10_000
 		})
 	],
 	resolve: {

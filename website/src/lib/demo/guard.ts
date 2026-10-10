@@ -7,6 +7,10 @@
 const SCENE = '.splash-ui';
 
 let engaged: Element | null = null;
+let actedAt = -Infinity;
+
+/** Whether the visitor clicked or typed inside a scene within the last `ms`. */
+export const actedInScene = (ms: number) => performance.now() - actedAt < ms;
 
 const sceneOf = (node: Node | null) => (node instanceof Element ? node.closest(SCENE) : node?.parentElement?.closest(SCENE)) ?? null;
 
@@ -27,6 +31,9 @@ export function installSceneGuard() {
 	const remember = (e: Event) => (engaged = sceneOf(e.target as Node));
 	window.addEventListener('pointerdown', remember, true);
 	window.addEventListener('focusin', remember, true);
+	const act = (e: Event) => sceneOf(e.target as Node) && (actedAt = performance.now());
+	window.addEventListener('pointerdown', act, true);
+	window.addEventListener('keydown', act, true);
 
 	const focus = HTMLElement.prototype.focus;
 	HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {

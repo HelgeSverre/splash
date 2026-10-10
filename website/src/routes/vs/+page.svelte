@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Seo from '#lib/components/Seo.svelte';
 	import CompareCard from '#lib/components/CompareCard.svelte';
+	import CompareDirectory from '#lib/components/CompareDirectory.svelte';
 	import JsonLd, { breadcrumbs } from '#lib/components/JsonLd.svelte';
 	import { date } from '#lib/compare/date.ts';
 	import type { PageProps } from './$types';
@@ -24,13 +25,22 @@
 		<p class="lede">
 			Several apps run coding agents in parallel, and they differ in which agents they support, where they run, what they cost and how you review the work. Each page sets one of them beside Splash, fact by fact, with a source for every statement.
 		</p>
-		<p class="meta">{data.cards.length} comparisons · checked {date(data.checked[0])}{#if data.checked.length > 1} to {date(data.checked.at(-1)!)}{/if}</p>
+		<p class="meta">{data.count} comparisons · checked {date(data.checked[0])}{#if data.checked.length > 1}{' '}to {date(data.checked.at(-1)!)}{/if}</p>
 	</div>
 </header>
 
-<section class="wrap grid" aria-label="Comparisons">
-	{#each data.cards as card (card.slug)}<CompareCard {card} />{/each}
-</section>
+{#each [{ title: 'Desktop apps', cards: data.apps }, { title: 'From agent and IDE makers', cards: data.vendors }] as section (section.title)}
+	{#if section.cards.length}
+		<section class="wrap cards" aria-label={section.title}>
+			<h2 class="section">{section.title}</h2>
+			<div class="grid">
+				{#each section.cards as card (card.slug)}<CompareCard {card} />{/each}
+			</div>
+		</section>
+	{/if}
+{/each}
+
+{#if data.directory.length}<CompareDirectory entries={data.directory} checked={data.directoryChecked} />{/if}
 
 <style>
 	.head {
@@ -67,6 +77,14 @@
 		margin: 24px 0 0;
 		color: var(--muted);
 		font: 12.5px var(--font-mono);
+	}
+	.cards + .cards {
+		margin-top: 64px;
+	}
+	.section {
+		margin: 0 0 16px;
+		color: var(--muted);
+		font: var(--fw-medium) 12px var(--font-mono);
 	}
 	.grid {
 		display: grid;

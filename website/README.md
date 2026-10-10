@@ -76,15 +76,19 @@ files the release workflow publishes, newest first. Add the release date to
 ## Comparison pages
 
 `/vs/<slug>` compares Splash with one other tool. The pages are factual, not
-sales copy: every statement about either product cites a public source, and
-the footer's Comparisons column is their only link (not the nav).
+sales copy: every statement about either product cites a public source. They
+are not in the nav: `/vs` lists them all (desktop apps, then apps from agent
+and IDE makers, then a directory of other tools with one source each), and the
+footer's Comparisons column links the ones marked `featured` plus `/vs`.
 
 | File | Role |
 | --- | --- |
 | `src/lib/compare/types.ts` | The `Comparison` shape: intro, product cards, grouped rows, differences, fit, sources. |
 | `src/lib/compare/splash.ts` | Splash's side of every page: `SPLASH`, the `S` answer cells and their sources in this repository. The agent count and version are read from the source. |
 | `src/lib/compare/<slug>.ts` | One comparison's data and sources. |
-| `src/lib/compare/index.ts` | `COMPARISONS`, in footer order. The route, footer, sitemap and share cards read it. |
+| `src/lib/compare/index.ts` | `COMPARISONS`, in slug order. The routes and sitemap read it; it must match `COMPARISON_LINKS` in `site.ts` (slug, name, hub group, `featured`), which the footer and share cards read. |
+| `src/lib/compare/directory.ts` | The directory on `/vs`: tools without a page, one line and one source each. |
+| `src/lib/compare/drafts/` | Drafted pages that haven't been reviewed yet. Nothing imports them; see `docs/comparisons-next.md`. |
 | `src/lib/compare/sources.ts` | Numbers sources in the order a page cites them, and fails the prerender on a statement without a source, an unknown source id, or a source nothing cites. |
 
 `src/routes/vs/[slug]/+page.svelte` is the shared layout, built from
