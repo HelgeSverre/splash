@@ -13,6 +13,8 @@
   import { prefs } from "../lib/prefs.svelte";
   import { showError } from "../lib/system";
   import { foldersFromText } from "../lib/session-history";
+  import { openSettings } from "../lib/customize.svelte";
+  import { serverUnavailable } from "../lib/server.svelte";
   import type { AgentStatus, Isolation } from "../bindings";
 
 
@@ -36,7 +38,8 @@
   }
   const close = () => { if (!busy) app.newSession = null; };
   const agentOff = (a: AgentStatus) => readiness(a).tone === "err";
-  const canStart = $derived(!!projectId && !!agent && !agentOff(agent) && !busy);
+  const readyAgents = $derived(app.agents.filter((a) => !agentOff(a)));
+  const canStart = $derived(!!projectId && !!agent && !agentOff(agent) && !busy && !serverUnavailable());
 
   // The stored default may not be installed or ready: start on one that is.
   $effect(() => {
@@ -47,6 +50,7 @@
   });
 
   async function addFolder() {
+    if (busy || serverUnavailable()) return;
     const p = await pickFolder();
     if (p) projectId = p.id;
   }
@@ -95,8 +99,9 @@
     <ChoiceGroup data-testid="new-session-project" items={app.projects} value={projectId} key={(p) => p.id} title={(p) => p.path} labelledby="ns-project"
       variant="stack" onchange={(p) => (projectId = p.id)}>
       {#snippet item(p)}<span class="name">{p.name}</span><PathLabel path={p.path} muted start />{/snippet}
+      {#snippet empty()}<EmptyState data-testid="new-session-project-empty" inline icon="folder" title="Add a project folder to begin" detail="Splash starts each session in a selected local folder." />{/snippet}
     </ChoiceGroup>
-    <span class="add"><AddButton data-testid="new-session-add-folder" label="Add folder…" onclick={addFolder} /></span>
+    <span class="add"><AddButton data-testid="new-session-add-folder" label="Add folder…" disabled={busy || serverUnavailable()} onclick={addFolder} /></span>
 
     <div class="label t-group" id="ns-agent">Agent</div>
     <ChoiceGroup data-testid="new-session-agent" items={app.agents} value={agentId} key={(a) => a.id} disabled={agentOff} labelledby="ns-agent"
@@ -110,6 +115,10 @@
       {/snippet}
       {#snippet empty()}<EmptyState inline loading title="Detecting agents…" />{/snippet}
     </ChoiceGroup>
+    {#if !app.agentsLoading && app.agents.length && !readyAgents.length}
+      <EmptyState data-testid="new-session-agent-empty" inline icon="agents" title="No agents are ready" detail="Install and sign in to a supported coding agent, then refresh agent detection." />
+      <button class="btn" data-testid="new-session-configure-agents" onclick={() => openSettings("agents")}>Configure agents</button>
+    {/if}
 
     {#if context?.kind === "pull_request"}<label class="desc"><input type="checkbox" data-testid="new-session-pr-head" bind:checked={prHead} disabled={busy} /> Start a new worktree from PR #{context.number} ({context.branch})</label>{/if}
     {#if !prHead}

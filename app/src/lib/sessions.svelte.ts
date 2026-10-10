@@ -4,7 +4,7 @@ import { configurePaths } from "./paths";
 import { dialog } from "@elyra/runtime";
 import { api, type GithubItem, type AgentStatus, type Isolation, type Project, type SessionView, type Status } from "../bindings";
 import type { View } from "./route.svelte";
-import { prefs, setPref } from "./prefs.svelte";
+import { applyPrefsSnapshot, prefs, prefsSnapshotMarker, setPref } from "./prefs.svelte";
 import { showSideTab } from "./layout.svelte";
 import { showError, notifyUser } from "./system";
 import { serverMode } from "./server.svelte";
@@ -12,6 +12,7 @@ import { pickServerFolder } from "./folder-picker.svelte";
 import { dropTranscript, newTranscript, openTranscript } from "./transcripts.svelte";
 import { dropTabs, ensureTabs, openTab } from "./tabs.svelte";
 import { dropWorkspace, ensureWorkspace } from "./workspace.svelte";
+import { dropTerminal } from "../components/TerminalPane.svelte";
 
 export const app = $state({
   projects: [] as Project[],
@@ -55,13 +56,14 @@ let arriving: Project[] | null = null;
 
 export async function loadAll() {
   const arrived: Project[] = (arriving = []);
+  const prefsMarker = prefsSnapshotMarker();
   const [projects, sessions, settings, info] = await Promise.all([api.list_projects(), api.list_sessions(), api.get_settings(), api.app_info()])
     .finally(() => { if (arriving === arrived) arriving = null; });
   configurePaths(info);
   app.projects = projects;
   for (const p of arrived) if (!projects.some((x) => x.id === p.id)) addSorted(p);
   app.sessions = sessions;
-  Object.assign(prefs, settings);
+  applyPrefsSnapshot(settings, prefsMarker);
   await refreshAgents(false);
 }
 
@@ -157,6 +159,7 @@ function forgetSession(id: string) {
   dropTranscript(id);
   dropTabs(id);
   dropWorkspace(id);
+  dropTerminal(id);
   delete drafts[id];
   delete previousStatus[id];
   delete app.unread[id];

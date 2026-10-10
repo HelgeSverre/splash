@@ -1,6 +1,8 @@
 // The transcript: streamed messages and tools, thinking, permissions, stopping
 // a turn, slash commands, usage, and an agent that dies mid-turn.
 import { expect, test } from "../../fixtures.ts";
+import type { Page } from "@playwright/test";
+import { App } from "../../support/app.ts";
 import { Attention } from "../../support/views.ts";
 
 test("a turn streams text and tools, then retitles the session from the prompt", async ({ splash }) => {
@@ -15,6 +17,44 @@ test("a turn streams text and tools, then retitles the session from the prompt",
   await app.expectStatus("idle");
   await expect(app.title).toHaveText("What does subtract do?");
   await expect(app.sessionRow("What does subtract do?")).toBeVisible();
+});
+
+test("live transcript updates survive an older delayed snapshot", async ({ splash }) => {
+  const { app, page, backend, harness } = splash;
+  const id = await app.newSession({ where: "in_place" });
+  let releaseSnapshot!: () => void;
+  const snapshotReleased = new Promise<void>((resolve) => (releaseSnapshot = resolve));
+  let snapshotCaptured = false;
+  let other: Page | undefined;
+
+  await page.route("**/__cmd/open_session", async (route) => {
+    // Capture a real, empty snapshot before the other client starts a turn.
+    const response = await route.fetch();
+    snapshotCaptured = true;
+    await snapshotReleased;
+    await route.fulfill({ response });
+  }, { times: 1 });
+
+  try {
+    await app.sessionRow("New session").click();
+    await expect.poll(() => snapshotCaptured).toBe(true);
+
+    other = await page.context().newPage();
+    const otherApp = new App(other, harness);
+    await other.goto(`${backend.url}/#/session/${encodeURIComponent(id)}`);
+    await otherApp.waitReady();
+    await otherApp.composer.fill("What does subtract do?");
+    await otherApp.composer.press("Enter");
+    await expect(otherApp.entries("agent")).toContainText("subtracts instead of adding");
+
+    releaseSnapshot();
+    await expect(app.entries("user")).toContainText("What does subtract do?");
+    await expect(app.entries("agent")).toContainText("subtracts instead of adding");
+  } finally {
+    releaseSnapshot();
+    await other?.close();
+    await page.unroute("**/__cmd/open_session");
+  }
 });
 
 test("an agent's own title replaces the prompt title", async ({ splash }) => {
@@ -151,6 +191,72 @@ test("an agent without commands shows no slash menu", async ({ splash }) => {
   await expect(app.slashMenu).toHaveCount(0);
 });
 
+test("Enter that confirms an IME candidate keeps the composer draft", async ({ splash }) => {
+  const { app, world } = splash;
+  await app.newSession({ where: "in_place" });
+  await app.composer.fill("unfinished candidate");
+
+  // WebKit can report this composition-confirming Enter after compositionend,
+  // with isComposing already false. It still has legacy keyCode 229.
+  await app.composer.evaluate((element) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, key: "Enter" });
+    Object.defineProperty(event, "keyCode", { value: 229 });
+    element.dispatchEvent(event);
+  });
+  await expect(app.composer).toHaveValue("unfinished candidate");
+  await expect(app.entries("user")).toHaveCount(0);
+
+  await app.composer.press("Enter");
+  await expect.poll(() => world.agents.requests("claude", "session/prompt")).toHaveLength(1);
+  await expect(app.composer).toHaveValue("");
+});
+
+test("returning to Chat follows output that arrived while Log was open", async ({ splash }) => {
+  const { app, world } = splash;
+  world.agents.fixture("claude", "claude/cancel.jsonl");
+  world.agents.speed("claude", 1);
+  await app.newSession({ where: "in_place" });
+  await app.send("Write a long essay");
+  await expect(app.entries("agent")).toContainText("Addition is often");
+
+  await app.openLogButton.click();
+  await expect(app.sessionTab("log")).toHaveAttribute("aria-selected", "true");
+  // Let enough output arrive for the transcript to overflow while its scroller
+  // is hidden by the Log pane.
+  await expect(app.entries("agent")).toContainText("This sounds obvious");
+
+  await app.sessionTab("chat").click();
+  await expect.poll(() => app.transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight)).toBeLessThanOrEqual(2);
+});
+
+test("session controls remain reachable in a narrow centre pane", async ({ splash }) => {
+  const { app, page } = splash;
+  await page.setViewportSize({ width: 900, height: 560 });
+  await app.newSession({ where: "in_place" });
+
+  const controls = [app.title, app.status, app.terminalToggle, app.panelToggle, app.composer, app.sendButton];
+  const boxes = await Promise.all(controls.map((control) => control.boundingBox()));
+  expect(boxes.every((box) => box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 900 && box.y + box.height <= 560)).toBe(true);
+});
+
+test("resizing the terminal follows a pinned transcript but preserves a reader's position", async ({ splash }) => {
+  const { app, page } = splash;
+  await page.setViewportSize({ width: 900, height: 560 });
+  await app.newSession({ where: "in_place" });
+  await app.prompt("Inspect the calculation demo");
+
+  const distanceFromBottom = () => app.transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight);
+  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(2);
+
+  await app.terminalToggle.click();
+  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(2);
+
+  await app.transcript.evaluate((element) => { element.scrollTop = 0; });
+  await expect.poll(() => app.transcript.evaluate((element) => element.scrollTop)).toBe(0);
+  await app.terminalToggle.click();
+  await expect.poll(() => app.transcript.evaluate((element) => element.scrollTop)).toBe(0);
+});
+
 test("context use and cost are shown and kept across a restart", async ({ splash }) => {
   const { app } = splash;
   await app.newSession({ where: "in_place" });
@@ -227,51 +333,4 @@ test.describe("Amp", () => {
       expect.objectContaining({ configId: "amp-mode", value: "low" }),
     ]);
   });
-});
-
-
-test("returning to Chat follows output that arrived while Log was open", async ({ splash }) => {
-  const { app, world } = splash;
-  world.agents.fixture("claude", "claude/cancel.jsonl");
-  world.agents.speed("claude", 1);
-  await app.newSession({ where: "in_place" });
-  await app.send("Write a long essay");
-  await expect(app.entries("agent")).toContainText("Addition is often");
-
-  await app.openLogButton.click();
-  await expect(app.sessionTab("log")).toHaveAttribute("aria-selected", "true");
-  // Let enough output arrive for the transcript to overflow while its scroller
-  // is hidden by the Log pane.
-  await expect(app.entries("agent")).toContainText("This sounds obvious");
-
-  await app.sessionTab("chat").click();
-  await expect.poll(() => app.transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight)).toBeLessThanOrEqual(2);
-});
-
-test("session controls remain reachable in a narrow centre pane", async ({ splash }) => {
-  const { app, page } = splash;
-  await page.setViewportSize({ width: 900, height: 560 });
-  await app.newSession({ where: "in_place" });
-
-  const controls = [app.title, app.status, app.terminalToggle, app.panelToggle, app.composer, app.sendButton];
-  const boxes = await Promise.all(controls.map((control) => control.boundingBox()));
-  expect(boxes.every((box) => box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 900 && box.y + box.height <= 560)).toBe(true);
-});
-
-test("resizing the terminal follows a pinned transcript but preserves a reader's position", async ({ splash }) => {
-  const { app, page } = splash;
-  await page.setViewportSize({ width: 900, height: 560 });
-  await app.newSession({ where: "in_place" });
-  await app.prompt("Inspect the calculation demo");
-
-  const distanceFromBottom = () => app.transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight);
-  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(2);
-
-  await app.terminalToggle.click();
-  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(2);
-
-  await app.transcript.evaluate((element) => { element.scrollTop = 0; });
-  await expect.poll(() => app.transcript.evaluate((element) => element.scrollTop)).toBe(0);
-  await app.terminalToggle.click();
-  await expect.poll(() => app.transcript.evaluate((element) => element.scrollTop)).toBe(0);
 });

@@ -9,12 +9,13 @@
   import SettingsRow from "./SettingsRow.svelte";
   import { app, refreshAllAgents } from "../../lib/sessions.svelte";
   import { readiness, transportLabel } from "../../lib/agents";
+  import { serverUnavailable } from "../../lib/server.svelte";
 </script>
 
 <div class="set-page">
   <PageHeader title="Agents">
     {#snippet actions()}
-      <IconButton title="Refresh all agents" icon="refresh" loading={app.agentsLoading} onclick={refreshAllAgents} />
+      <IconButton data-testid="settings-agents-refresh" title="Refresh all agents" icon="refresh" loading={app.agentsLoading} disabled={serverUnavailable()} onclick={refreshAllAgents} />
     {/snippet}
     {#snippet lede()}Agents connect over ACP, natively or through an adapter. Refreshing is free.{/snippet}
   </PageHeader>
