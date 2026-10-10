@@ -83,8 +83,12 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
+    // Older WebKit can deliver the Enter used to confirm an IME candidate
+    // after compositionend. keyCode 229 still identifies that keystroke.
+    // Check before SlashMenu so a partial command cannot be completed either.
+    if (e.isComposing || e.keyCode === 229) return;
     if (menu?.keydown(e)) return;
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
     }
@@ -152,7 +156,7 @@
 <style>
   .resume-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: var(--fs-xs); padding-bottom: 10px; }
 
-  .composer { position: relative; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 28px 12px; }
+  .composer { position: relative; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 28px 12px; container-type: inline-size; }
   .chips { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; min-width: 0; }
   .chip {
     display: inline-flex; align-items: center; gap: 6px;
@@ -171,4 +175,8 @@
   .box :global(.stop) { color: var(--err); }
   .box :global(.stop:is(:hover, :focus-visible)) { background: var(--del-bg); color: var(--err); }
   .controls { display: flex; align-items: center; gap: 2px; margin-top: 6px; padding: 0 2px; min-height: var(--control-h-xs); }
+
+  @container (max-width: 400px) {
+    textarea { max-height: 180px; }
+  }
 </style>

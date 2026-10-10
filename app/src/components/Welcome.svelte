@@ -3,8 +3,11 @@
   import Kbd from "./Kbd.svelte";
   import { shortcut } from "../lib/keybindings.svelte";
   import { app } from "../lib/sessions.svelte";
+  import { readiness } from "../lib/agents";
   import { openSettings } from "../lib/customize.svelte";
-  const ready = $derived(app.agents.filter((a) => a.installed && a.auth !== "logged_out"));
+  // Keep this count aligned with the New session dialog: an installed adapter
+  // is not usable until the program that launches it is available too.
+  const ready = $derived(app.agents.filter((a) => readiness(a).tone !== "err"));
 </script>
 
 <div class="welcome" data-testid="welcome">

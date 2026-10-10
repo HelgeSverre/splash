@@ -46,6 +46,7 @@ test("a lost connection keeps drafts and blocks sending until it returns", async
   await expect(connection.message).toHaveText("Connection lost · reconnecting");
   await expect(connection.error).toHaveText("Check that the server and SSH tunnel are running. Your drafts are kept here.");
   await expect(app.sendButton).toBeDisabled();
+  await expect(app.addProjectButton).toBeDisabled();
   await expect(app.composer).toHaveValue("Keep this draft");
   await expect(connection.retry).toBeVisible();
 
@@ -54,6 +55,44 @@ test("a lost connection keeps drafts and blocks sending until it returns", async
   await connection.expectStatus("online");
   await expect(app.composer).toHaveValue("Keep this draft");
   await expect(app.sendButton).toBeEnabled();
+});
+
+test("sign out handles a lost tunnel immediately", async ({ splash }) => {
+  const { page } = splash;
+  const connection = new Connection(page);
+
+  // Signing out uses a normal HTTP endpoint rather than the IPC bridge. It
+  // must still move the banner to its useful offline state without waiting for
+  // the five-second health check.
+  await page.route("**/logout", (route) => route.abort("connectionrefused"));
+  await page.route("**/__server/state", (route) => route.abort("connectionrefused"));
+  await connection.signOut.click();
+  await connection.expectStatus("offline");
+  await expect(connection.retry).toBeVisible();
+  await expect(connection.error).toHaveText("Check that the server and SSH tunnel are running. Your drafts are kept here.");
+  await expect(connection.message).toHaveText("Connection lost · reconnecting");
+  await page.unroute("**/logout");
+  await page.unroute("**/__server/state");
+});
+
+test("a server error while signing out keeps the connection online", async ({ splash }) => {
+  const { app, page } = splash;
+  const connection = new Connection(page);
+  await page.route("**/logout", (route) => route.fulfill({ status: 500, body: "temporary server error" }));
+  await connection.signOut.click();
+  await connection.expectStatus("online");
+  await expect(app.ui.errorToasts.filter({ hasText: "Could not sign out (500)" })).toBeVisible();
+  await page.unroute("**/logout");
+});
+
+test("signing out after the session expires returns to login", async ({ splash }) => {
+  const { page } = splash;
+  const connection = new Connection(page);
+  // A session cleared by another tab must lead to login instead of leaving a
+  // stale, apparently connected workspace after a no-op Sign out click.
+  await page.context().clearCookies();
+  await connection.signOut.click();
+  await expect(new Login(page).token).toBeVisible();
 });
 
 test("after a server restart the workspace is restored and the agent reconnects", async ({ splash }) => {

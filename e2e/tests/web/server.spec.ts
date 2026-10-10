@@ -131,6 +131,7 @@ test("a server with a new token asks to sign in again", async ({ splash }) => {
 
   await connection.expectStatus("auth", 15_000);
   await expect(connection.message).toHaveText("Sign in again to reconnect");
+  await expect(connection.error).toHaveCount(0);
   await expect(app.sendButton).toBeDisabled();
   // The old sign-in no longer counts for anything.
   const res = await page.request.post(backend.url + "/__cmd/list_sessions", { headers: { origin: backend.url } });

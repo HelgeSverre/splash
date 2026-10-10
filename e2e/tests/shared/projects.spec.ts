@@ -1,6 +1,6 @@
 // Projects and sessions: adding and removing projects, starting sessions in
 // place or in a worktree, renaming, archiving and deleting them.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "../../fixtures.ts";
 import { branchExists, status } from "../../support/git.ts";
@@ -69,6 +69,29 @@ test("a session in a worktree gets its own branch and folder", async ({ splash }
   await expect(app.detail("base")).toHaveText(row.base_sha!.slice(0, 10));
   await app.sideTab("changes").click();
   await expect(new Workbench(app.page).changesBase).toHaveText(`vs ${row.base_sha!.slice(0, 7)}`);
+});
+
+test("a moved project reports its Git error and can start after the folder returns", async ({ splash }) => {
+  const { app, world, db } = splash;
+  await app.newSessionButton.click();
+  await expect(app.newSessionDialog).toBeVisible();
+  await app.dialogChoice("agent", "claude").click();
+  await app.dialogChoice("where", "worktree").click();
+  renameSync(world.repo, world.repo + "-moved");
+  await app.dialogStart.click();
+
+  const failure = app.ui.toasts.filter({ hasText: "git:" });
+  await expect(failure).toBeVisible();
+  await expect(failure).not.toContainText("the repository has no commits yet");
+  await expect(app.newSessionDialog).toBeVisible();
+  await expect(app.dialogStart).toBeEnabled();
+  expect(db.sessions()).toEqual([]);
+
+  renameSync(world.repo + "-moved", world.repo);
+  await app.dialogStart.click();
+  await expect(app.newSessionDialog).toBeHidden();
+  await app.expectStatus("idle");
+  expect(db.sessions()).toHaveLength(1);
 });
 
 test("a session in place works in the project folder", async ({ splash }) => {
