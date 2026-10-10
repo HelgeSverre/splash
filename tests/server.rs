@@ -703,40 +703,40 @@ fn incomplete_bodies_expire_without_breaking_a_long_event_connection() {
     for client in 0..PARTIAL_BODIES {
         let mut partial = TcpStream::connect(("127.0.0.1", port)).unwrap();
         let framing = if client + 1 == PARTIAL_BODIES {
-            "Transfer-Encoding: chunked\r\n"
-        } else if client + 2 == PARTIAL_BODIES {
-            "Expect: 100-continue\r\nContent-Length: 1\r\n"
+            // Transfer-Encoding takes precedence over Content-Length. Expect
+            // gives this chunked body an admission acknowledgement too.
+            "Expect: 100-continue\r\nTransfer-Encoding: chunked\r\nContent-Length: 1\r\n"
         } else {
-            "Content-Length: 1025\r\n"
+            "Expect: 100-continue\r\nContent-Length: 1025\r\n"
         };
         partial
             .write_all(
                 format!(
                     "POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: body-timeout-{client}\r\nContent-Type: application/msgpack\r\n{framing}\r\n"
-                )
-                .as_bytes(),
             )
-            .unwrap();
+            .as_bytes(),
+        )
+        .unwrap();
+        let continued = read_response(&mut partial, Duration::from_secs(2))
+            .expect("body holder was not admitted before saturation check");
+        assert_eq!(
+            status(&continued),
+            100,
+            "body holder did not reach its streaming reader"
+        );
         partials.push(partial);
     }
 
-    let saturation_deadline = std::time::Instant::now() + Duration::from_secs(2);
-    loop {
-        let command = http(
-            port,
-            &list_sessions_request(port, &cookie, &ipc, "body-timeout-saturated"),
-            Duration::from_secs(1),
-            "list_sessions while incomplete bodies occupy command capacity",
-        );
-        if status(&command) == 503 {
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < saturation_deadline,
-            "incomplete bodies did not occupy command capacity"
-        );
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    // Each 100 Continue is emitted by Request::as_reader only after this
+    // request acquired its command permit. This proves all 32 permits are held
+    // before checking that a normal command is rejected.
+    let saturated = http(
+        port,
+        &list_sessions_request(port, &cookie, &ipc, "body-timeout-saturated"),
+        Duration::from_secs(2),
+        "list_sessions while admitted incomplete bodies occupy command capacity",
+    );
+    assert_eq!(status(&saturated), 503);
 
     // The server's ten-second body inactivity timeout must release permits even
     // when the clients keep their connections open.
@@ -752,6 +752,34 @@ fn incomplete_bodies_expire_without_breaking_a_long_event_connection() {
     );
     assert_eq!(status(&recovered), 200);
     drop(partials);
+
+    // These no-Expect holders cover the two other streaming classifications.
+    // Keep their sockets open until the inactivity timeout itself returns 408,
+    // rather than relying on a client disconnect to release the permits.
+    let mut declared = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    declared
+        .write_all(
+            format!(
+                "POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: body-timeout-declared\r\nContent-Type: application/msgpack\r\nContent-Length: 1025\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let mut chunked = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    chunked
+        .write_all(
+            format!(
+                "POST /__cmd/list_sessions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: {cookie}\r\nx-elyra-token: {ipc}\r\nx-elyra-client-id: body-timeout-chunked\r\nContent-Type: application/msgpack\r\nTransfer-Encoding: chunked\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    std::thread::sleep(Duration::from_secs(11));
+    for (name, holder) in [("declared", &mut declared), ("chunked", &mut chunked)] {
+        let expired = read_response(holder, Duration::from_secs(2))
+            .unwrap_or_else(|error| panic!("{name} body did not time out: {error}"));
+        assert_eq!(status(&expired), 408, "{name} body did not return 408");
+    }
 
     // Reaching Take's body-size cap is still a partial EqualReader body. The
     // declared length is intentionally absurd: after aborting the read side,
