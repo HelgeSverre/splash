@@ -179,6 +179,27 @@ jobs:
             e2e/playwright-report
             e2e/test-results
           retention-days: 7
+  website:
+    name: Website from a clean checkout
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.1'
+      # Shared app components must resolve dependencies from website alone,
+      # just as they do on Vercel. Installing app first hides missing packages.
+      - name: Build without installed app dependencies
+        working-directory: website
+        run: |
+          test ! -d ../app/node_modules
+          bun install --frozen-lockfile
+          bun run build
+          test ! -d ../app/node_modules
   packages:
     name: Installable artifacts
     uses: ./.github/workflows/packages.yml

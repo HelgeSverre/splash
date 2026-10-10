@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // bare imports must resolve to this package's copies (one Svelte runtime), and
 // `@elyra/runtime` resolves to an in-browser demo backend instead of the IPC
 // bridge to Rust.
-const SHARED = ['svelte', 'diff', 'dompurify', 'highlight.js', 'marked', 'mermaid', '@mermaid-js/layout-elk', 'remend', '@fontsource-variable/inter', '@fontsource-variable/jetbrains-mono'];
+const SHARED = ['svelte', 'diff', 'dompurify', 'highlight.js', 'marked', 'mermaid', '@mermaid-js/layout-elk', 'remend', '@fontsource-variable/inter', '@fontsource-variable/jetbrains-mono', '@xterm/xterm', '@xterm/addon-fit'];
 
 export default defineConfig({
 	plugins: [
