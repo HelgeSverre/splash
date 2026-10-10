@@ -12,6 +12,24 @@ covers it:
 
     cargo test --manifest-path vendor/tiny_http/Cargo.toml --lib task_pool
 
+Splash also adds request-scoped incoming-body controls. `Request` now exposes
+`set_body_read_timeout` and `abort_body`. The former applies an inactivity
+timeout only while the host consumes a streaming request body; the latter
+closes the read side before an unfinished `EqualReader` is dropped. This avoids
+its upstream keep-alive drain blocking the host after an incomplete upload. A
+request-owned timeout lease clears the deadline as a streaming body reaches EOF,
+before its sequential reader releases a pipelined request. Later host cleanup is
+generation-checked, so it cannot clear a newer request's deadline; request drop
+also leaves timeouts untouched. This keeps idle keep-alive connections and
+long-poll responses outside the body timeout. Enabling the timeout on a TLS
+stream returns `Unsupported` because this vendored transport cannot safely
+apply the socket timeout there; clearing it is a no-op. The timeout state is applied by the active reader on
+each read, while an aborted body interrupts only that read half and preserves
+the response writer. `EqualReader` drains in fixed-size chunks, so an aborted
+request with an arbitrary declared Content-Length cannot allocate a buffer
+proportional to the remaining body.
+
 `Cargo.toml` drops the dev-dependencies and allows the `unused` lints that newer
-compilers raise in the upstream source. All other behavior is upstream. Remove the patch when an upstream release fixes
-the pool.
+compilers raise in the upstream source. All other behavior is upstream. Revisit
+the patch when an upstream release provides equivalent queued-task accounting
+and request body controls.

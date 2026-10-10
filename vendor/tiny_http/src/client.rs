@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 
 use crate::common::{HTTPVersion, Method};
-use crate::util::RefinedTcpStream;
+use crate::util::{ReadTimeout, RefinedTcpStream};
 use crate::util::{SequentialReader, SequentialReaderBuilder, SequentialWriterBuilder};
 use crate::Request;
 
@@ -28,6 +28,8 @@ pub struct ClientConnection {
 
     // Reader to read the next header from
     next_header_source: SequentialReader<BufReader<RefinedTcpStream>>,
+
+    read_timeout: ReadTimeout,
 
     // set to true if we know that the previous request is the last one
     no_more_requests: bool,
@@ -54,6 +56,7 @@ impl ClientConnection {
     ) -> ClientConnection {
         let remote_addr = read_socket.peer_addr();
         let secure = read_socket.secure();
+        let read_timeout = read_socket.read_timeout();
 
         let mut source = SequentialReaderBuilder::new(BufReader::with_capacity(1024, read_socket));
         let first_header = source.next().unwrap();
@@ -63,6 +66,7 @@ impl ClientConnection {
             sink: SequentialWriterBuilder::new(BufWriter::with_capacity(1024, write_socket)),
             remote_addr,
             next_header_source: first_header,
+            read_timeout,
             no_more_requests: false,
             secure,
         }
@@ -153,6 +157,7 @@ impl ClientConnection {
             *self.remote_addr.as_ref().unwrap(),
             data_source,
             writer,
+            Some(self.read_timeout.clone()),
         )
         .map_err(|e| {
             use crate::request;
