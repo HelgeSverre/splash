@@ -184,6 +184,34 @@ test("slash commands complete from the agent's list", async ({ splash }) => {
   await expect(app.slashMenu).toHaveCount(0);
 });
 
+test("IME Enter does not complete an open slash command", async ({ splash }) => {
+  const { app } = splash;
+  await app.newSession({ where: "in_place" });
+  await app.prompt("What does subtract do?");
+  const userEntries = await app.entries("user").count();
+  await app.composer.fill("/cont");
+  await expect(app.slashMenu).toBeVisible();
+
+  await app.composer.evaluate((element) => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter", isComposing: true }));
+  });
+  await expect(app.composer).toHaveValue("/cont");
+  await expect(app.slashMenu).toBeVisible();
+
+  await app.composer.evaluate((element) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, key: "Enter" });
+    Object.defineProperty(event, "keyCode", { value: 229 });
+    element.dispatchEvent(event);
+  });
+  await expect(app.composer).toHaveValue("/cont");
+  await expect(app.slashMenu).toBeVisible();
+  await expect(app.entries("user")).toHaveCount(userEntries);
+
+  await app.composer.press("Enter");
+  await expect(app.composer).toHaveValue("/context ");
+  await expect(app.slashMenu).toHaveCount(0);
+});
+
 test("an agent without commands shows no slash menu", async ({ splash }) => {
   const { app } = splash;
   await app.newSession({ agent: "glue", where: "in_place" });
