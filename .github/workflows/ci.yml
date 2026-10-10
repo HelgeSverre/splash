@@ -60,7 +60,9 @@ jobs:
           just frontend
           node --experimental-strip-types --test app/tests/*.test.ts
       - name: Native checks and tests
-        run: just check
+        run: |
+          just check
+          cargo test --manifest-path vendor/tiny_http/Cargo.toml --lib
       - name: Build native desktop and separate headless server
         run: |
           cargo build --locked --bin splash

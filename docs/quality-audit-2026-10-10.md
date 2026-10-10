@@ -96,6 +96,13 @@ Separate held-open declared and chunked uploads without `Expect` still verify 40
 Default and headless server suites and an isolated Linux amd64 Docker run passed
 with that synchronization fix; runtime code was unchanged.
 
+That synchronized regression then exposed a Windows transport failure: admitted
+uploads stayed blocked instead of returning 408 after ten seconds. The transport
+now applies the selected timeout immediately before reads on the actual reader
+and shares abort state with cleanup. Native Windows validation of this follow-up
+is pending; no particular socket-clone behavior is treated as a proven cause.
+The native CI lane also runs the vendored transport unit tests directly.
+
 One long Docker command did not finish its native wrapper phase within its outer
 deadline. That run is not counted as a native success. A bounded fresh native
 retake subsequently emitted the renderer-loaded and IPC-round-trip success line.
@@ -133,7 +140,7 @@ managed worktree. Review is split into six draft stacked PRs, in this review and
 [backend recovery #2](https://github.com/HelgeSverre/splash/pull/2),
 [terminal and layout #3](https://github.com/HelgeSverre/splash/pull/3),
 [client recovery #4](https://github.com/HelgeSverre/splash/pull/4),
-[history and workbench #5](https://github.com/HelgeSverre/splash/pull/5), and
+[history and workbench #5](https://github.com/HelgeSverre/splash/pull/5),
 [validation and evidence #6](https://github.com/HelgeSverre/splash/pull/6), and
 [HTTP request timeouts #7](https://github.com/HelgeSverre/splash/pull/7).
 Merge commits preserve stack ancestry; retarget the next PR to `main` after
