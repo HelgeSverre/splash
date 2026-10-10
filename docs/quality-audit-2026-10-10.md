@@ -88,6 +88,14 @@ The log helper now reads only newline-terminated records and still rejects
 malformed complete records. Both helper unit tests and the desktop/web IME
 regressions passed, followed by a full 265-test rerun. A later slash-menu IME regression reproduced the unwanted completion in both browser modes before the fix; the composition guard now precedes menu dispatch. Its red/green checks and the final 267-test suite passed.
 
+The first final timeout-PR matrix failed its new admission assertion on Ubuntu
+and Windows: sending request headers did not prove that all 32 body readers had
+acquired permits. The regression now waits for each holder's `100 Continue`,
+which is emitted after admission, before checking 503 and automatic recovery.
+Separate held-open declared and chunked uploads without `Expect` still verify 408.
+Default and headless server suites and an isolated Linux amd64 Docker run passed
+with that synchronization fix; runtime code was unchanged.
+
 One long Docker command did not finish its native wrapper phase within its outer
 deadline. That run is not counted as a native success. A bounded fresh native
 retake subsequently emitted the renderer-loaded and IPC-round-trip success line.
