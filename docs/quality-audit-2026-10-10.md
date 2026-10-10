@@ -19,6 +19,7 @@ not establish compatibility with authenticated production providers.
 | Interrupted agents | Startup did not share a total timeout across initialize and new/load/resume requests. Stale streaming entries or tools could appear unfinished after restart. | One 180-second startup deadline covers the whole sequence. Actor restoration and cold transcript reads settle interrupted messages, tools, and permissions. Paused-clock actor and fresh-Hub tests cover both paths. Cold reads leave stored checkpoints untouched. |
 | Tool failures | A pending tool could appear completed when the agent failed. | Pending and in-progress tools become failed. Mapper and lifecycle tests cover interrupted states. |
 | HTTP capacity | Idle event polls could occupy the command pool and block ordinary operations. | Event polls have a separate bounded pool. An HTTP test fills that pool, proves overflow, and then completes an authenticated command. |
+| Stalled uploads | An incomplete request body could hold a request permit indefinitely; rejecting it could block cleanup, and declared lengths could cause an oversized drain allocation. | Streaming bodies have a ten-second read inactivity timeout. Timeout and admission rejection close the read side before cleanup; oversized bodies retain the size error without draining forever. Cleanup uses an 8 KiB buffer. The transport regression saturates capacity with declared, chunked and `100-continue` bodies, keeps their sockets open through recovery, checks an oversized body with an extreme declared length, and reuses a complete-upload connection for an event response lasting beyond the timeout. |
 | Sign out | An HTTP error from logout could be mistaken for an unreachable server. | Transport failures show offline guidance; HTTP failures retain online state and report the response. Unauthorized logout returns to login. Web server tests cover each outcome. |
 | Agent history | Another import action could overlap a pending import; action buttons crowded the history bar. | Import controls stay disabled while saving. History actions open from a vertical ellipsis menu with keyboard navigation and disabled-state guidance. Shared history tests cover imports and menu interactions. |
 | Missing folders | A deleted or moved workspace looked like an empty directory. | Files displays a readable error, including failed nested folders. Rust directory tests and shared workbench tests distinguish absent folders from empty ones. |
@@ -61,16 +62,17 @@ test installation on a machine without that runtime.
 
 | Check | Evidence |
 | --- | --- |
-| Local quality gate | `just check`: 96 Rust tests passed; formatting, Clippy, CSS tokens, focus and copy checks passed; Svelte reported zero errors and warnings. |
+| Local quality gate | `just check`: 97 Rust tests passed; formatting, Clippy, CSS tokens, focus and copy checks passed; Svelte reported zero errors and warnings. |
 | Frontend and server client | `just frontend` passed; all 15 `app/tests/*.test.ts` tests passed; the freshly built headless server passed `scripts/test-server-http.py`. |
-| macOS server archive | The final macOS arm64 server archive passed checksum verification and the HTTP smoke with a fresh HOME/data directory and `/usr/bin:/bin` PATH. |
+| macOS server archive | The macOS arm64 server archive from application snapshot `a18f842` passed checksum verification and the HTTP smoke with a fresh HOME/data directory and `/usr/bin:/bin` PATH. |
 | Browser workflows | The final local suite passed 267 tests with nine intentional skips. All 30 project tests also passed separately, including moved-folder recovery in both harnesses. |
 | Native matrix | [CI run 38006450744](https://github.com/HelgeSverre/splash/actions/runs/38006450744), at application snapshot `a18f842`, passed all ten jobs: macOS arm64/x64, Windows MSVC, Ubuntu x64, desktop and headless builds, native renderer readiness, browser flows and package smoke. Each cumulative [stacked PR](https://github.com/HelgeSverre/splash/pull/6) repeats this matrix. |
 | Clean native x64 Docker | Rust terminal tests, default/headless checks, 18 terminal/workbench browser flows and native renderer/IPC readiness passed. A separate full run passed 263 browser tests with nine skips. |
-| Linux packages | Downloaded CI packages passed checksum verification, fresh apt dependency installation, extracted-AppImage/raw-DEB/installed-DEB native renderer readiness and isolated server HTTP checks. AppImage internal executable modes were checked before ordinary-user execution. |
-| Normal AppImage launch | The final CI AppImage also passed direct FUSE-mounted launch in a fresh Ubuntu 24.04 container, with `libfuse2t64`, `fuse3`, `/dev/fuse`, UID 1001 and a fresh TMPDIR. No extraction flag/environment override or WebKit sandbox override was used. |
-| Windows packages | Downloaded CI installer and portable archive passed checksum verification and frontend readiness under a fresh non-admin account. Installation/uninstallation succeeded and user data survived uninstall. |
+| Linux packages | CI packages from application snapshot `a18f842` passed checksum verification, fresh apt dependency installation, extracted-AppImage/raw-DEB/installed-DEB native renderer readiness and isolated server HTTP checks. AppImage internal executable modes were checked before ordinary-user execution. |
+| Normal AppImage launch | The CI AppImage from application snapshot `a18f842` also passed direct FUSE-mounted launch in a fresh Ubuntu 24.04 container, with `libfuse2t64`, `fuse3`, `/dev/fuse`, UID 1001 and a fresh TMPDIR. No extraction flag/environment override or WebKit sandbox override was used. |
+| Windows packages | The CI installer and portable archive from application snapshot `a18f842` passed checksum verification and frontend readiness under a fresh non-admin account. Installation/uninstallation succeeded and user data survived uninstall. |
 | Windows terminal | All four native terminal regressions passed independently on Windows PowerShell 5.1.26100.33451; the same regressions passed on the Windows CI runner. |
+| HTTP transport | All eight server integration tests passed with default and headless features; all 11 vendored HTTP-library tests passed. Read timeouts apply while streaming bodies are consumed and are cleared before idle keep-alive/event traffic. |
 | Audit cleanup guard | Mock AWS regressions refuse mismatched instance/account pins and extra or managed/unattached network interfaces before any destructive request; the helper is included in CI. |
 | Documentation captures | Real first-run, populated, minimum-window, history menu/dialog and offline states were captured and inspected; native Linux and Windows captures use finished CI packages. |
 
@@ -119,12 +121,12 @@ and native-validation lane. These choices were presented together for review.
 ## Audit isolation
 
 The audit branch is `feature/quality-audit`, based on `7b04cd8`, in a separate
-managed worktree. Review is split into five draft stacked PRs, in this review and merge order:
+managed worktree. Review is split into six draft stacked PRs, in this review and merge order:
 [backend recovery #2](https://github.com/HelgeSverre/splash/pull/2),
 [terminal and layout #3](https://github.com/HelgeSverre/splash/pull/3),
 [client recovery #4](https://github.com/HelgeSverre/splash/pull/4),
 [history and workbench #5](https://github.com/HelgeSverre/splash/pull/5), and
-[validation and evidence #6](https://github.com/HelgeSverre/splash/pull/6).
+[validation and evidence #6](https://github.com/HelgeSverre/splash/pull/6), followed by the focused HTTP timeout fix on `feature/quality-6-request-timeouts`.
 Merge commits preserve stack ancestry; retarget the next PR to `main` after
 its predecessor merges. Squash or rebase merges require restacking descendants.
 Nothing has been merged as part of the audit. The original checkout and its existing edits were left alone.
