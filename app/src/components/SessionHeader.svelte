@@ -62,7 +62,7 @@
       PR #{git.pr.number}<Tag tone={PR_TONE[git.pr.state.toLowerCase()] ?? "default"}>{git.pr.state.toLowerCase()}</Tag>
     </button>
   {/if}
-  <span class="status {session.status}" data-testid="session-status" data-status={session.status}><span class="dot {session.status}"></span>{statusLabel(session.status)}</span>
+  <span class="status {session.status}" data-testid="session-status" data-status={session.status}><span class="dot {session.status}"></span><span class="status-label">{statusLabel(session.status)}</span></span>
   {#if session.archived}<Tag data-testid="session-archived" tone="muted">archived</Tag>{/if}
 
   <span class="spacer"></span>
@@ -78,6 +78,7 @@
   header {
     display: flex; align-items: center; gap: 12px; min-width: 0;
     padding: 0 12px 0 var(--gutter); height: var(--h-header); border-bottom: 1px solid var(--border); flex: none;
+    container-type: inline-size;
   }
   /* The title renames on click: a quiet box on hover and focus says so. */
   .title {
@@ -101,4 +102,17 @@
   .status.error { color: var(--err-dim); }
   .cost { font: var(--fs-xs) var(--font-mono); color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
   .toggles { display: flex; gap: 2px; flex: none; margin-left: 4px; }
+
+  /* A narrow centre pane still needs its title, state, and panel controls.
+     Secondary repository metadata has full detail in the Details panel. */
+  @container (max-width: 440px) {
+    header { gap: 6px; padding: 0 8px; }
+    .agent, .repo, .branch, .pr, .cost { display: none; }
+    .title { flex: 1 1 auto; min-width: 0; }
+    .toggles { margin-left: 0; }
+  }
+  @container (max-width: 320px) {
+    .status { gap: 0; }
+    .status-label { display: none; }
+  }
 </style>

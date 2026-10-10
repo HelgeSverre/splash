@@ -48,6 +48,17 @@
   } & DataAttrs = $props();
 
   let list: HTMLDivElement | undefined = $state();
+  let listWidth = $state(0);
+
+  // A narrow pane keeps the tab list horizontally scrollable. When its width
+  // changes, keep the selected tab entirely in view so its label remains a
+  // reachable pointer target as well as a keyboard target.
+  $effect(() => {
+    void active;
+    void items;
+    if (!list || !listWidth) return;
+    list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
 
   function focusAt(i: number) {
     queueMicrotask(() => list?.querySelectorAll<HTMLElement>("[role=tab]")[i]?.focus());
@@ -70,7 +81,7 @@
 </script>
 
 <div class="tabs" class:header={size === "header"}>
-  <div {...rest} class="tablist" role="tablist" aria-label={label} bind:this={list}>
+  <div {...rest} class="tablist" role="tablist" aria-label={label} bind:this={list} bind:clientWidth={listWidth}>
     {#each items as t, i (t.id)}
       <div class="tab" class:active={t.id === active}>
         <button {...dataOf(t)} data-testid="tab" data-tab={t.id} class="plain tab-btn" role="tab" id="{prefix}-tab-{t.id}" aria-selected={t.id === active} aria-controls="{prefix}-panel-{t.id}"

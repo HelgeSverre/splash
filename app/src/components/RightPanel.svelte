@@ -35,7 +35,7 @@
 <div class="panel">
   <Tabs data-testid="side-tabs" items={tabs} active={layout.rightTab} prefix="rp" label="Side panel" size="header" onselect={setTab}>
     {#snippet actions()}
-      <IconButton title="Refresh" size="sm" icon="refresh" onclick={() => { refreshStatus(session.id); loadDir(session.id, ""); }} />
+      <IconButton data-testid="side-panel-refresh" title="Refresh" size="sm" icon="refresh" onclick={() => { refreshStatus(session.id); loadDir(session.id, ""); }} />
     {/snippet}
   </Tabs>
   <div class="tabpanel" id="rp-panel-{layout.rightTab}" role="tabpanel" aria-labelledby="rp-tab-{layout.rightTab}">

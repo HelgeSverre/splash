@@ -75,7 +75,7 @@
         {#if tab.kind === "chat"}
           <div class="chat">
             <div class="transcript">
-              <Transcript {session} entries={t?.entries ?? []} loading={t?.loading ?? true} />
+              <Transcript {session} entries={t?.entries ?? []} loading={t?.loading ?? true} active={i === tabs.active} />
             </div>
             <Composer {session} />
           </div>

@@ -161,6 +161,14 @@ test("the terminal runs a shell in the session's folder", async ({ splash }) => 
   await expect(bench.terminalScreen).toContainText("e2e-ok-42");
   await expect(bench.terminalScreen).toContainText(world.repo);
 
+  // A shell can exit on its own; typing then starts a fresh shell in the
+  // same folder instead of leaving a dead terminal pane behind.
+  await page.keyboard.type("exit\n");
+  await expect(bench.terminalScreen).toContainText("shell exited");
+  await page.keyboard.type("echo terminal-restarted && pwd\n");
+  await expect(bench.terminalScreen).toContainText("terminal-restarted");
+  await expect(bench.terminalScreen).toContainText(world.repo);
+
   await bench.hideTerminal.click();
   await expect(bench.terminal).toHaveCount(0);
   await expect(app.composer).toBeFocused();
