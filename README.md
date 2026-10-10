@@ -147,6 +147,16 @@ See the [artifact smoke-test report](docs/artifact-smoke-2026-10-07.md) for scop
   </tr>
   <tr>
     <td width="50%" valign="top">
+      <strong>Flowchart with a decision and labelled edges</strong><br>
+      <a href="screenshots/markdown-diagram-flowchart.png"><img src="screenshots/markdown-diagram-flowchart.png" alt="A left-to-right mermaid flowchart with padded nodes, a dashed decision node and pill-shaped yes and no edge labels" width="100%"></a>
+    </td>
+    <td width="50%" valign="top">
+      <strong>Sequence diagram</strong><br>
+      <a href="screenshots/markdown-diagram-sequence.png"><img src="screenshots/markdown-diagram-sequence.png" alt="A mermaid sequence diagram of a prompt going from the user through Splash to an ACP agent and the streamed updates coming back" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
       <strong>Sessions and transcripts</strong><br>
       <a href="screenshots/session.jpg"><img src="screenshots/session.jpg" alt="Saved conversation with explicit reconnect and the review panel" width="100%"></a>
     </td>
