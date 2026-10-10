@@ -28,7 +28,7 @@ not establish compatibility with authenticated production providers.
 | Windows shell exit | An exited PowerShell process retained a ConPTY master, preventing reader EOF and leaving the terminal active indefinitely. | A Windows child watcher releases the ConPTY master after process exit. The reader drains final output before publishing one exit. Reconnecting during that drain reattaches to the same terminal. Native regressions cover final output, replacement generations, and the drain handoff. |
 | Window layout | Invalid saved JSON could stop startup. Wide panels or a tall terminal could hide the composer in the minimum desktop window. | Saved values are validated. Rendered panel sizes yield to the available area while preserving preferences for a larger window. Tests verify a usable composer and at least 80 pixels of transcript at 900×560, then restored dimensions after expansion. |
 | Side tabs | The selected tab could be clipped in a narrow side panel. | Selection scrolls into view after tab or width changes. A 220-pixel panel regression checks the selected tab and refresh control. |
-| Input and navigation | IME Enter could send unfinished text; streaming while Chat was hidden could reset its scroll position; previous-session navigation from the library selected the wrong session. | Composition and legacy key-code guards, active-view and resize scroll tracking, and corrected wraparound navigation have shared browser coverage. Terminal resizing preserves a pinned bottom position and leaves a scrolled-up reader in place. |
+| Input and navigation | IME Enter could send unfinished text or complete an open slash command; streaming while Chat was hidden could reset its scroll position; previous-session navigation from the library selected the wrong session. | Composition and legacy key-code guards run before slash-menu dispatch; tests keep the partial command unchanged for both IME markers and verify ordinary Enter still completes it. Active-view and resize scroll tracking, and corrected wraparound navigation have shared browser coverage. Terminal resizing preserves a pinned bottom position and leaves a scrolled-up reader in place. |
 | Document previews | Repeated frontmatter values caused duplicate Svelte keys and prevented rendering. | Preview chips accept repeated values. The regression renders `[Read, Read, Bash]`, switches to source, and checks for page errors. |
 | GitHub | Expired credentials kept triggering requests; issue creation could be offered without an eligible repository. | Authentication failure pauses the remaining batch until retry. Issue creation requires a repository that supports issues. Shared fixture-backed GitHub tests cover both states. |
 | Linux installation tests | Preinstalled GTK and WebKit libraries hid missing DEB dependency declarations. | Package smoke starts without those libraries, installs the finished DEB through apt, then runs the extracted AppImage's AppRun, raw DEB, installed DEB, and server checks as an ordinary user. |
@@ -64,8 +64,8 @@ test installation on a machine without that runtime.
 | Local quality gate | `just check`: 96 Rust tests passed; formatting, Clippy, CSS tokens, focus and copy checks passed; Svelte reported zero errors and warnings. |
 | Frontend and server client | `just frontend` passed; all 15 `app/tests/*.test.ts` tests passed; the freshly built headless server passed `scripts/test-server-http.py`. |
 | macOS server archive | The final macOS arm64 server archive passed checksum verification and the HTTP smoke with a fresh HOME/data directory and `/usr/bin:/bin` PATH. |
-| Browser workflows | The final local suite passed 265 tests with nine intentional skips. All 30 project tests also passed separately, including moved-folder recovery in both harnesses. |
-| Native matrix | [CI run 38006450744](https://github.com/HelgeSverre/splash/actions/runs/38006450744), at final application source `a18f842`, passed all ten jobs: macOS arm64/x64, Windows MSVC, Ubuntu x64, desktop and headless builds, native renderer readiness, browser flows and package smoke. |
+| Browser workflows | The final local suite passed 267 tests with nine intentional skips. All 30 project tests also passed separately, including moved-folder recovery in both harnesses. |
+| Native matrix | [CI run 38006450744](https://github.com/HelgeSverre/splash/actions/runs/38006450744), at application snapshot `a18f842`, passed all ten jobs: macOS arm64/x64, Windows MSVC, Ubuntu x64, desktop and headless builds, native renderer readiness, browser flows and package smoke. Each cumulative [stacked PR](https://github.com/HelgeSverre/splash/pull/6) repeats this matrix. |
 | Clean native x64 Docker | Rust terminal tests, default/headless checks, 18 terminal/workbench browser flows and native renderer/IPC readiness passed. A separate full run passed 263 browser tests with nine skips. |
 | Linux packages | Downloaded CI packages passed checksum verification, fresh apt dependency installation, extracted-AppImage/raw-DEB/installed-DEB native renderer readiness and isolated server HTTP checks. AppImage internal executable modes were checked before ordinary-user execution. |
 | Normal AppImage launch | The final CI AppImage also passed direct FUSE-mounted launch in a fresh Ubuntu 24.04 container, with `libfuse2t64`, `fuse3`, `/dev/fuse`, UID 1001 and a fresh TMPDIR. No extraction flag/environment override or WebKit sandbox override was used. |
@@ -84,7 +84,7 @@ A final browser run passed 264 cases but failed while reading an incomplete
 fixture-agent JSONL audit record. The IME behavior assertions had already passed.
 The log helper now reads only newline-terminated records and still rejects
 malformed complete records. Both helper unit tests and the desktop/web IME
-regressions passed, followed by the full 265-test rerun above.
+regressions passed, followed by a full 265-test rerun. A later slash-menu IME regression reproduced the unwanted completion in both browser modes before the fix; the composition guard now precedes menu dispatch. Its red/green checks and the final 267-test suite passed.
 
 One long Docker command did not finish its native wrapper phase within its outer
 deadline. That run is not counted as a native success. A bounded fresh native
@@ -119,7 +119,15 @@ and native-validation lane. These choices were presented together for review.
 ## Audit isolation
 
 The audit branch is `feature/quality-audit`, based on `7b04cd8`, in a separate
-managed worktree. The original checkout and its existing edits were left alone.
+managed worktree. Review is split into five draft stacked PRs, in this review and merge order:
+[backend recovery #2](https://github.com/HelgeSverre/splash/pull/2),
+[terminal and layout #3](https://github.com/HelgeSverre/splash/pull/3),
+[client recovery #4](https://github.com/HelgeSverre/splash/pull/4),
+[history and workbench #5](https://github.com/HelgeSverre/splash/pull/5), and
+[validation and evidence #6](https://github.com/HelgeSverre/splash/pull/6).
+Merge commits preserve stack ancestry; retarget the next PR to `main` after
+its predecessor merges. Squash or rebase merges require restacking descendants.
+Nothing has been merged as part of the audit. The original checkout and its existing edits were left alone.
 All runtime data came from isolated test directories. The audit created two
 Linux runners and one Windows VM with dedicated networking and transfer buckets.
 A Linux provisioning retry replaced the ledger entry without retaining the first
