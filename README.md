@@ -28,12 +28,26 @@ Click any screenshot to open it at full size. Session and workbench captures use
 The platform settings captures below show a macOS browser connected to the local
 macOS demo server. The Linux and Windows captures show downloaded CI artifacts
 running in Ubuntu 24.04 Docker/Xvfb and a temporary Windows Server 2025 EC2 desktop.
-See the [artifact smoke-test report](docs/artifact-smoke-2026-10-07.md) for scope and results.
+The first-run and native quality audit captures use fresh environments with no configured
+providers. Populated audit captures use synthetic fixture agents in isolated projects.
+See the [quality audit report](docs/quality-audit-2026-10-10.md) for fixes, validation,
+and platform limits, and the [earlier artifact smoke-test report](docs/artifact-smoke-2026-10-07.md).
 
 <table>
   <tr>
-    <td width="50%" valign="top"><strong>Linux CI artifact — installed DEB</strong><br><a href="screenshots/linux-ci-artifact.png"><img src="screenshots/linux-ci-artifact.png" alt="Installed Linux CI artifact rendering in an Ubuntu 24.04 Docker container with Xvfb" width="100%"></a></td>
-    <td width="50%" valign="top"><strong>Windows CI artifact — standard-user install</strong><br><a href="screenshots/windows-ci-artifact.png"><img src="screenshots/windows-ci-artifact.png" alt="Installed Windows CI artifact running as a standard user on a temporary Windows Server 2025 EC2 desktop" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>First run with no agents</strong><br><a href="screenshots/quality-desktop-first-run.jpg"><img src="screenshots/quality-desktop-first-run.jpg" alt="Fresh Splash welcome screen with no projects or ready agents" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Agent setup before a first session</strong><br><a href="screenshots/quality-desktop-agent-setup.jpg"><img src="screenshots/quality-desktop-agent-setup.jpg" alt="New session dialog explaining that an agent needs configuration before it can start" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top"><strong>Agent history actions</strong><br><a href="screenshots/quality-desktop-history-actions-connected.jpg"><img src="screenshots/quality-desktop-history-actions-connected.jpg" alt="Connected session history actions collected in a vertical ellipsis menu beside the history status" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><strong>Workbench at the minimum desktop size</strong><br><a href="screenshots/quality-desktop-small-window.jpg"><img src="screenshots/quality-desktop-small-window.jpg" alt="Fixture conversation and review panel in a 900 by 560 desktop web harness window" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>A moved or deleted workspace</strong><br><a href="screenshots/quality-desktop-missing-workspace.jpg"><img src="screenshots/quality-desktop-missing-workspace.jpg" alt="File panel showing a readable error when the workspace folder no longer exists" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><strong>Linux CI artifact — installed DEB</strong><br><a href="screenshots/quality-linux-first-run.png"><img src="screenshots/quality-linux-first-run.png" alt="Installed Linux CI artifact rendering in an Ubuntu 24.04 Docker container with Xvfb" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Windows CI artifact — standard-user install</strong><br><a href="screenshots/quality-windows-installed.png"><img src="screenshots/quality-windows-installed.png" alt="Installed Windows CI artifact running as a standard user on a temporary Windows Server 2025 EC2 desktop" width="100%"></a></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><strong>Backend host and shell diagnostics</strong><br><a href="screenshots/platform-host.jpg"><img src="screenshots/platform-host.jpg" alt="About Splash showing the backend operating system, architecture, terminal shell and isolated data location" width="100%"></a></td>
@@ -48,11 +62,11 @@ See the [artifact smoke-test report](docs/artifact-smoke-2026-10-07.md) for scop
   </tr>
   <tr>
     <td width="50%" valign="top"><strong>Sign in to a Splash server</strong><br><a href="screenshots/server-login.jpg"><img src="screenshots/server-login.jpg" alt="Token login for the authenticated Splash server" width="100%"></a></td>
-    <td width="50%" valign="top"><strong>Server session library</strong><br><a href="screenshots/server-library.jpg"><img src="screenshots/server-library.jpg" alt="Connected server status and saved conversations in the browser" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Server session library</strong><br><a href="screenshots/quality-web-library.jpg"><img src="screenshots/quality-web-library.jpg" alt="Connected server status and saved conversations in the browser" width="100%"></a></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><strong>Choose a folder on the server</strong><br><a href="screenshots/server-folders.jpg"><img src="screenshots/server-folders.jpg" alt="Browser folder picker showing projects on the server filesystem" width="100%"></a></td>
-    <td width="50%" valign="top"><strong>Keep drafts during a disconnect</strong><br><a href="screenshots/server-offline.jpg"><img src="screenshots/server-offline.jpg" alt="Offline banner with a saved conversation and an unsent draft preserved" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Keep drafts during a disconnect</strong><br><a href="screenshots/quality-web-offline-draft.jpg"><img src="screenshots/quality-web-offline-draft.jpg" alt="Offline banner with a saved conversation and an unsent draft preserved" width="100%"></a></td>
   </tr>
 
   <tr>
@@ -62,33 +76,33 @@ See the [artifact smoke-test report](docs/artifact-smoke-2026-10-07.md) for scop
     </td>
     <td width="50%" valign="top">
       <strong>Refresh a conversation continued elsewhere</strong><br>
-      <a href="screenshots/session-history-refresh.jpg"><img src="screenshots/session-history-refresh.jpg" alt="Refreshed transcript with source activity, synchronization time and additional workspace folders" width="100%"></a>
+      <a href="screenshots/quality-desktop-history-refresh.jpg"><img src="screenshots/quality-desktop-history-refresh.jpg" alt="Refreshed transcript with source activity, synchronization time and additional workspace folders" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <strong>Fork a conversation</strong><br>
-      <a href="screenshots/session-fork.jpg"><img src="screenshots/session-fork.jpg" alt="Experimental conversation fork choices showing the workspace folders shared with the original session" width="100%"></a>
+      <a href="screenshots/quality-desktop-history-fork.jpg"><img src="screenshots/quality-desktop-history-fork.jpg" alt="Experimental conversation fork choices showing the workspace folders shared with the original session" width="100%"></a>
     </td>
     <td width="50%" valign="top">
       <strong>Prepare a review in a fork</strong><br>
-      <a href="screenshots/session-fork-review.jpg"><img src="screenshots/session-fork-review.jpg" alt="Forked conversation linked to its parent, with an editable review draft ready to send" width="100%"></a>
+      <a href="screenshots/quality-desktop-history-fork-review.jpg"><img src="screenshots/quality-desktop-history-fork-review.jpg" alt="Forked conversation linked to its parent, with an editable review draft ready to send" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <strong>Inspect native history and capabilities</strong><br>
-      <a href="screenshots/session-history-management.jpg"><img src="screenshots/session-history-management.jpg" alt="Agent history metadata, workspace folders and advertised lifecycle capabilities" width="100%"></a>
+      <a href="screenshots/quality-desktop-history-management.jpg"><img src="screenshots/quality-desktop-history-management.jpg" alt="Agent history metadata, workspace folders and advertised lifecycle capabilities" width="100%"></a>
     </td>
     <td width="50%" valign="top">
       <strong>Delete agent history with confirmation</strong><br>
-      <a href="screenshots/session-history-delete.jpg"><img src="screenshots/session-history-delete.jpg" alt="Explicit confirmation to delete native agent history while keeping the saved Splash transcript" width="100%"></a>
+      <a href="screenshots/quality-desktop-history-delete.jpg"><img src="screenshots/quality-desktop-history-delete.jpg" alt="Explicit confirmation to delete native agent history while keeping the saved Splash transcript" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <strong>Session library</strong><br>
-      <a href="screenshots/session-library.jpg"><img src="screenshots/session-library.jpg" alt="Saved conversations across agents, with project, agent and status filters" width="100%"></a>
+      <a href="screenshots/quality-desktop-library.jpg"><img src="screenshots/quality-desktop-library.jpg" alt="Saved conversations across agents, with project, agent and status filters" width="100%"></a>
     </td>
     <td width="50%" valign="top">
       <strong>Search saved and archived transcripts</strong><br>
@@ -128,7 +142,7 @@ See the [artifact smoke-test report](docs/artifact-smoke-2026-10-07.md) for scop
   <tr>
     <td width="50%" valign="top">
       <strong>Sessions and transcripts</strong><br>
-      <a href="screenshots/session.jpg"><img src="screenshots/session.jpg" alt="Saved conversation with explicit reconnect and the review panel" width="100%"></a>
+      <a href="screenshots/quality-desktop-conversation.jpg"><img src="screenshots/quality-desktop-conversation.jpg" alt="Synthetic agent conversation with the review panel" width="100%"></a>
     </td>
     <td width="50%" valign="top">
       <strong>GitHub triage</strong><br>
@@ -188,7 +202,7 @@ See the [artifact smoke-test report](docs/artifact-smoke-2026-10-07.md) for scop
   <tr>
     <td width="50%" valign="top">
       <strong>Terminal</strong><br>
-      <a href="screenshots/terminal.png"><img src="screenshots/terminal.png" alt="Splash: Terminal" width="100%"></a>
+      <a href="screenshots/quality-desktop-small-window-terminal.jpg"><img src="screenshots/quality-desktop-small-window-terminal.jpg" alt="A synthetic conversation with a working terminal and reachable composer in a 900 by 560 desktop harness window" width="100%"></a>
     </td>
     <td width="50%" valign="top">
       <strong>Session details</strong><br>

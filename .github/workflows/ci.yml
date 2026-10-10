@@ -81,6 +81,15 @@ jobs:
           shellcheck scripts/import-signing-assets.sh scripts/package-release.sh scripts/package-pkg.sh scripts/fetch-appimagetool.sh packaging/AppRun e2e/fakes/agent e2e/fakes/gh e2e/fakes/github-ssh
           python -B scripts/test_release.py
           python -B scripts/test_release_pipeline.py
+          bash scripts/quality/test-remote-docker-cleanup.sh
+      - name: Preserve Windows native test binaries
+        if: runner.os == 'Windows' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: splash-windows-native-tests
+          path: target/debug/deps/splash-*.exe
+          if-no-files-found: ignore
+          retention-days: 1
   headless-linux:
     name: Linux server without GUI libraries
     runs-on: ubuntu-24.04

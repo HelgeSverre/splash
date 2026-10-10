@@ -2,6 +2,9 @@
 !scripts/
 !scripts/test-desktop.py
 !scripts/test-server-http.py
+!e2e/
+!e2e/package.json
+!e2e/package-lock.json
 !packaging/
 !packaging/smoke-linux.sh
 

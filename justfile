@@ -62,7 +62,8 @@ test:
 e2e *ARGS: frontend
     cargo build --bin splash-web --bin fake-acp
     cargo build --no-default-features --bin splash-server
-    @[ -d e2e/node_modules ] || (cd e2e && npm ci && npx playwright install chromium)
+    @[ -d e2e/node_modules ] || (cd e2e && npm ci)
+    cd e2e && npx playwright install chromium
     cd e2e && npm run check
     cd e2e && npx playwright test {{ ARGS }}
 
@@ -71,7 +72,8 @@ e2e *ARGS: frontend
 e2e-ui: frontend
     cargo build --bin splash-web --bin fake-acp
     cargo build --no-default-features --bin splash-server
-    @[ -d e2e/node_modules ] || (cd e2e && npm ci && npx playwright install chromium)
+    @[ -d e2e/node_modules ] || (cd e2e && npm ci)
+    cd e2e && npx playwright install chromium
     cd e2e && npx playwright test --ui
 
 # Format the Rust code
