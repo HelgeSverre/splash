@@ -3,6 +3,8 @@ use std::io::Result as IoResult;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, Sender};
 
+const DRAIN_BUFFER_SIZE: usize = 8 * 1024;
+
 /// A `Reader` that reads exactly the number of bytes from a sub-reader.
 ///
 /// If the limit is reached, it returns EOF. If the limit is not reached
@@ -64,12 +66,12 @@ where
     R: Read,
 {
     fn drop(&mut self) {
-        let mut remaining_to_read = self.size;
+        let mut buffer = [0; DRAIN_BUFFER_SIZE];
 
-        while remaining_to_read > 0 {
-            let mut buf = vec![0; remaining_to_read];
+        while self.size > 0 {
+            let to_read = self.size.min(buffer.len());
 
-            match self.reader.read(&mut buf) {
+            match self.reader.read(&mut buffer[..to_read]) {
                 Err(e) => {
                     self.last_read_signal.send(Err(e)).ok();
                     break;
@@ -79,7 +81,7 @@ where
                     break;
                 }
                 Ok(other) => {
-                    remaining_to_read -= other;
+                    self.size -= other;
                 }
             }
         }
@@ -88,8 +90,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::EqualReader;
+    use super::{EqualReader, DRAIN_BUFFER_SIZE};
+    use std::cell::Cell;
     use std::io::Read;
+    use std::rc::Rc;
 
     #[test]
     fn test_limit() {
@@ -127,5 +131,33 @@ mod tests {
         let mut string = String::new();
         org_reader.read_to_string(&mut string).unwrap();
         assert_eq!(string, " world");
+    }
+
+    #[test]
+    fn drop_drains_with_a_bounded_buffer() {
+        struct RecordingReader {
+            remaining: usize,
+            largest_buffer: Rc<Cell<usize>>,
+        }
+
+        impl Read for RecordingReader {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                self.largest_buffer
+                    .set(self.largest_buffer.get().max(buffer.len()));
+                let read = self.remaining.min(buffer.len());
+                self.remaining -= read;
+                Ok(read)
+            }
+        }
+
+        let largest_buffer = Rc::new(Cell::new(0));
+        let reader = RecordingReader {
+            remaining: DRAIN_BUFFER_SIZE * 4,
+            largest_buffer: largest_buffer.clone(),
+        };
+        let (reader, _) = EqualReader::new(reader, DRAIN_BUFFER_SIZE * 4);
+        drop(reader);
+
+        assert_eq!(largest_buffer.get(), DRAIN_BUFFER_SIZE);
     }
 }

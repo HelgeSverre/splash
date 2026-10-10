@@ -1,4 +1,5 @@
 use std::io::Error as IoError;
+use std::io::Result as IoResult;
 use std::io::{self, Cursor, ErrorKind, Read, Write};
 
 use std::fmt;
@@ -7,9 +8,10 @@ use std::str::FromStr;
 
 use std::sync::mpsc::Sender;
 
-use crate::util::{EqualReader, FusedReader};
+use crate::util::{EqualReader, FusedReader, ReadTimeout};
 use crate::{HTTPVersion, Header, Method, Response, StatusCode};
 use chunked_transfer::Decoder;
+use std::time::Duration;
 
 /// Represents an HTTP request made by a client.
 ///
@@ -69,11 +71,16 @@ pub struct Request {
 
     body_length: Option<usize>,
 
+    // true when reading the body can wait on the client socket
+    body_can_block: bool,
+
     // true if a `100 Continue` response must be sent when `as_reader()` is called
     must_send_continue: bool,
 
     // If Some, a message must be sent after responding
     notify_when_responded: Option<Sender<()>>,
+
+    read_timeout: Option<ReadTimeout>,
 }
 
 struct NotifyOnDrop<R> {
@@ -135,6 +142,7 @@ pub fn new_request<R, W>(
     remote_addr: Option<SocketAddr>,
     mut source_data: R,
     writer: W,
+    read_timeout: Option<ReadTimeout>,
 ) -> Result<Request, RequestCreationError>
 where
     R: Read + Send + 'static,
@@ -182,6 +190,10 @@ where
             _ => false,
         }
     };
+
+    let body_can_block = connection_upgrade
+        || transfer_encoding.is_some()
+        || content_length.is_some_and(|length| length > 0 && (length > 1024 || expects_continue));
 
     // we wrap `source_data` around a reading whose nature depends on the transfer-encoding and
     // content-length headers
@@ -236,8 +248,10 @@ where
         http_version: version,
         headers,
         body_length: content_length,
+        body_can_block,
         must_send_continue: expects_continue,
         notify_when_responded: None,
+        read_timeout,
     })
 }
 
@@ -278,6 +292,12 @@ impl Request {
     #[inline]
     pub fn body_length(&self) -> Option<usize> {
         self.body_length
+    }
+
+    /// Returns whether reading this request body can wait for more client data.
+    #[inline]
+    pub fn body_can_block(&self) -> bool {
+        self.body_can_block
     }
 
     /// Returns the address of the client that sent this request.
@@ -374,6 +394,28 @@ impl Request {
         }
 
         self.data_reader.as_mut().unwrap()
+    }
+
+    /// Applies an inactivity timeout while this request body is read.
+    ///
+    /// The timeout affects incoming bytes only. Callers should clear it after
+    /// consuming the body so idle keep-alive connections are not timed out.
+    pub fn set_body_read_timeout(&mut self, timeout: Option<Duration>) -> IoResult<()> {
+        if let Some(read_timeout) = &self.read_timeout {
+            read_timeout.set(timeout)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Stops consuming this request body and closes its incoming stream.
+    ///
+    /// This lets an incomplete streaming body be dropped without waiting for
+    /// its remaining bytes, while leaving the response writer available.
+    pub fn abort_body(&mut self) {
+        if let Some(read_timeout) = &mut self.read_timeout {
+            let _ = read_timeout.abort();
+        }
     }
 
     /// Turns the `Request` into a writer.
@@ -494,6 +536,11 @@ impl Drop for Request {
                 sender.send(()).unwrap();
             }
         }
+        // EqualReader drains unfinished data when dropped to support HTTP
+        // keep-alive. Drop it before clearing a request-scoped inactivity
+        // timeout so a timed-out body cannot block cleanup indefinitely.
+        drop(self.data_reader.take());
+        let _ = self.set_body_read_timeout(None);
     }
 }
 
