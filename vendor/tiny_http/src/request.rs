@@ -85,7 +85,6 @@ pub struct Request {
     // The body reader and this request share the lease. The reader clears it
     // before it releases a streaming connection to a pipelined request.
     body_timeout: Option<ReadTimeoutLease>,
-
 }
 
 struct NotifyOnDrop<R> {
