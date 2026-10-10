@@ -34,7 +34,8 @@ use super::model::{Entry, SessionMeta};
 use super::transport::{self, Dir};
 use crate::agents::AgentSpec;
 
-/// How long an agent gets to answer `initialize` — `npx` may be downloading.
+/// How long an agent gets to complete startup after its process is available —
+/// `npx` may be downloading, but a reconnect must not outlive the UI's wait.
 const INIT_TIMEOUT: Duration = Duration::from_secs(180);
 const FLUSH_EVERY: Duration = Duration::from_millis(33);
 /// Checkpoint still-streaming entries to the database this often.
@@ -252,6 +253,10 @@ async fn run(
             let key = key2;
             let outcome: Result<(), agent_client_protocol::Error> = async {
 
+            // Startup RPCs share Tokio's clock so the deadline composes with
+            // the hub's async readiness wait and remains deterministic in
+            // paused-clock regression tests.
+            let startup_started = tokio::time::Instant::now();
             let init = tokio::time::timeout(
                 INIT_TIMEOUT,
                 cx.send_request(
@@ -274,11 +279,16 @@ async fn run(
             let roots = spec.additional_directories;
             let can_load = init.agent_capabilities.load_session;
             let can_resume = init.agent_capabilities.session_capabilities.resume.is_some();
+            let startup_remaining = || {
+                INIT_TIMEOUT
+                    .checked_sub(startup_started.elapsed())
+                    .unwrap_or(Duration::ZERO)
+            };
 
             let session_id: SessionId = match resume {
                 Some(prev) => {
                     if can_resume && !transcript.is_empty() {
-                        let resp = tokio::time::timeout(INIT_TIMEOUT, cx.send_request(ResumeSessionRequest::new(SessionId::new(prev.clone()), cwd.clone()).additional_directories(roots.clone())).block_task()).await
+                        let resp = tokio::time::timeout(startup_remaining(), cx.send_request(ResumeSessionRequest::new(SessionId::new(prev.clone()), cwd.clone()).additional_directories(roots.clone())).block_task()).await
                             .map_err(|_| agent_client_protocol::Error::internal_error().data("Resuming the saved conversation timed out"))??;
                         transcript.set_session_state(&serde_json::to_value(&resp).unwrap_or_default());
                     } else {
@@ -286,7 +296,7 @@ async fn run(
                             return Err(agent_client_protocol::Error::invalid_params().data("This agent cannot restore the saved conversation. Its history is still available; create a separate session to start over."));
                         }
                         replaying.store(true, Ordering::Release);
-                        let loaded = tokio::time::timeout(INIT_TIMEOUT, cx.send_request(LoadSessionRequest::new(SessionId::new(prev.clone()), cwd.clone()).additional_directories(roots.clone())).block_task()).await;
+                        let loaded = tokio::time::timeout(startup_remaining(), cx.send_request(LoadSessionRequest::new(SessionId::new(prev.clone()), cwd.clone()).additional_directories(roots.clone())).block_task()).await;
                         replaying.store(false, Ordering::Release);
                         // Never replace a failed resume with an unrelated conversation.
                         let resp = loaded.map_err(|_| agent_client_protocol::Error::internal_error().data("Loading the saved conversation timed out"))??;
@@ -294,7 +304,7 @@ async fn run(
                     }
                     SessionId::new(prev)
                 }
-                None => new_session(&cx, &cwd, roots, &mut transcript).await?,
+                None => new_session(&cx, &cwd, roots, startup_remaining(), &mut transcript).await?,
             };
             sink.agent_session(&key, &session_id.0);
 
@@ -511,15 +521,21 @@ async fn new_session(
     cx: &ConnectionTo<Agent>,
     cwd: &std::path::Path,
     additional_directories: Vec<PathBuf>,
+    timeout: Duration,
     transcript: &mut Transcript,
 ) -> Result<SessionId, agent_client_protocol::Error> {
-    let resp = cx
-        .send_request(
+    let resp = tokio::time::timeout(
+        timeout,
+        cx.send_request(
             NewSessionRequest::new(cwd.to_path_buf())
                 .additional_directories(additional_directories),
         )
-        .block_task()
-        .await?;
+        .block_task(),
+    )
+    .await
+    .map_err(|_| {
+        agent_client_protocol::Error::internal_error().data("Creating a new conversation timed out")
+    })??;
     transcript.set_session_state(&serde_json::to_value(&resp).unwrap_or_default());
     Ok(resp.session_id)
 }

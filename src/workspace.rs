@@ -195,6 +195,10 @@ pub fn list_dir(root: &Path, path: &str) -> Result<Vec<DirEntry>, String> {
         relative(root, path)?
     };
     let dir = root.join(&rel);
+    let meta = std::fs::metadata(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    if !meta.is_dir() {
+        return Err(format!("{} is not a directory", dir.display()));
+    }
     let mut out: Vec<DirEntry> = ignore::WalkBuilder::new(&dir)
         .max_depth(Some(1))
         .hidden(false)
@@ -408,6 +412,8 @@ mod tests {
         assert_eq!(top, vec!["src", ".gitignore", "gone.txt"]);
         let src = list_dir(&root, "src").unwrap();
         assert_eq!(src[0].path, "src/a.txt");
+        assert!(list_dir(&root, "src/a.txt").is_err());
+        assert!(list_dir(&root, "missing").is_err());
         let _ = std::fs::remove_dir_all(root);
     }
 
