@@ -181,6 +181,9 @@ export class Workbench {
   get tree() {
     return testId(this.page, "file-tree");
   }
+  get refreshSidePanel() {
+    return testId(this.page, "side-panel-refresh");
+  }
   /** A file or folder in the tree, by path relative to the session folder. */
   node(path: string) {
     return testId(this.tree, "tree-node", { path });

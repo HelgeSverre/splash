@@ -8,7 +8,7 @@
   import { agentById, app } from "../lib/sessions.svelte";
   import { pendingPermission } from "../lib/transcripts.svelte";
 
-  let { session, entries, loading }: { session: SessionView; entries: Entry[]; loading: boolean } = $props();
+  let { session, entries, loading, active = true }: { session: SessionView; entries: Entry[]; loading: boolean; active?: boolean } = $props();
 
   let scroller: HTMLDivElement | undefined = $state();
   let pinned = true;
@@ -25,7 +25,7 @@
     void entries.length;
     void (last && "text" in last ? last.text.length : 0);
     void (last && last.kind === "tool" ? last.status : "");
-    if (!pinned || app.focusEntry !== null) return;
+    if (!active || !pinned || app.focusEntry !== null) return;
     tick().then(() => scroller && (scroller.scrollTop = scroller.scrollHeight));
   });
 
@@ -43,6 +43,19 @@
       pinned = false;
       tick().then(() => document.getElementById(`entry-${session.id}-${index}`)?.scrollIntoView({ block: "center" }));
     }
+  });
+
+  // Opening the terminal (or resizing the window) changes the viewport without
+  // changing transcript entries. Keep a reader at the bottom in that case, but
+  // never move someone who deliberately scrolled up to read earlier output.
+  $effect(() => {
+    const element = scroller;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      if (active && pinned && app.focusEntry === null) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
   });
 
   const agentName = $derived(agentById(session.agent_id)?.name ?? session.agent_id);

@@ -12,6 +12,30 @@
 
   let { session }: { session: SessionView } = $props();
   let el: HTMLDivElement | undefined = $state();
+  let parentHeight = $state(0);
+
+  // Keep the saved preference intact while a smaller window temporarily caps
+  // the rendered pane. Its parent is the actual workbench area, so this also
+  // accounts for the web connection banner instead of assuming the viewport
+  // is entirely available to the session.
+  const MIN_TERMINAL_HEIGHT = 100;
+  const MIN_WORKBENCH_HEIGHT = 400;
+  const maxHeight = $derived(Math.max(MIN_TERMINAL_HEIGHT, parentHeight - MIN_WORKBENCH_HEIGHT));
+  const bottomHeight = $derived(clamp(layout.bottom, MIN_TERMINAL_HEIGHT, maxHeight));
+
+  function resizeTerminal(delta: number) {
+    layout.bottom = clamp(bottomHeight - delta, MIN_TERMINAL_HEIGHT, maxHeight);
+  }
+
+  $effect(() => {
+    const parent = el?.parentElement;
+    if (!parent) return;
+    const update = () => (parentHeight = parent.clientHeight);
+    const observer = new ResizeObserver(update);
+    observer.observe(parent);
+    update();
+    return () => observer.disconnect();
+  });
 
   function restartShell() {
     const id = session.id;
@@ -26,8 +50,9 @@
   }
 </script>
 
-<Splitter axis="y" label="Resize terminal" value={layout.bottom} min={100} max={window.innerHeight - 200} onmove={(d) => (layout.bottom = clamp(layout.bottom - d, 100, window.innerHeight - 200))} onend={saveLayout} />
-<div class="bottom" data-testid="terminal" id={TERMINAL_PANE} style:height="{layout.bottom}px" bind:this={el}>
+
+<Splitter axis="y" label="Resize terminal" value={bottomHeight} min={MIN_TERMINAL_HEIGHT} max={maxHeight} onmove={resizeTerminal} onend={saveLayout} />
+<div class="bottom" data-testid="terminal" id={TERMINAL_PANE} style:height="{bottomHeight}px" bind:this={el}>
   <Toolbar>
     <span class="bar-title">Terminal</span>
     <PathLabel path={session.cwd} muted />

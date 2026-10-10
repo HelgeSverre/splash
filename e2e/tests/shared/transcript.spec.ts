@@ -228,3 +228,50 @@ test.describe("Amp", () => {
     ]);
   });
 });
+
+
+test("returning to Chat follows output that arrived while Log was open", async ({ splash }) => {
+  const { app, world } = splash;
+  world.agents.fixture("claude", "claude/cancel.jsonl");
+  world.agents.speed("claude", 1);
+  await app.newSession({ where: "in_place" });
+  await app.send("Write a long essay");
+  await expect(app.entries("agent")).toContainText("Addition is often");
+
+  await app.openLogButton.click();
+  await expect(app.sessionTab("log")).toHaveAttribute("aria-selected", "true");
+  // Let enough output arrive for the transcript to overflow while its scroller
+  // is hidden by the Log pane.
+  await expect(app.entries("agent")).toContainText("This sounds obvious");
+
+  await app.sessionTab("chat").click();
+  await expect.poll(() => app.transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight)).toBeLessThanOrEqual(2);
+});
+
+test("session controls remain reachable in a narrow centre pane", async ({ splash }) => {
+  const { app, page } = splash;
+  await page.setViewportSize({ width: 900, height: 560 });
+  await app.newSession({ where: "in_place" });
+
+  const controls = [app.title, app.status, app.terminalToggle, app.panelToggle, app.composer, app.sendButton];
+  const boxes = await Promise.all(controls.map((control) => control.boundingBox()));
+  expect(boxes.every((box) => box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 900 && box.y + box.height <= 560)).toBe(true);
+});
+
+test("resizing the terminal follows a pinned transcript but preserves a reader's position", async ({ splash }) => {
+  const { app, page } = splash;
+  await page.setViewportSize({ width: 900, height: 560 });
+  await app.newSession({ where: "in_place" });
+  await app.prompt("Inspect the calculation demo");
+
+  const distanceFromBottom = () => app.transcript.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight);
+  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(2);
+
+  await app.terminalToggle.click();
+  await expect.poll(distanceFromBottom).toBeLessThanOrEqual(2);
+
+  await app.transcript.evaluate((element) => { element.scrollTop = 0; });
+  await expect.poll(() => app.transcript.evaluate((element) => element.scrollTop)).toBe(0);
+  await app.terminalToggle.click();
+  await expect.poll(() => app.transcript.evaluate((element) => element.scrollTop)).toBe(0);
+});
