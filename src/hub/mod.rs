@@ -124,6 +124,95 @@ async fn warm_env() {
     .await;
 }
 
-fn split_args(s: &str) -> Vec<String> {
-    s.split_whitespace().map(String::from).collect()
+/// Parse stored command-line text into argv. Quoting stays consistent for
+/// probes, history, and live sessions, while ordinary Windows backslashes
+/// remain path separators rather than Unix-style escapes.
+fn split_args(s: &str) -> Result<Vec<String>> {
+    #[derive(Clone, Copy)]
+    enum Quote {
+        Single,
+        Double,
+    }
+
+    let mut args = Vec::new();
+    let mut word = String::new();
+    let mut quote = None;
+    let mut started = false;
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        match quote {
+            Some(Quote::Single) if c == '\'' => quote = None,
+            Some(Quote::Single) => word.push(c),
+            Some(Quote::Double) if c == '"' => quote = None,
+            Some(Quote::Double) if c == '\\' => push_escaped(&mut chars, &mut word),
+            Some(Quote::Double) => word.push(c),
+            None if c == '\'' => {
+                quote = Some(Quote::Single);
+                started = true;
+            }
+            None if c == '"' => {
+                quote = Some(Quote::Double);
+                started = true;
+            }
+            None if c == '\\' => {
+                push_escaped(&mut chars, &mut word);
+                started = true;
+            }
+            None if c.is_whitespace() => {
+                if started {
+                    args.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            None => {
+                word.push(c);
+                started = true;
+            }
+        }
+    }
+    if quote.is_some() {
+        return Err(Error::Other(
+            "Invalid extra arguments: unclosed quote".into(),
+        ));
+    }
+    if started {
+        args.push(word);
+    }
+    Ok(args)
+}
+
+fn push_escaped(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, word: &mut String) {
+    match chars.peek().copied() {
+        Some(next) if next.is_whitespace() || matches!(next, '\'' | '"') => {
+            word.push(next);
+            chars.next();
+        }
+        _ => word.push('\\'),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_args;
+
+    #[test]
+    fn extra_arguments_keep_quoted_values_together() {
+        assert_eq!(
+            split_args("--config 'path with spaces' --flag=\"two words\"").unwrap(),
+            ["--config", "path with spaces", "--flag=two words"]
+        );
+        assert_eq!(
+            split_args(r#"--dir "C:\Program Files\Agent" C:\work"#).unwrap(),
+            ["--dir", r"C:\Program Files\Agent", r"C:\work"]
+        );
+        assert_eq!(
+            split_args(r#"--dir \\server\share "\\server\shared folder""#).unwrap(),
+            ["--dir", r"\\server\share", r"\\server\shared folder"]
+        );
+        assert_eq!(
+            split_args(r#"'' "" one\ two"#).unwrap(),
+            ["", "", "one two"]
+        );
+        assert!(split_args("--config 'unfinished").is_err());
+    }
 }

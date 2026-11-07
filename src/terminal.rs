@@ -55,7 +55,7 @@ struct TermState {
 
 #[derive(Default)]
 pub struct Terminals {
-    map: Mutex<HashMap<String, Term>>,
+    map: Arc<Mutex<HashMap<String, Term>>>,
     // Event sequence numbers are per service rather than per shell. Clients
     // only require monotonicity within their session, so harmless gaps avoid
     // an old shell generation reusing a new shell's sequence numbers.
@@ -71,7 +71,7 @@ impl Terminals {
         cwd: &Path,
         cols: u16,
         rows: u16,
-        emit: impl Fn(TermEvent, u64) + Send + 'static,
+        emit: impl Fn(TermEvent) + Send + 'static,
     ) -> Result<TermAttach> {
         let mut map = self.map.lock();
         if let Some(t) = map.get(session) {
@@ -137,6 +137,17 @@ impl Terminals {
 
         let baseline = self.seq.load(Ordering::Acquire);
         let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
+        let terminals = Arc::downgrade(&self.map);
+        // Shell generations and reaping belong here. Callers only publish the
+        // event; they cannot accidentally retain an exited process tree.
+        let emit = move |event: TermEvent, generation| {
+            if event.exited {
+                if let Some(map) = terminals.upgrade() {
+                    reap(&map, &event.session, generation);
+                }
+            }
+            emit(event);
+        };
         let state = Arc::new(TermState {
             generation,
             buffer: Arc::new(Mutex::new((VecDeque::with_capacity(SCROLLBACK), baseline))),
@@ -263,22 +274,22 @@ impl Terminals {
             retire(term);
         }
     }
+}
 
-    /// Forget a shell whose reader ended. A newer replacement is retained.
-    pub fn reap(&self, session: &str, generation: u64) {
-        let term = {
-            let mut map = self.map.lock();
-            if map.get(session).is_some_and(|t| {
-                t.state.generation == generation && t.state.reader_done.load(Ordering::Acquire)
-            }) {
-                map.remove(session)
-            } else {
-                None
-            }
-        };
-        if let Some(term) = term {
-            retire(term);
+/// Forget a shell whose reader ended. A newer replacement is retained.
+fn reap(map: &Mutex<HashMap<String, Term>>, session: &str, generation: u64) {
+    let term = {
+        let mut map = map.lock();
+        if map.get(session).is_some_and(|t| {
+            t.state.generation == generation && t.state.reader_done.load(Ordering::Acquire)
+        }) {
+            map.remove(session)
+        } else {
+            None
         }
+    };
+    if let Some(term) = term {
+        retire(term);
     }
 }
 
@@ -370,7 +381,7 @@ mod tests {
         let (tx, rx) = mpsc::channel::<TermEvent>();
         let dir = std::env::temp_dir();
         terms
-            .open("t1", &dir, 80, 24, move |e, _| {
+            .open("t1", &dir, 80, 24, move |e| {
                 let _ = tx.send(e);
             })
             .unwrap();
@@ -408,7 +419,7 @@ mod tests {
         assert!(seen.contains("splash-42"), "output: {seen:?}");
 
         // A second open reattaches: same shell, scrollback included.
-        let again = terms.open("t1", &dir, 100, 30, |_, _| {}).unwrap();
+        let again = terms.open("t1", &dir, 100, 30, |_| {}).unwrap();
         let scroll = base64::engine::general_purpose::STANDARD
             .decode(again.scrollback)
             .unwrap();
@@ -423,7 +434,7 @@ mod tests {
         let (tx, rx) = mpsc::channel::<TermEvent>();
         let dir = std::env::temp_dir();
         terms
-            .open("t1", &dir, 80, 24, move |e, _| {
+            .open("t1", &dir, 80, 24, move |e| {
                 let _ = tx.send(e);
             })
             .unwrap();
@@ -474,8 +485,12 @@ mod tests {
             final_output_seen,
             "final output was lost before exit (output={output:?})"
         );
+        assert!(
+            terms.map.lock().is_empty(),
+            "the terminal owns exit cleanup"
+        );
 
-        let fresh = terms.open("t1", &dir, 80, 24, |_, _| {}).unwrap();
+        let fresh = terms.open("t1", &dir, 80, 24, |_| {}).unwrap();
         let scrollback = base64::engine::general_purpose::STANDARD
             .decode(fresh.scrollback)
             .unwrap();
@@ -492,7 +507,7 @@ mod tests {
     fn a_draining_conpty_is_not_replaced_before_reader_finishes() {
         let terms = Terminals::default();
         let dir = std::env::temp_dir();
-        terms.open("t1", &dir, 80, 24, |_, _| {}).unwrap();
+        terms.open("t1", &dir, 80, 24, |_| {}).unwrap();
 
         // This is the state after the watcher observes the child exit and
         // takes the ConPTY master. Keep it alive outside Term so the reader
@@ -508,7 +523,7 @@ mod tests {
             (generation, master)
         };
 
-        terms.open("t1", &dir, 100, 30, |_, _| {}).unwrap();
+        terms.open("t1", &dir, 100, 30, |_| {}).unwrap();
         let map = terms.map.lock();
         let term = map.get("t1").expect("draining terminal was replaced");
         assert_eq!(term.state.generation, generation);
@@ -522,20 +537,16 @@ mod tests {
     #[test]
     fn a_late_exit_event_is_stale_after_replacement() {
         let terms = Arc::new(Terminals::default());
-        let old_terms = Arc::downgrade(&terms);
         let (output_tx, output_rx) = mpsc::channel::<TermEvent>();
         let (exit_ready_tx, exit_ready_rx) = mpsc::channel::<u32>();
         let (release_tx, release_rx) = mpsc::channel::<()>();
         let (late_tx, late_rx) = mpsc::channel::<TermEvent>();
         let dir = std::env::temp_dir();
         terms
-            .open("t1", &dir, 80, 24, move |event, generation| {
+            .open("t1", &dir, 80, 24, move |event| {
                 if event.exited {
                     let _ = exit_ready_tx.send(event.seq);
                     let _ = release_rx.recv();
-                    if let Some(terms) = old_terms.upgrade() {
-                        terms.reap(&event.session, generation);
-                    }
                     let _ = late_tx.send(event);
                 } else {
                     let _ = output_tx.send(event);
@@ -582,7 +593,7 @@ mod tests {
         // its floor, so clients discard the delayed old exit event below.
         let (fresh_tx, fresh_rx) = mpsc::channel::<TermEvent>();
         let fresh = terms
-            .open("t1", &dir, 80, 24, move |event, _| {
+            .open("t1", &dir, 80, 24, move |event| {
                 let _ = fresh_tx.send(event);
             })
             .unwrap();
@@ -629,7 +640,6 @@ mod tests {
         }
         assert!(live_output, "replacement shell did not produce output");
 
-        let fresh_generation = terms.map.lock().get("t1").unwrap().state.generation;
         terms.write("t1", exit).unwrap();
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         let mut fresh_exited = false;
@@ -648,10 +658,12 @@ mod tests {
             }
         }
         assert!(fresh_exited, "replacement shell did not exit");
+        assert!(terms.map.lock().is_empty());
+        terms.open("t1", &dir, 80, 24, |_| {}).unwrap();
+        let fresh_generation = terms.map.lock().get("t1").unwrap().state.generation;
 
-        // The old callback reaps after the replacement has also finished. It
-        // must not remove the newer generation merely because both share a
-        // session ID.
+        // An old publication can arrive after multiple replacements. Cleanup
+        // is internal, and this delayed event cannot retire the current shell.
         release_tx.send(()).unwrap();
         let late = late_rx.recv_timeout(Duration::from_secs(1)).unwrap();
         assert!(late.exited);
@@ -659,7 +671,7 @@ mod tests {
         let retained = terms.map.lock();
         let current = retained.get("t1").expect("replacement was reaped");
         assert_eq!(current.state.generation, fresh_generation);
-        assert!(current.state.reader_done.load(Ordering::Acquire));
+        assert!(!current.state.reader_done.load(Ordering::Acquire));
         drop(retained);
         terms.close("t1");
     }

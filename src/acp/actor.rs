@@ -55,7 +55,13 @@ pub enum Status {
 }
 
 pub enum SessionCmd {
-    Prompt(String),
+    /// Ask the actor to begin a turn. The acknowledgement resolves only after
+    /// the actor has published `Running`, so callers never infer admission
+    /// from a command merely being queued.
+    Prompt {
+        text: String,
+        admitted: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
     Cancel,
     SetOption {
         id: String,
@@ -313,6 +319,7 @@ async fn run(
             sink.status(&key, status, None, &transcript.meta);
 
             let mut prompt: Option<PromptFut> = None;
+            let mut admission: Option<tokio::sync::oneshot::Sender<Result<(), String>>> = None;
             let mut turn_started = Instant::now();
             let mut permissions: HashMap<String, Responder<RequestPermissionResponse>> = HashMap::new();
             let mut ticker = tokio::time::interval(FLUSH_EVERY);
@@ -408,8 +415,9 @@ async fn run(
                         sink.workspace_dirty(&key);
                     }
                     Some(cmd) = cmds.recv() => match cmd {
-                        SessionCmd::Prompt(text) => {
+                        SessionCmd::Prompt { text, admitted } => {
                             if prompt.is_some() {
+                                let _ = admitted.send(Err("The agent is already working.".into()));
                                 continue;
                             }
                             transcript.begin_turn(&text);
@@ -418,6 +426,7 @@ async fn run(
                             prompt = Some(Box::pin(cx.send_request(req).block_task()));
                             status = Status::Running;
                             detail = None;
+                            admission = Some(admitted);
                         }
                         SessionCmd::Cancel => {
                             if prompt.is_some() {
@@ -427,6 +436,7 @@ async fn run(
                                 let _ = r.respond(RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled));
                                 transcript.resolve_permission(&id, "cancelled");
                             }
+                            leave_permission_wait(&mut status, prompt.is_some(), permissions.is_empty());
                         }
                         SessionCmd::SetOption { id, value } => {
                             let legacy = transcript.meta.legacy_modes && id == "mode";
@@ -461,9 +471,7 @@ async fn run(
                                 let _ = r.respond(RequestPermissionResponse::new(outcome));
                                 transcript.resolve_permission(&request_id, option_id.as_deref().unwrap_or("cancelled"));
                             }
-                            if permissions.is_empty() && status == Status::AwaitingPermission {
-                                status = if prompt.is_some() { Status::Running } else { Status::Idle };
-                            }
+                            leave_permission_wait(&mut status, prompt.is_some(), permissions.is_empty());
                         }
                         cmd @ (SessionCmd::Shutdown | SessionCmd::Disconnect(_)) => {
                             flush(&*sink, &key, &mut transcript, true);
@@ -491,6 +499,9 @@ async fn run(
                     flush(&*sink, &key, &mut transcript, false);
                     sink.status(&key, status, detail.as_deref(), &transcript.meta);
                 }
+                if let Some(admitted) = admission.take() {
+                    let _ = admitted.send(Ok(()));
+                }
             }
             flush(&*sink, &key, &mut transcript, true);
             Ok(())
@@ -514,6 +525,19 @@ async fn run(
             Some(&e.to_string()),
             &SessionMeta::default(),
         );
+    }
+}
+
+/// Once no question remains, the visible state belongs to the prompt again.
+/// Keeping this rule here prevents each command path from inventing a subtly
+/// different transition after resolving permissions.
+fn leave_permission_wait(status: &mut Status, prompt_active: bool, no_permissions: bool) {
+    if no_permissions && *status == Status::AwaitingPermission {
+        *status = if prompt_active {
+            Status::Running
+        } else {
+            Status::Idle
+        };
     }
 }
 

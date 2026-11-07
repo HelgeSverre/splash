@@ -10,7 +10,8 @@
 //! Test flags: `--apply-diffs` writes each completed edit's new text to disk,
 //! `--exit-mid-turn N` dies after N steps of the first turn, `--hang-new`
 //! accepts `session/new` without answering, `--fail-prompt` answers every
-//! prompt with an error, `--wait-initialize FILE` waits for FILE before
+//! prompt with an error, `--hold-after-cancel MS` holds the prompt response
+//! after cancellation, `--wait-initialize FILE` waits for FILE before
 //! answering initialization, `--trace FILE` logs every message sent,
 //! `--announce-commands` sends the
 //! recording's slash commands right after `session/new`, as adapters do (so a
@@ -70,6 +71,7 @@ async fn main() {
     let _ = TRACE.set(option("--trace"));
     let apply_diffs = args.iter().any(|s| s == "--apply-diffs");
     let exit_mid_turn: Option<usize> = option("--exit-mid-turn").and_then(|n| n.parse().ok());
+    let hold_after_cancel: Option<u64> = option("--hold-after-cancel").and_then(|n| n.parse().ok());
     let wait_initialize = option("--wait-initialize");
     let mut first_turn = true;
     let required_root = option("--require-root");
@@ -387,6 +389,9 @@ async fn main() {
                 }
                 let _ = &recorded_sid;
                 let stop = if cancelled {
+                    if let Some(milliseconds) = hold_after_cancel {
+                        tokio::time::sleep(Duration::from_millis(milliseconds)).await;
+                    }
                     json!("cancelled")
                 } else {
                     turn.stop_reason

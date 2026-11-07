@@ -9,7 +9,7 @@ use std::sync::{Arc, OnceLock};
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{mpsc, OnceCell};
+use tokio::sync::{mpsc, oneshot, OnceCell};
 
 use super::{blocking, split_args, warm_env, workspace, Core, Error, Result};
 use crate::acp::actor::{self, SessionCmd, SessionSpec, Sink, Status};
@@ -61,6 +61,38 @@ struct Live {
     status: Status,
     detail: Option<String>,
     meta: SessionMeta,
+}
+
+/// Owns a just-claimed live slot until an actor takes it over. Starting an
+/// actor awaits filesystem and store work, so dropping that future must not
+/// strand a `Starting` slot that rejects every later retry.
+struct LiveClaim {
+    sessions: Arc<Sessions>,
+    id: String,
+    active: Arc<AtomicBool>,
+    claimed: bool,
+}
+
+impl LiveClaim {
+    fn release(&mut self) {
+        self.claimed = false;
+    }
+}
+
+impl Drop for LiveClaim {
+    fn drop(&mut self) {
+        if !self.claimed {
+            return;
+        }
+        self.active.store(false, Ordering::Release);
+        let mut live = self.sessions.live.lock();
+        if live
+            .get(&self.id)
+            .is_some_and(|slot| Arc::ptr_eq(&slot.active, &self.active))
+        {
+            live.remove(&self.id);
+        }
+    }
 }
 
 type OnStop = Box<dyn Fn(&str) + Send + Sync>;
@@ -168,6 +200,10 @@ impl Sessions {
     }
 
     pub async fn remove_project(&self, id: &str) -> Result<()> {
+        // Creating a session reads the project, may create a worktree, then
+        // records the session. Keep removal on that same lifecycle seam so it
+        // cannot delete the project between those steps.
+        let _lifecycle = self.startup_lock.lock().await;
         let store = self.store().await?;
         let ids: Vec<String> = self
             .records
@@ -256,6 +292,11 @@ impl Sessions {
         revision: Option<String>,
         additional_directories: Vec<String>,
     ) -> Result<SessionView> {
+        // A project is the parent of its sessions in both SQLite and memory.
+        // Hold the lifecycle seam from project lookup through insertion so a
+        // concurrent project removal cannot leave a newly-created worktree
+        // without a session record.
+        let _lifecycle = self.startup_lock.lock().await;
         let store = self.store().await?;
         for path in &additional_directories {
             library::validate_directory(path)?;
@@ -335,12 +376,12 @@ impl Sessions {
         self.mirrors
             .lock()
             .insert(id.clone(), TranscriptSnapshot::default());
-        self.ensure_live(&id).await?;
+        self.start_live(&id).await?;
         Ok(self.view(record))
     }
 
     /// Start the agent for a session if it isn't running (resuming if we can).
-    pub async fn ensure_live(self: &Arc<Self>, id: &str) -> Result<()> {
+    async fn start_live(self: &Arc<Self>, id: &str) -> Result<()> {
         // Claim the slot before any await: two quick opens (or an open and a
         // prompt) must not start two agents. Commands sent meanwhile queue on
         // the real channel and reach the actor once it runs.
@@ -362,12 +403,15 @@ impl Sessions {
                 },
             );
         }
+        let mut claim = LiveClaim {
+            sessions: self.clone(),
+            id: id.to_string(),
+            active: active.clone(),
+            claimed: true,
+        };
         let spec = match self.spec(id).await {
             Ok(spec) => spec,
-            Err(e) => {
-                self.live.lock().remove(id);
-                return Err(e);
-            }
+            Err(e) => return Err(e),
         };
         actor::start_with(
             spec,
@@ -377,6 +421,7 @@ impl Sessions {
                 active,
             }),
         );
+        claim.release();
         self.emit(id);
         Ok(())
     }
@@ -394,10 +439,11 @@ impl Sessions {
         }
         let agent = self.core.agent(&record.agent_id)?;
         let history = store.entries(id).await?;
-        let extra = split_args(&match &record.launch_args {
+        let args = match &record.launch_args {
             Some(args) => args.clone(),
             None => store.extra_args(agent.id).await?,
-        });
+        };
+        let extra = split_args(&args)?;
         self.mirrors
             .lock()
             .insert(id.to_string(), settled_snapshot(history.clone()));
@@ -422,7 +468,7 @@ impl Sessions {
         let store = self.store().await?;
         if !self.mirrors.lock().contains_key(id) {
             let entries = store.entries(id).await?;
-            // Do not write recovery here: a concurrent ensure_live may have
+            // Do not write recovery here: a concurrent start_live may have
             // just claimed the actor, whose Transcript::restore owns a safe
             // persisted recovery. A cold reader only needs honest display
             // state, and can safely settle its private mirror.
@@ -445,6 +491,7 @@ impl Sessions {
 
     pub async fn prompt(self: &Arc<Self>, id: &str, text: &str) -> Result<()> {
         let _startup = self.startup_lock.lock().await;
+        self.store().await?;
         if self.record(id)?.archived || self.record(id)?.source.deleted {
             return Err(Error::Other("Archived sessions are read-only.".into()));
         }
@@ -467,7 +514,7 @@ impl Sessions {
             if needs_start {
                 self.stop(id);
                 self.store().await?.settle().await;
-                self.ensure_live(id).await?;
+                self.start_live(id).await?;
             }
         }
         // Do not acknowledge a prompt until initialization/resume has succeeded.
@@ -489,15 +536,8 @@ impl Sessions {
                 None => return Err(Error::Other("The session stopped before the message could be sent.".into())),
             }
         }
-        // Name the session after its first prompt. The agent's own title
-        // replaces it when it sends one.
-        let unnamed = self.record(id).is_ok_and(|r| r.title == NEW_SESSION);
         let title = short_title(text);
-        if unnamed && !title.is_empty() {
-            self.store().await?.set_title(id, &title).await?;
-            self.update_record(id, |r| r.title = title);
-        }
-        let store = self.store().await?;
+        let (admitted, accepted) = oneshot::channel();
         {
             let _callbacks = self.callbacks.lock();
             let mut live = self.live.lock();
@@ -507,14 +547,28 @@ impl Sessions {
             if l.status != Status::Idle {
                 return Err(Error::Other("The agent is already working.".into()));
             }
-            l.tx.send(SessionCmd::Prompt(text.to_string()))
-                .map_err(|_| Error::Other("The session stopped before sending.".into()))?;
-            // Claim this turn before releasing the lock, so concurrent submissions
-            // cannot both pass the readiness check and silently lose a prompt.
-            l.status = Status::Running;
-            drop(live);
-            self.update_record(id, |r| r.attention = None);
-            store.queue_attention(id, None);
+            l.tx.send(SessionCmd::Prompt {
+                text: text.to_string(),
+                admitted,
+            })
+            .map_err(|_| Error::Other("The session stopped before sending.".into()))?;
+        }
+        accepted
+            .await
+            .map_err(|_| Error::Other("The session stopped before sending.".into()))?
+            .map_err(Error::Other)?;
+        // The command has been accepted, so do not perform a fallible write
+        // that could tell the caller it failed and invite a duplicate retry.
+        // This queued auto-title is intentionally replaceable by the agent.
+        // Keep the unnamed check, update and queued write together with actor
+        // callbacks so a prompt title cannot overwrite a newer provider title.
+        let _callbacks = self.callbacks.lock();
+        if self
+            .record(id)
+            .is_ok_and(|record| record.title == NEW_SESSION)
+            && !title.is_empty()
+        {
+            self.set_auto_title(id, &title);
         }
         Ok(())
     }
@@ -624,6 +678,7 @@ impl Sessions {
     /// branch stays). Refuses a dirty worktree unless `force`.
     pub async fn archive(&self, id: &str, force: bool) -> Result<()> {
         let _guard = self.startup_lock.lock().await;
+        self.store().await?;
         let record = self.record(id)?;
         self.remove_worktree(&record, force).await?;
         self.stop(id);
@@ -639,6 +694,7 @@ impl Sessions {
     /// Delete a session, refusing to discard worktree changes unless `force`.
     pub async fn delete(&self, id: &str, force: bool) -> Result<()> {
         let _guard = self.startup_lock.lock().await;
+        self.store().await?;
         if let Ok(record) = self.record(id) {
             self.remove_worktree(&record, force).await?;
         }
@@ -963,7 +1019,10 @@ impl Sink for ActiveSink {
 
 #[cfg(test)]
 mod tests {
-    use super::short_title;
+    use std::sync::Arc;
+
+    use super::{short_title, Sessions};
+    use crate::hub::Core;
 
     #[test]
     fn titles_are_the_first_sentence_cut_at_a_word() {
@@ -980,5 +1039,44 @@ mod tests {
             "what does main.rs do?"
         );
         assert_eq!(short_title("Short one"), "Short one");
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_start_releases_its_claimed_slot() {
+        let core = Arc::new(Core {
+            data_dir: std::env::temp_dir(),
+            bus: elyra::EventBus::new(),
+            store: Default::default(),
+            find_agent: Arc::new(|_| None),
+        });
+        let sessions = Arc::new(Sessions::new(core));
+        let (entered, ready) = tokio::sync::oneshot::channel();
+        let held_core = sessions.core.clone();
+        let holder = tokio::spawn(async move {
+            let _ = held_core
+                .store
+                .get_or_try_init(|| async {
+                    let _ = entered.send(());
+                    std::future::pending::<crate::hub::Result<crate::store::Store>>().await
+                })
+                .await;
+        });
+        ready.await.unwrap();
+
+        let starting = {
+            let sessions = sessions.clone();
+            tokio::spawn(async move { sessions.start_live("s1").await })
+        };
+        for _ in 0..100 {
+            if sessions.live.lock().contains_key("s1") {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(sessions.live.lock().contains_key("s1"));
+        starting.abort();
+        let _ = starting.await;
+        assert!(!sessions.live.lock().contains_key("s1"));
+        holder.abort();
     }
 }

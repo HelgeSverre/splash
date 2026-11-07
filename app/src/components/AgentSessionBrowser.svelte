@@ -2,7 +2,7 @@
   import { onDestroy } from "svelte";
   import { api, type ExternalSession, type SessionPreview } from "../bindings";
   import { app, agentById, applySession, openSession } from "../lib/sessions.svelte";
-  import { historySources, sourceKey, loadSource, retrySource } from "../lib/agent-history.svelte";
+  import { agentHistory } from "../lib/agent-history.svelte";
   import { foldersFromText, sourceIsNewer } from "../lib/session-history";
   import { errorMessage } from "../lib/format";
   import { home } from "../lib/paths";
@@ -30,13 +30,13 @@
   const available = $derived(app.agents.filter((a) => a.installed));
   const selected = $derived(available.filter((a) => !agent || a.id === agent));
   const directory = $derived(folder === "all" || !folder ? "" : folder === "custom" ? cwd.trim() : folder);
-  const sources = $derived(selected.map((a) => ({ agent: a, key: sourceKey(a.id, a.extra_args, directory) })));
-  const loading = $derived(sources.some((s) => historySources[s.key]?.loading));
-  const loaded = $derived(sources.some((s) => historySources[s.key]?.page));
+  const sources = $derived(selected.map((agent) => ({ agent, state: agentHistory.state(agent.id, agent.extra_args, directory) })));
+  const loading = $derived(sources.some((s) => s.state?.loading));
+  const loaded = $derived(sources.some((s) => s.state?.page));
   const rows = $derived.by(() => {
     const cutoff = since === "all" ? 0 : Date.now() - Number(since) * 86400000;
     const term = query.trim().toLowerCase();
-    return sources.flatMap(({ agent, key }) => (historySources[key]?.sessions ?? []).map((info) => ({ agent, key, info })))
+    return sources.flatMap(({ agent, state }) => (state?.sessions ?? []).map((info) => ({ agent, info })))
       .filter(({ agent, info }) => (!term || `${info.title ?? ""} ${info.session_id} ${info.cwd} ${(info.additional_directories ?? []).join(" ")} ${agent.name}`.toLowerCase().includes(term)) &&
         (!cutoff || (info.updated_at && Date.parse(info.updated_at) >= cutoff)))
       .toSorted((a,b) => sort === "title" ? (a.info.title ?? a.info.session_id).localeCompare(b.info.title ?? b.info.session_id) : sort === "agent" ? a.agent.name.localeCompare(b.agent.name) :
@@ -59,7 +59,7 @@
     await Promise.all(Array.from({ length: Math.min(3, pending.length) }, async () => {
       while (pending.length) {
         const source = pending.shift()!;
-        await loadSource(source.key, source.agent.id, scope, false, refresh);
+        await (refresh ? agentHistory.refresh(source.agent.id, source.agent.extra_args, scope) : agentHistory.load(source.agent.id, source.agent.extra_args, scope));
       }
     }));
   }
@@ -99,16 +99,16 @@
 <p class="summary">Browse saved conversations across your agents. Preview a conversation before adding its history and workspace folders.</p>
 {#if !available.length}<EmptyState inline title="No installed agents" detail="Install an agent and refresh it in Settings to browse its conversations." />{/if}
 <div class="sources" aria-label="Agent discovery status">
-  {#each sources as s (s.key)}
-    {@const state = historySources[s.key]}
+  {#each sources as s (s.agent.id)}
+    {@const state = s.state}
     {#if state}
       <div class="source" data-testid="external-source" data-agent={s.agent.id} data-state={state.loading ? "loading" : state.error ? "failed" : state.page?.capabilities.list ? "listed" : "unlisted"} data-count={state.sessions.length}>
         <AgentIcon id={s.agent.id} size={16} /><strong>{s.agent.name}</strong>
         <span class="meta" role="status">{state.loading ? "Finding sessions…" : state.error ? "Could not finish" : state.page?.capabilities.list ? `${state.sessions.length} loaded` : "Listing unavailable"}</span>
         {#if state.fetchedAt}<span class="meta">Checked {new Date(state.fetchedAt).toLocaleTimeString()}</span>{/if}
         {#if state.page && !state.page.capabilities.load}<Tag data-testid="external-source-no-preview" tone="muted">Preview unavailable</Tag>{/if}
-        {#if state.error}<button class="btn sm" data-testid="external-source-retry" disabled={state.loading} onclick={() => retrySource(s.key)}>Retry</button>{/if}
-        {#if state.page?.next_cursor}<button class="btn sm" data-testid="external-source-more" disabled={state.loading} onclick={() => loadSource(s.key, s.agent.id, directory, true)}>Load more from {s.agent.name}</button>{/if}
+        {#if state.error}<button class="btn sm" data-testid="external-source-retry" disabled={state.loading} onclick={() => agentHistory.retry(s.agent.id, s.agent.extra_args, directory)}>Retry</button>{/if}
+        {#if state.page?.next_cursor}<button class="btn sm" data-testid="external-source-more" disabled={state.loading} onclick={() => agentHistory.loadMore(s.agent.id, s.agent.extra_args, directory)}>Load more from {s.agent.name}</button>{/if}
         {#if state.error}<p class="error" role="alert" data-testid="external-source-error">{state.error}</p>{/if}
       </div>
     {/if}
@@ -129,7 +129,7 @@
     {#each rows as row (`${row.agent.id}:${row.info.session_id}`)}
       {@const s = row.info}
       {@const local = app.sessions.find((x) => x.agent_id === row.agent.id && x.agent_session_id === s.session_id)}
-      <button class="plain session-row" data-testid="external-session" data-agent={row.agent.id} data-session-id={s.session_id} data-cwd={s.cwd} data-extra-folders={(s.additional_directories ?? []).length} data-local={local ? (sourceIsNewer(local.source) ? "outdated" : "current") : "none"} disabled={!!busy || !historySources[row.key]?.page?.capabilities.load} aria-pressed={preview?.agent_id === row.agent.id && preview?.session_id === s.session_id} onclick={() => load(row.agent.id, s)}>
+      <button class="plain session-row" data-testid="external-session" data-agent={row.agent.id} data-session-id={s.session_id} data-cwd={s.cwd} data-extra-folders={(s.additional_directories ?? []).length} data-local={local ? (sourceIsNewer(local.source) ? "outdated" : "current") : "none"} disabled={!!busy || !agentHistory.state(row.agent.id, row.agent.extra_args, directory)?.page?.capabilities.load} aria-pressed={preview?.agent_id === row.agent.id && preview?.session_id === s.session_id} onclick={() => load(row.agent.id, s)}>
         <AgentIcon id={row.agent.id} size={20} />
         <span class="row-body"><strong data-testid="external-session-title">{s.title || s.session_id}</strong><span class="meta">{row.agent.name} · {home(s.cwd)}</span>
           {#if (s.additional_directories ?? []).length}<span class="meta">+{(s.additional_directories ?? []).length} workspace {(s.additional_directories ?? []).length === 1 ? "folder" : "folders"}</span>{/if}

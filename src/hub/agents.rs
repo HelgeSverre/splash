@@ -44,7 +44,8 @@ impl Agents {
         let spec = self.core.agent(agent_id)?;
         let store = self.core.store().await?;
         warm_env().await;
-        let extra = split_args(&store.extra_args(agent_id).await?);
+        let raw_args = store.extra_args(agent_id).await?;
+        let extra = split_args(&raw_args)?;
         let result = probe::probe(spec, &extra).await;
         store
             .save_probe(
@@ -54,13 +55,17 @@ impl Agents {
             .await?;
         let mut status = detect::detect(spec).await;
         status.probe = Some(result);
-        status.extra_args = extra.join(" ");
+        // This string names an agent profile for history imports. Keep the
+        // user's exact quoting rather than reconstructing a different profile
+        // from argv.
+        status.extra_args = raw_args;
         self.replace(status.clone());
         Ok(status)
     }
 
     pub async fn set_args(&self, agent_id: &str, args: &str) -> Result<AgentStatus> {
         let args = args.trim();
+        split_args(args)?;
         self.core
             .store()
             .await?

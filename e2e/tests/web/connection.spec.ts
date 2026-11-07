@@ -57,6 +57,44 @@ test("a lost connection keeps drafts and blocks sending until it returns", async
   await expect(app.sendButton).toBeEnabled();
 });
 
+test("an auth event during workspace recovery remains authoritative", async ({ splash }) => {
+  const { app, page } = splash;
+  const connection = new Connection(page);
+  let listStarted = false;
+  let releaseList!: () => void;
+  let releaseEvents!: () => void;
+  const listHeld = new Promise<void>((resolve) => { releaseList = resolve; });
+  const eventsHeld = new Promise<void>((resolve) => { releaseEvents = resolve; });
+  let eventReplies = 0;
+  await page.route("**/__cmd/list_sessions", async (route) => {
+    listStarted = true;
+    await listHeld;
+    await route.continue();
+  });
+  await page.route("**/__events", async (route) => {
+    if (eventReplies++ === 0) {
+      await eventsHeld;
+      await route.fulfill({ status: 401, body: "session expired" });
+    } else await route.continue();
+  });
+
+  try {
+    await page.reload();
+    await expect.poll(() => listStarted).toBe(true);
+    await connection.expectStatus("syncing");
+    releaseEvents();
+    await connection.expectStatus("auth");
+    releaseList();
+    await app.waitReady();
+    await expect(connection.banner).toHaveAttribute("data-status", "auth");
+  } finally {
+    releaseEvents();
+    releaseList();
+    await page.unroute("**/__cmd/list_sessions");
+    await page.unroute("**/__events");
+  }
+});
+
 test("sign out handles a lost tunnel immediately", async ({ splash }) => {
   const { page } = splash;
   const connection = new Connection(page);

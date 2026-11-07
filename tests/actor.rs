@@ -108,10 +108,6 @@ async fn wait_for_method(rec: Arc<Recorder>, method: &'static str, timeout: Dura
     .unwrap()
 }
 
-fn fake_agent(fixture: &str) -> &'static AgentSpec {
-    fake_agent_with(fixture, &[])
-}
-
 fn fake_agent_with(fixture: &str, flags: &[&'static str]) -> &'static AgentSpec {
     let program: &'static str =
         Box::leak(env!("CARGO_BIN_EXE_fake-acp").to_string().into_boxed_str());
@@ -145,11 +141,23 @@ fn start(
     tokio::sync::mpsc::UnboundedSender<SessionCmd>,
     Arc<Recorder>,
 ) {
+    start_with_flags(fixture, history, resume, &[])
+}
+
+fn start_with_flags(
+    fixture: &str,
+    history: Vec<Entry>,
+    resume: Option<&str>,
+    flags: &[&'static str],
+) -> (
+    tokio::sync::mpsc::UnboundedSender<SessionCmd>,
+    Arc<Recorder>,
+) {
     let rec = Arc::new(Recorder::default());
     let tx = actor::start(
         SessionSpec {
             key: "s1".into(),
-            agent: fake_agent(fixture),
+            agent: fake_agent_with(fixture, flags),
             cwd: std::env::temp_dir(),
             extra_args: vec![],
             resume: resume.map(String::from),
@@ -160,6 +168,28 @@ fn start(
         rec.clone() as Arc<dyn Sink>,
     );
     (tx, rec)
+}
+
+fn prompt(tx: &tokio::sync::mpsc::UnboundedSender<SessionCmd>, text: &str) {
+    let (admitted, _accepted) = tokio::sync::oneshot::channel();
+    tx.send(SessionCmd::Prompt {
+        text: text.into(),
+        admitted,
+    })
+    .unwrap();
+}
+
+fn prompt_with_ack(
+    tx: &tokio::sync::mpsc::UnboundedSender<SessionCmd>,
+    text: &str,
+) -> tokio::sync::oneshot::Receiver<Result<(), String>> {
+    let (admitted, accepted) = tokio::sync::oneshot::channel();
+    tx.send(SessionCmd::Prompt {
+        text: text.into(),
+        admitted,
+    })
+    .unwrap();
+    accepted
 }
 
 async fn wait_for(rec: &Recorder, what: &str, f: impl Fn(&Recorder) -> bool) {
@@ -198,8 +228,7 @@ async fn streams_a_claude_turn_into_the_mirror() {
         .iter()
         .any(|o| o.category == "model"));
 
-    tx.send(SessionCmd::Prompt("what's the bug?".into()))
-        .unwrap();
+    prompt(&tx, "what's the bug?");
     wait_for(&rec, "turn end", has_turn_end).await;
     wait_for(&rec, "idle again", |r| {
         r.last_status() == Some(Status::Idle)
@@ -233,11 +262,29 @@ async fn streams_a_claude_turn_into_the_mirror() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn only_the_actor_admits_a_queued_prompt() {
+    let (tx, rec) = start("pool/read", vec![], None);
+    wait_for(&rec, "idle", |r| r.last_status() == Some(Status::Idle)).await;
+
+    let first = prompt_with_ack(&tx, "first");
+    assert_eq!(first.await.unwrap(), Ok(()));
+    assert_eq!(rec.last_status(), Some(Status::Running));
+
+    let second = prompt_with_ack(&tx, "second");
+    assert_eq!(
+        second.await.unwrap(),
+        Err("The agent is already working.".into())
+    );
+    tx.send(SessionCmd::Cancel).unwrap();
+    tx.send(SessionCmd::Shutdown).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn permission_requests_wait_for_the_user() {
     // Pool's recording asked twice before running tools.
     let (tx, rec) = start("pool/read", vec![], None);
     wait_for(&rec, "idle", |r| r.last_status() == Some(Status::Idle)).await;
-    tx.send(SessionCmd::Prompt("go".into())).unwrap();
+    prompt(&tx, "go");
     wait_for(&rec, "awaiting permission", |r| {
         r.last_status() == Some(Status::AwaitingPermission)
     })
@@ -294,7 +341,7 @@ async fn permission_requests_wait_for_the_user() {
 async fn cancel_stops_a_turn_and_answers_open_permissions() {
     let (tx, rec) = start("pool/read", vec![], None);
     wait_for(&rec, "idle", |r| r.last_status() == Some(Status::Idle)).await;
-    tx.send(SessionCmd::Prompt("go".into())).unwrap();
+    prompt(&tx, "go");
     wait_for(&rec, "awaiting permission", |r| {
         r.last_status() == Some(Status::AwaitingPermission)
     })
@@ -308,6 +355,27 @@ async fn cancel_stops_a_turn_and_answers_open_permissions() {
     assert!(
         matches!(entries.last(), Some(Entry::TurnEnd { stop_reason, .. }) if stop_reason == "cancelled")
     );
+    tx.send(SessionCmd::Shutdown).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelling_a_permission_returns_to_running_before_the_agent_replies() {
+    // A conforming agent can accept the cancellation while it is still
+    // finishing cleanup. The UI must no longer offer a resolved permission.
+    let (tx, rec) = start_with_flags("pool/read", vec![], None, &["--hold-after-cancel", "500"]);
+    wait_for(&rec, "idle", |r| r.last_status() == Some(Status::Idle)).await;
+    prompt(&tx, "go");
+    wait_for(&rec, "awaiting permission", |r| {
+        r.last_status() == Some(Status::AwaitingPermission)
+    })
+    .await;
+
+    tx.send(SessionCmd::Cancel).unwrap();
+    wait_for(&rec, "running after cancelling the permission", |r| {
+        r.last_status() == Some(Status::Running)
+    })
+    .await;
+    wait_for(&rec, "turn end", has_turn_end).await;
     tx.send(SessionCmd::Shutdown).unwrap();
 }
 
@@ -354,7 +422,7 @@ async fn resume_loads_without_duplicating_history() {
         .entries()
         .iter()
         .any(|e| matches!(e, Entry::Divider { .. })));
-    tx.send(SessionCmd::Prompt("and now?".into())).unwrap();
+    prompt(&tx, "and now?");
     wait_for(&rec, "turn end", has_turn_end).await;
     // The new turn starts after the restored three entries.
     assert!(matches!(&rec.entries()[3], Entry::User { text } if text == "and now?"));
@@ -467,7 +535,7 @@ async fn failed_resume_does_not_create_a_replacement_session_or_send_queued_prom
             }],
             Some("missing-session"),
         );
-        let _ = tx.send(SessionCmd::Prompt("never send this".into()));
+        prompt(&tx, "never send this");
         wait_for(&rec, "failed resume", |r| {
             r.last_status() == Some(Status::Error)
         })

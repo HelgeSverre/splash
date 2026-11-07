@@ -3,7 +3,7 @@
   import { api, type SessionView } from "../bindings";
   import { app, applySession, deleteSession, drafts, openSession } from "../lib/sessions.svelte";
   import { openTranscript } from "../lib/transcripts.svelte";
-  import { invalidateHistory } from "../lib/agent-history.svelte";
+  import { agentHistory } from "../lib/agent-history.svelte";
   import { sourceIsNewer } from "../lib/session-history";
   import { errorMessage } from "../lib/format";
   import { serverUnavailable } from "../lib/server.svelte";
@@ -119,16 +119,16 @@
         applySession({ ...session, source: { ...session.source, capabilities } });
       } else if (action === "delete") {
         applySession(await api.delete_agent_history(id));
-        invalidateHistory(agentId); confirm = null;
+        agentHistory.invalidate(agentId); confirm = null;
         notice = "Removed from agent history. Your local transcript is still available.";
       } else if (action === "remove" || action === "discard") {
         // A dirty worktree needs a second, explicit confirmation.
         try { await deleteSession(id, action === "discard"); }
         catch (e) { if (errorMessage(e) !== "dirty") throw e; confirm = "dirty"; return; }
-        invalidateHistory(agentId);
+        agentHistory.invalidate(agentId);
       } else {
         const child = await api.fork_session(id);
-        applySession(child); invalidateHistory(agentId);
+        applySession(child); agentHistory.invalidate(agentId);
         if (action === "review") drafts[child.id] = "Review the work in the parent conversation. Check the current changes for correctness, regressions, and missing validation. Report concrete findings with file locations and explain what you verified. Do not change files during this review.";
         panel = null;
         await openSession(child.id);

@@ -285,7 +285,10 @@ impl Transcript {
                     input: update.get("rawInput").and_then(summarize_input),
                     output: update.get("rawOutput").and_then(output_text),
                 };
-                match self.tools.get(&id).copied() {
+                // Tool ids identify an in-flight call, not a historical entry.
+                // Some adapters restart their local counter for each turn; a
+                // new call with that id must not rewrite the earlier turn.
+                match self.current_tool(&id) {
                     Some(i) => {
                         self.entries[i] = entry;
                         self.touch(i);
@@ -298,7 +301,7 @@ impl Transcript {
             }
             "tool_call_update" => {
                 let id = str_at(update, "toolCallId");
-                let Some(&i) = self.tools.get(&id) else {
+                let Some(i) = self.current_tool(&id) else {
                     // An update for a call we never saw: treat as a new call.
                     let mut as_call = update.clone();
                     as_call["sessionUpdate"] = "tool_call".into();
@@ -527,7 +530,7 @@ impl Transcript {
     }
 
     fn tool_title(&self, id: &str) -> Option<String> {
-        let i = *self.tools.get(id)?;
+        let i = self.current_tool(id)?;
         match &self.entries[i] {
             Entry::Tool { title, input, .. } => Some(match input {
                 Some(inp) if !title.contains(inp.as_str()) => format!("{title}: {inp}"),
@@ -535,6 +538,16 @@ impl Transcript {
             }),
             _ => None,
         }
+    }
+
+    /// A tool call is mutable only while its turn is active. Adapters may
+    /// reuse locally-generated IDs after a reconnect, so historical entries
+    /// are never valid update targets for the current turn.
+    fn current_tool(&self, id: &str) -> Option<usize> {
+        self.tools
+            .get(id)
+            .copied()
+            .filter(|&index| index >= self.turn_start)
     }
 
     pub fn resolve_permission(&mut self, request_id: &str, resolution: &str) {
@@ -879,6 +892,67 @@ mod tests {
             &transcript.entries()[1],
             Entry::Tool { status, .. } if status == "failed"
         ));
+    }
+
+    #[test]
+    fn a_reused_tool_id_stays_in_its_new_turn() {
+        let mut transcript = Transcript::new();
+        let call = |title: &str| {
+            serde_json::json!({
+                "sessionUpdate": "tool_call",
+                "toolCallId": "adapter-local-id",
+                "title": title,
+                "status": "completed",
+            })
+        };
+
+        transcript.begin_turn("first");
+        transcript.apply(&call("first call"));
+        transcript.end_turn("end_turn", 1.0);
+        transcript.begin_turn("second");
+        transcript.apply(&call("second call"));
+
+        let tools: Vec<_> = transcript
+            .entries()
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Tool { title, .. } => Some(title.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tools, ["first call", "second call"]);
+    }
+
+    #[test]
+    fn a_reused_tool_update_after_restore_stays_in_its_new_turn() {
+        let mut transcript = Transcript::restore(vec![Entry::Tool {
+            id: "adapter-local-id".into(),
+            title: "earlier call".into(),
+            tool_kind: "execute".into(),
+            status: "completed".into(),
+            locations: vec![],
+            content: vec![],
+            input: None,
+            output: None,
+        }]);
+
+        transcript.begin_turn("second");
+        transcript.apply(&serde_json::json!({
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "adapter-local-id",
+            "title": "second call",
+            "status": "in_progress",
+        }));
+
+        let tools: Vec<_> = transcript
+            .entries()
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Tool { title, .. } => Some(title.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tools, ["earlier call", "second call"]);
     }
 
     #[test]

@@ -690,6 +690,9 @@ The `npx` entries are adapters around the vendor's CLI; the rest are the CLIs' o
 
 ## How it works
 
+The [state-machine reference](docs/state-machines.md) documents states, invariants,
+transition tables, concurrency regressions and the modules that own them.
+
 Splash is built with [Elyra](https://github.com/kwhorne/elyra-framework): a Rust process with a Svelte 5 frontend in a webview.
 
 ```mermaid

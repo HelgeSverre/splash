@@ -168,6 +168,73 @@ async fn projects_and_sessions_in_place_and_in_a_worktree() {
     assert_eq!(hub.sessions.list().await.unwrap().len(), 2);
 }
 
+/// Worktree creation runs `post-checkout` after it has created the directory
+/// but before `create_at` can save its session record. That gives this test a
+/// deterministic window for the project-removal race.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn project_removal_waits_for_a_worktree_session_to_finish_creating() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (data, repo) = (temp("data"), repo());
+    let (hub, _) = hub(&data, "claude/read");
+    let project = hub
+        .sessions
+        .add_project(&repo.to_string_lossy())
+        .await
+        .unwrap();
+    let hook_dir = repo.join(".git").join("hooks");
+    let entered = data.join("worktree-creation-entered");
+    let release = data.join("worktree-creation-release");
+    let hook = hook_dir.join("post-checkout");
+    std::fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.01; done\n",
+            entered.display(),
+            release.display()
+        ),
+    )
+    .unwrap();
+    let mut permissions = std::fs::metadata(&hook).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&hook, permissions).unwrap();
+
+    let creating = {
+        let sessions = hub.sessions.clone();
+        let project_id = project.id.clone();
+        tokio::spawn(async move {
+            sessions
+                .create(&project_id, "fake", Isolation::Worktree, None)
+                .await
+        })
+    };
+    eventually("worktree hook", || {
+        let entered = entered.clone();
+        async move { entered.exists() }
+    })
+    .await;
+
+    let removing = {
+        let sessions = hub.sessions.clone();
+        let project_id = project.id.clone();
+        tokio::spawn(async move { sessions.remove_project(&project_id).await })
+    };
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let removal_finished_early = removing.is_finished();
+
+    std::fs::write(&release, "continue").unwrap();
+    let created = creating.await.unwrap();
+    removing.await.unwrap().unwrap();
+    assert!(
+        !removal_finished_early,
+        "project removal ran while worktree creation still owned the lifecycle"
+    );
+    created.unwrap();
+    assert!(hub.sessions.projects().await.unwrap().is_empty());
+    assert!(hub.sessions.list().await.unwrap().is_empty());
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_prompt_names_the_session_until_the_agent_does() {
     let (data, repo) = (temp("data"), repo());
@@ -379,7 +446,77 @@ async fn deleting_without_force_handles_clean_worktrees_and_in_place_files() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn concurrent_opens_start_one_agent() {
+async fn cold_lifecycle_actions_refuse_dirty_worktrees() {
+    for action in ["archive", "delete"] {
+        let (data, repo) = (temp("data"), repo());
+        let (id, cwd) = {
+            let (hub, _) = hub(&data, "claude/read");
+            let project = hub
+                .sessions
+                .add_project(&repo.to_string_lossy())
+                .await
+                .unwrap();
+            let session = hub
+                .sessions
+                .create(&project.id, "fake", Isolation::Worktree, None)
+                .await
+                .unwrap();
+            idle(&hub, &session.record.id).await;
+            hub.sessions.disconnect(&session.record.id).await.unwrap();
+            (session.record.id, session.record.cwd)
+        };
+        std::fs::write(Path::new(&cwd).join("unsaved.txt"), "keep me").unwrap();
+
+        let (cold, _) = hub(&data, "claude/read");
+        let result = match action {
+            "archive" => cold.sessions.archive(&id, false).await,
+            "delete" => cold.sessions.delete(&id, false).await,
+            _ => unreachable!(),
+        };
+        assert!(matches!(result, Err(splash::hub::Error::Dirty)), "{action}");
+        assert!(Path::new(&cwd).exists());
+        assert!(cold.core.store().await.unwrap().session(&id).await.is_ok());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cold_hub_can_send_a_prompt_without_listing_sessions_first() {
+    let (data, repo) = (temp("data"), repo());
+    let id = {
+        let (hub, _) = hub(&data, "claude/read");
+        let project = hub
+            .sessions
+            .add_project(&repo.to_string_lossy())
+            .await
+            .unwrap();
+        let session = hub
+            .sessions
+            .create(&project.id, "fake", Isolation::InPlace, None)
+            .await
+            .unwrap();
+        idle(&hub, &session.record.id).await;
+        hub.sessions.disconnect(&session.record.id).await.unwrap();
+        session.record.id
+    };
+
+    let (cold, _) = hub(&data, "claude/read");
+    cold.sessions
+        .prompt(&id, "Continue the review")
+        .await
+        .unwrap();
+    eventually("cold prompt", || async {
+        cold.sessions.transcript(&id).await.is_ok_and(|snapshot| {
+            snapshot
+                .entries
+                .iter()
+                .any(|entry| matches!(entry, Entry::User { text } if text == "Continue the review"))
+        })
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_reconnects_start_one_agent() {
     let (data, repo) = (temp("data"), repo());
     let id = {
         let (hub, _) = hub(&data, "claude/read");
@@ -395,10 +532,29 @@ async fn concurrent_opens_start_one_agent() {
             .unwrap();
         s.record.id
     };
-    let (hub, lookups) = hub(&data, "claude/read");
-    let (a, b) = tokio::join!(hub.sessions.ensure_live(&id), hub.sessions.ensure_live(&id));
-    a.unwrap();
-    b.unwrap();
+    let release: &'static str = Box::leak(
+        data.join("release-reconnect")
+            .to_string_lossy()
+            .into_owned()
+            .into_boxed_str(),
+    );
+    let spec = fake_agent_with("claude/read", &["--wait-initialize", release]);
+    let lookups = Arc::new(AtomicUsize::new(0));
+    let count = lookups.clone();
+    let hub = Hub::with_agents(
+        data.clone(),
+        elyra::EventBus::new(),
+        Arc::new(move |_| {
+            count.fetch_add(1, Ordering::SeqCst);
+            Some(spec)
+        }),
+    );
+    let (a, b) = tokio::join!(hub.sessions.restart(&id), hub.sessions.restart(&id));
+    assert!(
+        a.is_ok() ^ b.is_ok(),
+        "only one reconnect may claim a session: first={a:?}, second={b:?}"
+    );
+    std::fs::write(release, "continue").unwrap();
     idle(&hub, &id).await;
     assert_eq!(lookups.load(Ordering::SeqCst), 1);
 }

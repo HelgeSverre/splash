@@ -1,6 +1,7 @@
 import { api } from '../bindings';
+import { ServerConnection, type ServerInfo } from './server-connection-model';
 
-export type ServerInfo = { name: string; instance: string; token: string; version?: string };
+export type { ServerInfo } from './server-connection-model';
 declare global { var __SPLASH_SERVER__: ServerInfo | undefined; }
 export const serverMode = !!globalThis.__SPLASH_SERVER__;
 export const workspaceClient = crypto.randomUUID();
@@ -9,37 +10,34 @@ const unavailable = $derived(serverMode && connection.status !== 'online');
 /** True in the web version while commands can't reach the server: connecting,
  * restoring the workspace, signed out or connection lost. Never in the desktop app. */
 export const serverUnavailable = () => unavailable;
-let checking = false;
-let ready = false;
-let recoveryNeeded = false;
-let reconcile: (() => Promise<void>) | undefined;
-let knownInstance = '';
 let soon: ReturnType<typeof setTimeout> | undefined;
 let retryDelay = 0;
+let connectionMonitor: ServerConnection | undefined;
 
 function markOffline() {
-  if (connection.status === 'auth') return;
-  connection.status = 'offline';
-  recoveryNeeded = true;
+  if (!connectionMonitor?.offline()) return;
   // A request just failed: a restarted server refused the old token, or
   // nothing answered. Look now rather than at the next interval.
   checkSoon();
 }
 
 function markAuth() {
-  connection.status = 'auth';
-  connection.error = '';
-  recoveryNeeded = false;
+  connectionMonitor?.auth();
 }
 
 export function installServerConnection(resync: () => Promise<void>) {
   if (!serverMode) return;
-  reconcile = resync;
+  connectionMonitor = new ServerConnection(connection, async () => {
+    const response = await fetch('/__server/state', { cache: 'no-store', signal: AbortSignal.timeout(4500) });
+    if (response.status === 401) return undefined;
+    if (!response.ok) throw new Error('Server unavailable');
+    return response.json();
+  }, resync, (info) => Object.assign(globalThis.__SPLASH_SERVER__!, info));
   window.addEventListener('splash:offline', markOffline);
   window.addEventListener('splash:auth-required', markAuth);
-  window.addEventListener('online', () => { recoveryNeeded = true; void checkConnection(); });
+  window.addEventListener('online', () => { connectionMonitor?.reconnect(); void checkConnection(); });
   window.addEventListener('offline', markOffline);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { recoveryNeeded = true; void checkConnection(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { connectionMonitor?.reconnect(); void checkConnection(); } });
   window.setInterval(checkConnection, 5000);
   void checkConnection();
 }
@@ -51,41 +49,11 @@ function checkSoon(delay = 100) {
 }
 
 export async function checkConnection() {
-  if (!serverMode || checking || connection.status === 'auth') return;
-  checking = true;
-  connection.checking = true;
-  try {
-    const response = await fetch('/__server/state', { cache: 'no-store', signal: AbortSignal.timeout(4500) });
-    if (response.status === 401) { markAuth(); return; }
-    if (!response.ok) throw new Error('Server unavailable');
-    const info: ServerInfo = await response.json();
-    if (info.instance !== knownInstance) recoveryNeeded = true;
-    knownInstance = info.instance;
-    Object.assign(globalThis.__SPLASH_SERVER__!, info);
-    connection.name = info.name;
-    if ((!ready || recoveryNeeded) && reconcile) {
-      connection.status = 'syncing';
-      // Consume the old failure before resync; a new network failure sets it again.
-      recoveryNeeded = false;
-      await reconcile();
-      ready = true;
-      connection.recovered++;
-    }
-    if (!recoveryNeeded) { connection.status = 'online'; connection.error = ''; retryDelay = 0; }
-  } catch {
-    connection.status = 'offline';
-    recoveryNeeded = true;
-    connection.error = 'Check that the server and SSH tunnel are running. Your drafts are kept here.';
-  } finally {
-    checking = false;
-    connection.checking = false;
-    // Not back yet (or something failed while checking): a restart takes a
-    // moment, so look again soon, backing off to the event stream's 2 s.
-    if (recoveryNeeded) {
-      retryDelay = Math.min(retryDelay ? retryDelay * 2 : 250, 2000);
-      checkSoon(retryDelay);
-    }
-  }
+  if (!serverMode || !connectionMonitor) return;
+  if (await connectionMonitor.check()) {
+    retryDelay = Math.min(retryDelay ? retryDelay * 2 : 250, 2000);
+    checkSoon(retryDelay);
+  } else if (connection.status === 'online') retryDelay = 0;
 }
 
 export async function signOut() {

@@ -103,10 +103,11 @@ impl Sessions {
             .or_else(dirs::home_dir)
             .unwrap_or_else(std::env::temp_dir);
         validate_directory(&launch.to_string_lossy())?;
+        let extra = split_args(&args)?;
         let page = history::read(
             agent,
             &launch,
-            &split_args(&args),
+            &extra,
             history::Request::List {
                 cwd: filter,
                 cursor,
@@ -149,10 +150,11 @@ impl Sessions {
         }
         validate_workspace(&info)?;
         let (args, agent) = self.history_args(agent_id).await?;
+        let extra = split_args(&args)?;
         let result = history::read(
             agent,
             Path::new(&info.cwd),
-            &split_args(&args),
+            &extra,
             history::Request::Load(info.clone()),
         )
         .await?;
@@ -391,7 +393,7 @@ impl Sessions {
         self.require_disconnected(id)?;
         let mut record = self.record(id)?;
         let (args, agent) = self.profile(&record).await?;
-        let extra = split_args(&args);
+        let extra = split_args(&args)?;
         let info = self.current_info(&record, agent, &extra).await?;
         let result = history::read(
             agent,
@@ -420,6 +422,7 @@ impl Sessions {
 
     pub async fn history_capabilities(&self, id: &str) -> Result<HistoryCapabilities> {
         let _guard = self.startup_lock.lock().await;
+        self.store().await?;
         let record = self.record(id)?;
         let (args, agent) = self.profile(&record).await?;
         let launch = if Path::new(&record.cwd).is_dir() {
@@ -427,13 +430,8 @@ impl Sessions {
         } else {
             dirs::home_dir().unwrap_or_else(std::env::temp_dir)
         };
-        let result = history::read(
-            agent,
-            &launch,
-            &split_args(&args),
-            history::Request::Inspect,
-        )
-        .await?;
+        let extra = split_args(&args)?;
+        let result = history::read(agent, &launch, &extra, history::Request::Inspect).await?;
         // A live actor may have updated its metadata during the handshake.
         let mut record = self.record(id)?;
         record.source.capabilities = Some(result.page.capabilities.clone());
@@ -445,6 +443,7 @@ impl Sessions {
 
     pub async fn delete_native(&self, id: &str) -> Result<SessionView> {
         let _guard = self.startup_lock.lock().await;
+        self.store().await?;
         self.require_disconnected(id)?;
         let mut record = self.record(id)?;
         let info = native_info(&record)?;
@@ -454,10 +453,11 @@ impl Sessions {
         } else {
             dirs::home_dir().unwrap_or_else(std::env::temp_dir)
         };
+        let extra = split_args(&args)?;
         history::read(
             agent,
             &launch,
-            &split_args(&args),
+            &extra,
             history::Request::Delete(info.session_id),
         )
         .await?;
@@ -471,10 +471,11 @@ impl Sessions {
 
     pub async fn fork_history(&self, id: &str) -> Result<SessionView> {
         let _guard = self.startup_lock.lock().await;
+        self.store().await?;
         self.require_disconnected(id)?;
         let parent = self.record(id)?;
         let (args, agent) = self.profile(&parent).await?;
-        let extra = split_args(&args);
+        let extra = split_args(&args)?;
         let info = self.current_info(&parent, agent, &extra).await?;
         let result = history::read(
             agent,
@@ -574,6 +575,10 @@ impl Sessions {
 
     pub async fn restart(self: &Arc<Self>, id: &str) -> Result<()> {
         let _startup = self.startup_lock.lock().await;
+        // Restart is a public lifecycle action. It may be the first command
+        // after opening Splash, before `list` has populated the in-memory
+        // records cache.
+        self.store().await?;
         let record = self.record(id)?;
         if record.archived {
             return Err(Error::Other("Archived sessions are read-only.".into()));
@@ -590,6 +595,6 @@ impl Sessions {
         }
         self.stop(id);
         self.store().await?.settle().await;
-        self.ensure_live(id).await
+        self.start_live(id).await
     }
 }
