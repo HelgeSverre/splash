@@ -414,8 +414,11 @@ Windows execution remains a separate platform check.
 
 Severity is impact-based: P1 means loss of acknowledged messages or recorded
 history; P2 means a broken workflow, stranded retry, misleading wait state or
-incorrect launch. Fixes are in the working tree. Issues stay open until changes
-land; creating an issue is not evidence that a released build contains the fix.
+incorrect launch. Cleanup fixes landed on main in b8610d8 and shipped in
+[v0.2.3](https://github.com/HelgeSverre/splash/releases/tag/v0.2.3), whose immutable
+tag points to 2c359831e5284f0abb7dd3861326c6b46c14cc44. The publication-only collector
+repair landed afterward in 6b40f1d; it does not alter those released binaries.
+Issue creation alone is not evidence that a released build contains a fix.
 
 | Priority | Confirmed violation and reachable trace | Group / evidence | Fix |
 | --- | --- | --- | --- |
@@ -620,3 +623,11 @@ of the strict publisher. No source findings. Ruff, actionlint, the new collector
 regression and whitespace checks passed. The released app/binaries remain exactly
 the tested v0.2.3 tag; only publication input collection and documentation changed
 after that tag.
+
+Final release evidence: the publisher retry in run 42430099714 completed
+successfully through its already-published no-op guard; all 24 asset IDs, sizes,
+digests and release notes remained unchanged. The collector repair at 6b40f1d also
+passed [full CI run 42434719951](https://github.com/HelgeSverre/splash/actions/runs/42434719951),
+including its new configuration regression, native matrix, browser and package
+checks. v0.2.3 is published and Latest; v0.2.2 remains an unpublished immutable
+tag. Temporary recovery worktree and artifact downloads were removed.
