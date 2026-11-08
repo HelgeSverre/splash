@@ -80,9 +80,10 @@ jobs:
         run: |
           brew install actionlint shellcheck
           actionlint
-          shellcheck scripts/import-signing-assets.sh scripts/package-release.sh scripts/package-pkg.sh scripts/fetch-appimagetool.sh packaging/AppRun e2e/fakes/agent e2e/fakes/gh e2e/fakes/github-ssh
+          shellcheck scripts/notary-retry.sh scripts/import-signing-assets.sh scripts/package-release.sh scripts/package-pkg.sh scripts/fetch-appimagetool.sh packaging/AppRun e2e/fakes/agent e2e/fakes/gh e2e/fakes/github-ssh
           python -B scripts/test_release.py
           python -B scripts/test_release_pipeline.py
+          python -B scripts/test_notarization.py
           bash scripts/quality/test-remote-docker-cleanup.sh
       - name: Preserve Windows native test binaries
         if: runner.os == 'Windows' && always()

@@ -8,3 +8,8 @@
 - Preserve quoted launch arguments, Windows paths, and the original agent profile text.
 
 The cleanup also centralizes terminal cleanup and client state ownership, with regression coverage for retries and concurrency. See the state-machine reference in the repository for evidence and validation limits.
+
+## Packaging
+
+- Retry transient Apple ticket-service failures without repeating signing or notarization submission. Signature, stapled-ticket and Gatekeeper validation remain mandatory.
+- This release includes the reliability fixes prepared for v0.2.2, which remained unpublished after Apple ticket-service failures.

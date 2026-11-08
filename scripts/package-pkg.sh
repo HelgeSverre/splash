@@ -5,6 +5,9 @@
 # installs Splash into /Applications.
 set -euo pipefail
 
+# shellcheck source=scripts/notary-retry.sh
+source "$(dirname "$0")/notary-retry.sh"
+
 if [[ $# -ne 3 ]]; then
   echo "Usage: scripts/package-pkg.sh ARM64_ZIP X86_64_ZIP OUTPUT_PKG" >&2
   exit 2
@@ -77,7 +80,7 @@ codesign --force --options runtime --timestamp --sign "$APPLE_APPLICATION_SIGNIN
 codesign --verify --deep --strict --verbose=2 "$app"
 ditto -c -k --keepParent "$app" "$scratch/Splash-app.zip"
 notarize "$scratch/Splash-app.zip"
-xcrun stapler staple "$app"
+staple_notarized "$app"
 spctl --assess --type execute --verbose=2 "$app"
 
 # Install to /Applications only: a relocatable bundle would update a copy of
@@ -109,7 +112,7 @@ productbuild --distribution "$scratch/distribution.xml" --package-path "$scratch
   --sign "$APPLE_INSTALLER_SIGNING_IDENTITY" ${keychain_args[@]+"${keychain_args[@]}"} --timestamp "$scratch/Splash.pkg"
 pkgutil --check-signature "$scratch/Splash.pkg"
 notarize "$scratch/Splash.pkg"
-xcrun stapler staple "$scratch/Splash.pkg"
+staple_notarized "$scratch/Splash.pkg"
 xcrun stapler validate "$scratch/Splash.pkg"
 spctl --assess --type install --verbose=2 "$scratch/Splash.pkg"
 

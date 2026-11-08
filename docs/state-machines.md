@@ -522,3 +522,54 @@ schedules. Disk-full/write-error durability is not fault-injected; Store::settle
 still acknowledges processing rather than durable success. Project removal retains
 worktrees/files intentionally; no cleanup of user work is inferred from removing
 a sidebar project. These limits are not counted as newly confirmed bugs.
+
+## 15. Release follow-up: notarization ticket delivery
+
+The release follow-up extends scope to scripts/package-release.sh,
+scripts/package-pkg.sh, their shared scripts/notary-retry.sh owner, and the
+isolated script regression/CI wiring. This follows the cleanup verification
+above; its live release verification is tracked separately below.
+
+[Issue #15](https://github.com/HelgeSverre/splash/issues/15), P2: accepted Intel
+notarization failed to become a distributable archive because the one-shot
+stapling call lost its connection to Apple’s ticket service. Release run
+42426912427 failed twice (jobs 128567083819 and 128571717010): codesign
+verified, notarization returned Accepted, then NSURLErrorDomain Code=-1005
+and stapler exit 68 prevented publication. Both attempts used v0.2.2 at
+1d0f8d4999cb1c4bdaa51fb20a162e04d9c53794; that tag remains immutable and
+unpublished. The packaging correction is prepared as v0.2.3.
+
+| From | Event / guard | Effect / next state |
+| --- | --- | --- |
+| Signed artifact | Notarization accepted | Keep the same signed artifact and request its ticket |
+| Ticket request | Stapler succeeds | Return success; caller must validate ticket and Gatekeeper |
+| Ticket request | Network-labelled failure; attempts remain | Retain artifact; retry after 5, 10, 20, then 40 seconds |
+| Ticket request | Permanent failure or fifth failed attempt | Preserve tool failure status; stop packaging without publishing |
+| Stapled artifact | Ticket/signature/Gatekeeper validation fails | Fail closed; no archive/installer is published |
+| Validated package set | All required jobs/assets pass | Publish the complete checksum-verified release |
+
+The helper owns classification, attempt bounds, logging and temporary-log cleanup.
+Callers supply only the artifact path. It never re-signs or re-submits notarization
+while retrying ticket delivery, and app/installer callers retain their existing
+validation gates. The helper retries ticket retrieval, not mutations or whole
+release publication. This is resilience against the observed network failure,
+not proof that Apple’s service will recover within the retry window.
+
+The actual archive-packager regression was red before the fix (exit 68 after its
+first simulated network failure). After the fix, tests exercise recovery after
+two failures, one signing/submission only, permanent failure without retry,
+five-attempt exhaustion, installer paths with spaces, mandatory ticket validation,
+and mandatory Gatekeeper assessment. These fixtures replace external signing and
+network commands; they do not assert live Apple readiness.
+
+Local release-follow-up checks: six notarization regressions, four release-tool
+tests and eleven pipeline tests; Ruff, shellcheck, manifest consistency and locked
+Cargo metadata. Live v0.2.3 CI, accepted notarization/stapling and publication
+remain pending until the new workflow finishes.
+
+Release-repair review at staged patch 1187f6612b70428430653b0ef9ca5b1ae5ac8dc9d941f074d6975fa9f79c4d88:
+three read-only reviewers checked retry/exit/trap semantics, real-packager test
+coverage and CI wiring, and version/document consistency. No code findings;
+release-guide wording was corrected to five total attempts (four retries).
+Installer coverage tests the shared helper directly; full native installer
+validation remains the release workflow's responsibility.

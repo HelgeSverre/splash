@@ -119,6 +119,12 @@ ZIPs stay in the release for people who prefer to drag the app into place.
    prereleases and do not become Latest; stable releases use GitHub's automatic
    version/date selection for Latest.
 
+Ticket stapling allows five attempts total (the initial call plus four retries)
+for network-labelled Apple delivery failures, with bounded backoff and without
+re-signing or re-submitting notarization.
+Permanent failures, exhausted retries, ticket validation and Gatekeeper failures
+still stop publication. The shared helper is `scripts/notary-retry.sh`.
+
 You can still push a matching `v*` tag yourself. The release checks the exact
 commit behind that tag. Tags are serialized so overlapping runs cannot upload
 at the same time. A retry resumes an incomplete draft; an already-published

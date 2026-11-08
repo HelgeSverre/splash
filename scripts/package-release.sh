@@ -2,6 +2,9 @@
 # Sign an existing rata bundle, notarize it, and verify the final ZIP.
 set -euo pipefail
 
+# shellcheck source=scripts/notary-retry.sh
+source "$(dirname "$0")/notary-retry.sh"
+
 if [[ $# -ne 2 ]]; then
   echo "Usage: scripts/package-release.sh APP_PATH OUTPUT_ZIP" >&2
   exit 2
@@ -62,7 +65,7 @@ if [[ "$notary_exit" -ne 0 || "$notary_status" != "Accepted" ]]; then
   echo "Notarization was not accepted" >&2
   exit 1
 fi
-xcrun stapler staple "$app_path"
+staple_notarized "$app_path"
 xcrun stapler validate "$app_path"
 spctl --assess --type execute --verbose=2 "$app_path"
 
