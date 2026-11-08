@@ -84,6 +84,7 @@ jobs:
           python -B scripts/test_release.py
           python -B scripts/test_release_pipeline.py
           python -B scripts/test_notarization.py
+          python -B scripts/test_release_artifacts.py
           bash scripts/quality/test-remote-docker-cleanup.sh
       - name: Preserve Windows native test binaries
         if: runner.os == 'Windows' && always()

@@ -110,7 +110,7 @@ ZIPs stay in the release for people who prefer to drag the app into place.
    the CI/package gate and both macOS signing jobs concurrently. macOS bundles
    use hardened runtime, an Apple-accepted notarization submission, a stapled
    ticket and verification of the extracted distribution ZIP.
-5. One publishing job requires all 11 packages and their 11 SHA-256 sidecars,
+5. One publishing job requires all 12 packages and their 12 SHA-256 sidecars,
    verifies their names and hashes, creates a hidden draft, uploads the complete
    set, checks the remote inventory, then publishes automatically. A failed build
    cannot publish a partial release.

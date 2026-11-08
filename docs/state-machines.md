@@ -512,8 +512,9 @@ it is not counted as passing validation.
 Actual host: macOS arm64. Default desktop and headless Rust builds were tested.
 The desktop-labelled browser tests run the real splash-web harness, not a native
 webview; web tests run splash-server. No visual layout changed, so no new UI
-screenshots were substituted for runtime checks. Native macOS x64, Windows MSVC,
-Ubuntu x64 and native webview runtime/packaging CI were not run or claimed.
+screenshots were substituted for runtime checks. At that local cleanup snapshot, native macOS x64, Windows MSVC, Ubuntu x64
+and native webview runtime/packaging CI had not been run. The later release
+follow-up below records the completed native CI and installer validation.
 
 The source-level prompt/metadata schedule is documented explicitly; its regression
 locks the new admission contract rather than pretending to replay that exact old
@@ -537,7 +538,7 @@ stapling call lost its connection to Apple’s ticket service. Release run
 verified, notarization returned Accepted, then NSURLErrorDomain Code=-1005
 and stapler exit 68 prevented publication. Both attempts used v0.2.2 at
 1d0f8d4999cb1c4bdaa51fb20a162e04d9c53794; that tag remains immutable and
-unpublished. The packaging correction is prepared as v0.2.3.
+unpublished. The packaging correction shipped in v0.2.3.
 
 | From | Event / guard | Effect / next state |
 | --- | --- | --- |
@@ -564,8 +565,13 @@ network commands; they do not assert live Apple readiness.
 
 Local release-follow-up checks: six notarization regressions, four release-tool
 tests and eleven pipeline tests; Ruff, shellcheck, manifest consistency and locked
-Cargo metadata. Live v0.2.3 CI, accepted notarization/stapling and publication
-remain pending until the new workflow finishes.
+Cargo metadata. Live v0.2.3 build, native, webview, browser and package gates all passed in
+[run 42430099714](https://github.com/HelgeSverre/splash/actions/runs/42430099714).
+Intel signing job 128576907818 reproduced three Apple network failures, then
+stapled successfully on the fourth attempt after 5/10/20-second backoffs.
+The same accepted artifact passed ticket validation and Gatekeeper, both before
+and after ZIP extraction. The universal signed/notarized installer also passed.
+Publication was subsequently recovered from the collector issue described below.
 
 Release-repair review at staged patch 1187f6612b70428430653b0ef9ca5b1ae5ac8dc9d941f074d6975fa9f79c4d88:
 three read-only reviewers checked retry/exit/trap semantics, real-packager test
@@ -573,3 +579,44 @@ coverage and CI wiring, and version/document consistency. No code findings;
 release-guide wording was corrected to five total attempts (four retries).
 Installer coverage tests the shared helper directly; full native installer
 validation remains the release workflow's responsibility.
+
+## 16. Release follow-up: shipping artifact collection
+
+[Issue #16](https://github.com/HelgeSverre/splash/issues/16), P2: all v0.2.3 native,
+package and notarization jobs passed in run 42430099714, but publisher job
+128581905875 downloaded the Windows native-test diagnostics through its broad
+`splash-*` pattern. The strict file allowlist correctly rejected those unexpected
+files. This is a collection-scope error, not a failed or missing package.
+
+The publisher now collects `splash-macos-*` and `splash-packages-*` explicitly.
+The exact package/checksum allowlist is unchanged. The workflow-pattern regression
+reads the actual publisher configuration: it was red with the broad glob and is
+green with all seven shipping artifacts included and diagnostics excluded.
+
+| State | Event / guard | Effect / next state |
+| --- | --- | --- |
+| All build/test/notarization gates passed | Collect intended artifact families from exact run | Stage only shipping artifacts |
+| Staged artifacts | Unexpected/missing filenames or bad checksum | Reject; no public release |
+| Exact complete verified package set | Release absent | Create hidden draft and upload all files |
+| Draft uploaded | Exact remote inventory and uploaded states | Publish; immutable release |
+| Published release | Retry | Leave binaries and notes unchanged |
+
+Recovery uses the existing run's shipping artifacts and a clean detached checkout
+of v0.2.3 at 2c359831e5284f0abb7dd3861326c6b46c14cc44. It invokes that checkout's
+unchanged strict publisher after verifying the full package set. No binary is
+rebuilt, no validation is disabled, and the tag remains unchanged. The unchanged tag publisher verified all 24 files locally, created a hidden
+draft, uploaded the complete set, checked the remote inventory, then published
+[v0.2.3](https://github.com/HelgeSverre/splash/releases/tag/v0.2.3) at
+2026-11-08 01:59 CET (00:59 UTC). GitHub marks it Latest. All 24 uploaded sizes and GitHub
+SHA-256 digests were independently matched against the verified source files
+after publication. No test diagnostics were uploaded. The workflow-level
+collector repair and configuration regression keep future releases on the same
+strict intended input set.
+
+Collector repair review at staged eaea5aaeb2fa0c691315d73066ff7a39c311aac8cd58f81285fa2d1302f77b8e:
+three read-only reviewers verified producer/dependency coverage, disjoint shipping
+files, diagnostic exclusion, the real workflow-pattern regression, and preservation
+of the strict publisher. No source findings. Ruff, actionlint, the new collector
+regression and whitespace checks passed. The released app/binaries remain exactly
+the tested v0.2.3 tag; only publication input collection and documentation changed
+after that tag.
