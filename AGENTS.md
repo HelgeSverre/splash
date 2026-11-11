@@ -65,6 +65,21 @@ into the isolated demo directory. Do not leave launchers pointing into `target/`
 which build cleanup may remove. Before handing off a preview, exercise its main
 actions (including **Find sessions**) with the same environment it will retain.
 
+## Releases
+
+Before choosing or bumping a release version, read `docs/releasing.md` and
+reconcile repository version metadata, remote tags, GitHub releases (including
+drafts and prereleases), and pending or failed release workflows. A tag alone
+does not mean that version was published. Identify unpublished versions and
+version gaps before naming the next release.
+
+Recover a failed release under its intended version when possible; a retry of
+packaging or publication alone must not consume another version. Preserve
+existing tags and published assets. If a new version is necessary, explain the
+reason and any resulting gap before changing version metadata or tagging.
+After publication, verify the intended version appears in GitHub Releases with
+the complete asset inventory and the expected Latest status.
+
 ## Cross-platform changes
 
 Keep browser/client conventions separate from backend-host filesystem semantics.
