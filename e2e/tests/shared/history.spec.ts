@@ -132,7 +132,7 @@ test.describe("Open from agent", () => {
     await expect(app.title).toHaveText("Fix the subtract sign");
     const id = await app.sessionId();
     await app.expectStatus("exited");
-    await expect(app.resumeNote).toContainText("Viewing saved history. Continue to reconnect the agent.");
+    await app.expectReconnectHint();
     await expect(app.entries("tool")).toContainText("Read calc.py");
     await expect(app.entries("agent").last()).toContainText("subtract(a, b) is a minus b");
     await expect(app.sessionRow("Fix the subtract sign")).toBeVisible();

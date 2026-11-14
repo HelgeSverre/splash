@@ -32,7 +32,7 @@ test.describe("an agent that plans and edits", () => {
     await expect(app.toolDiffs(created)).toHaveAttribute("data-new", "true");
 
     // The diff's path opens a diff tab; the location opens the file at its line.
-    await app.toolDiffPath(app.toolDiffs(edit)).click();
+    await app.toolDiffOpen(edit).click();
     await expect(app.sessionTab("diff", join(cwd, "calc.py"))).toHaveAttribute("aria-selected", "true");
     await app.sessionTab("chat").click();
     await app.toolLocations(edit).click();
@@ -46,7 +46,7 @@ test.describe("an agent that plans and edits", () => {
     await app.prompt("Add a multiply function with a test");
     const bench = new Workbench(page);
 
-    await app.sideTab("changes").click();
+    await app.sideTab("review").click();
     await expect(bench.changes()).toHaveCount(2);
     await expect(bench.changesCount).toHaveAttribute("data-count", "2");
     await expect(bench.changes("calc.py")).toHaveAttribute("data-status", "M");
@@ -80,7 +80,7 @@ test.describe("an agent that plans and edits", () => {
     const { cwd } = db.session(id)!;
 
     const edit = app.tools("edit").first();
-    await app.toolDiffPath(app.toolDiffs(edit)).click();
+    await app.toolDiffOpen(edit).click();
     await expect(app.sessionTab("diff", join(cwd, "calc.py"))).toHaveAttribute("aria-selected", "true");
 
     writeFileSync(join(cwd, "calc.py"), readFileSync(join(cwd, "calc.py"), "utf8").replace("return a * b", "return a * 99"));
@@ -93,14 +93,14 @@ test("the Changes tab follows the files without a refresh", async ({ splash }) =
   const id = await app.newSession({ where: "worktree" });
   const { cwd } = db.session(id)!;
   const bench = new Workbench(page);
-  await app.sideTab("changes").click();
+  await app.sideTab("review").click();
   await expect(bench.noChanges).toBeVisible();
 
   writeFileSync(join(cwd, "calc.py"), readFileSync(join(cwd, "calc.py"), "utf8").replace("a - b", "b - a"));
   writeFileSync(join(cwd, "notes.txt"), "todo\n");
   rmSync(join(cwd, "README.md"));
   await expect(bench.changes()).toHaveCount(3, { timeout: 15_000 });
-  await expect(app.sideTab("changes")).toContainText("3");
+  await expect(app.sideTab("review")).toContainText("3");
 
   await bench.changes("README.md").click();
   await expect(bench.diffDeleted).toBeVisible();
@@ -154,7 +154,7 @@ test("the log shows the agent's JSON-RPC traffic and filters it", async ({ splas
   const { app, page } = splash;
   await app.newSession({ where: "in_place" });
   await app.prompt("What does subtract do?");
-  await app.openLogButton.click();
+  await app.openLog();
   await expect(app.sessionTab("log")).toHaveAttribute("aria-selected", "true");
 
   const bench = new Workbench(page);

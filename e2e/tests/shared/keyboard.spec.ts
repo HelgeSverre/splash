@@ -115,7 +115,7 @@ test("Stop, focus the message box and Settings have shortcuts", async ({ splash 
 test("Close tab closes the open tab, never the chat", async ({ splash }) => {
   const { app, page } = splash;
   await app.newSession({ where: "in_place" });
-  await app.openLogButton.click();
+  await app.openLog();
   await expect(app.sessionTab("log")).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press(app.key("W"));
   await expect(app.sessionTab("log")).toHaveCount(0);

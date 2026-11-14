@@ -23,17 +23,31 @@ Splash is an early personal project. Native CI covers macOS (Apple silicon and I
 
 ## Screenshots
 
-Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub captures show public repositories. The session library, ACP history, fork, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness. Server captures use the authenticated server locally with isolated data and fixture agents; they demonstrate the UI, not a live remote deployment.
+Click any screenshot to open it at full size. Session and workbench captures use an isolated demo project; GitHub and Actions captures use the offline fixture `gh` scenario (`e2e/demo`, `e2e-labs/widgets`), not live GitHub data. The session library, ACP history, fork, attention, and review captures use synthetic conversations and fixture-backed ACP responses in the real app's web harness. Server captures use the authenticated server locally with isolated data and fixture agents; they demonstrate the UI, not a live remote deployment.
 
-The platform settings captures below show a macOS browser connected to the local
-macOS demo server. The Linux and Windows captures show downloaded CI artifacts
-running in Ubuntu 24.04 Docker/Xvfb and a temporary Windows Server 2025 EC2 desktop.
+Desktop UI captures come from the `splash-web` harness and server captures from
+`splash-server`, both in headless Chromium on macOS with isolated data, fixture agents
+and synthetic conversations. The platform settings captures show that browser connected
+to the local macOS server. The Linux and Windows captures show downloaded CI artifacts
+running in Ubuntu 24.04 Docker/Xvfb and a temporary Windows Server 2025 EC2 desktop;
+they predate the compact workbench, so their sidebar differs slightly from the current one.
 The first-run and native quality audit captures use fresh environments with no configured
 providers. Populated audit captures use synthetic fixture agents in isolated projects.
 See the [quality audit report](docs/quality-audit-2026-10-10.md) for fixes, validation,
 and platform limits, and the [earlier artifact smoke-test report](docs/artifact-smoke-2026-10-07.md).
 
 <table>
+  <tr>
+    <td colspan="2" valign="top"><strong>One header over the conversation</strong><br><a href="screenshots/compact-session.jpg"><img src="screenshots/compact-session.jpg" alt="Fixture session with a single header bar, the plan and two edits, and the Review panel listing changed files above a pinned feedback box" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><strong>New session with installed agents</strong><br><a href="screenshots/compact-new-session.jpg"><img src="screenshots/compact-new-session.jpg" alt="New session dialog offering three installed fixture agents, with uninstalled agents and extra folders folded away" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Reply to reconnect a stopped agent</strong><br><a href="screenshots/compact-stopped-session.jpg"><img src="screenshots/compact-stopped-session.jpg" alt="Session whose fixture agent exited, with the status exited, a Reconnect button and a composer that says replying reconnects" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><strong>Small window: chat keeps the room</strong><br><a href="screenshots/compact-small-window.jpg"><img src="screenshots/compact-small-window.jpg" alt="900 by 560 window where the side panel has stepped aside and the conversation uses the full width" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Small window: panel floats over the chat</strong><br><a href="screenshots/compact-small-window-panel.jpg"><img src="screenshots/compact-small-window-panel.jpg" alt="900 by 560 window with the Review panel floating over the right of the conversation below the header" width="100%"></a></td>
+  </tr>
   <tr>
     <td width="50%" valign="top"><strong>First run with no agents</strong><br><a href="screenshots/quality-desktop-first-run.jpg"><img src="screenshots/quality-desktop-first-run.jpg" alt="Fresh Splash welcome screen with no projects or ready agents" width="100%"></a></td>
     <td width="50%" valign="top"><strong>Agent setup before a first session</strong><br><a href="screenshots/quality-desktop-agent-setup.jpg"><img src="screenshots/quality-desktop-agent-setup.jpg" alt="New session dialog explaining that an agent needs configuration before it can start" width="100%"></a></td>
@@ -57,7 +71,7 @@ and platform limits, and the [earlier artifact smoke-test report](docs/artifact-
     <td colspan="2" valign="top"><strong>Verify ACP compatibility on the backend host</strong><br><a href="screenshots/platform-agent-check.jpg"><img src="screenshots/platform-agent-check.jpg" alt="Agent settings showing a successful fixture-backed ACP handshake on the macOS demo host" width="100%"></a></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><strong>Discover sessions through the server</strong><br><a href="screenshots/server-discovery-restored.jpg"><img src="screenshots/server-discovery-restored.jpg" alt="Successful server discovery with two fixture sessions each from Claude Code, Codex and Pi" width="100%"></a></td>
+    <td width="50%" valign="top"><strong>Discover sessions through the server</strong><br><a href="screenshots/server-discovery-restored.jpg"><img src="screenshots/server-discovery-restored.jpg" alt="Server discovery listing fixture sessions from Claude Code and Codex, with Glue reporting that it cannot list sessions" width="100%"></a></td>
     <td width="50%" valign="top"><strong>Diagnose an adapter startup failure</strong><br><a href="screenshots/server-discovery-error.jpg"><img src="screenshots/server-discovery-error.jpg" alt="Agent initialization failure including stderr that identifies a missing adapter executable" width="100%"></a></td>
   </tr>
   <tr>
@@ -76,7 +90,7 @@ and platform limits, and the [earlier artifact smoke-test report](docs/artifact-
     </td>
     <td width="50%" valign="top">
       <strong>Refresh a conversation continued elsewhere</strong><br>
-      <a href="screenshots/quality-desktop-history-refresh.jpg"><img src="screenshots/quality-desktop-history-refresh.jpg" alt="Refreshed transcript with source activity, synchronization time and additional workspace folders" width="100%"></a>
+      <a href="screenshots/quality-desktop-history-refresh.jpg"><img src="screenshots/quality-desktop-history-refresh.jpg" alt="Refreshed transcript with the notice that history was refreshed from the agent" width="100%"></a>
     </td>
   </tr>
   <tr>
@@ -92,7 +106,7 @@ and platform limits, and the [earlier artifact smoke-test report](docs/artifact-
   <tr>
     <td width="50%" valign="top">
       <strong>Inspect native history and capabilities</strong><br>
-      <a href="screenshots/quality-desktop-history-management.jpg"><img src="screenshots/quality-desktop-history-management.jpg" alt="Agent history metadata, workspace folders and advertised lifecycle capabilities" width="100%"></a>
+      <a href="screenshots/quality-desktop-history-management.jpg"><img src="screenshots/quality-desktop-history-management.jpg" alt="Agent history metadata and workspace folders, with the agent's supported actions under Agent details" width="100%"></a>
     </td>
     <td width="50%" valign="top">
       <strong>Delete agent history with confirmation</strong><br>
@@ -216,7 +230,7 @@ and platform limits, and the [earlier artifact smoke-test report](docs/artifact-
     </td>
     <td width="50%" valign="top">
       <strong>New session with additional folders</strong><br>
-      <a href="screenshots/new-session-folders.jpg"><img src="screenshots/new-session-folders.jpg" alt="New session setup with additional workspace folders, mode, model and permission choices" width="100%"></a>
+      <a href="screenshots/new-session-folders.jpg"><img src="screenshots/new-session-folders.jpg" alt="New session dialog with the additional workspace folders field opened" width="100%"></a>
     </td>
   </tr>
   <tr>

@@ -3,6 +3,7 @@
   // repo, branch and PR, the status, the cost, and the panel toggles. The
   // playground renders this same component with `live` off (no git lookups,
   // no rename, no panel toggles).
+  import type { Snippet } from "svelte";
   import { prompt as askText } from "@elyra/runtime";
   import AgentIcon from "./AgentIcon.svelte";
   import IconButton from "./ui/IconButton.svelte";
@@ -13,10 +14,13 @@
   import { home } from "../lib/paths";
   import { api, type SessionView, type GitInfo } from "../bindings";
   import { agentById } from "../lib/sessions.svelte";
-  import { layout, toggleBottom, toggleRight } from "../lib/layout.svelte";
+  import { layout, rightVisible, toggleBottom, toggleLeft, toggleRight } from "../lib/layout.svelte";
   import { openExternal, showError } from "../lib/system";
 
-  let { session, live = true }: { session: SessionView; live?: boolean } = $props();
+  /** `actions` sits between the cost and the panel toggles (the session's menu). */
+  let { session, live = true, actions }: { session: SessionView; live?: boolean; actions?: Snippet } = $props();
+  // An agent that died is not one the user stopped.
+  const failed = $derived(session.status === "exited" && session.attention?.kind === "failed");
 
   const agent = $derived(agentById(session.agent_id));
   const usage = $derived(session.meta.usage);
@@ -43,6 +47,7 @@
 </script>
 
 <header>
+  {#if live && !layout.leftOpen}<IconButton data-testid="session-sidebar-toggle" class="side-toggle" size="md" icon="panel-left" title={withKey("Show sidebar", "view.left")} label="Show sidebar" onclick={toggleLeft} />{/if}
   <button class="plain title t-pane-title" data-testid="session-title" onclick={rename} title="Rename"><span class="title-text">{session.title}</span></button>
   <span class="agent"><AgentIcon id={session.agent_id} size={13} /> {agent?.name ?? session.agent_id}</span>
   {#if git?.repo}
@@ -62,15 +67,16 @@
       PR #{git.pr.number}<Tag tone={PR_TONE[git.pr.state.toLowerCase()] ?? "default"}>{git.pr.state.toLowerCase()}</Tag>
     </button>
   {/if}
-  <span class="status {session.status}" data-testid="session-status" data-status={session.status}><span class="dot {session.status}"></span><span class="status-label">{statusLabel(session.status)}</span></span>
+  <span class="status {session.status}" class:failed data-testid="session-status" data-status={session.status} data-failed={failed}><span class="dot {failed ? "error" : session.status}"></span><span class="status-label">{failed ? "exited" : statusLabel(session.status)}</span></span>
   {#if session.archived}<Tag data-testid="session-archived" tone="muted">archived</Tag>{/if}
 
   <span class="spacer"></span>
 
   {#if usage?.cost_usd}<span class="cost" data-testid="session-cost" title="session cost reported by the agent">{usd(usage.cost_usd)}</span>{/if}
+  {#if actions}{@render actions()}{/if}
   <span class="toggles">
     <IconButton data-testid="session-terminal-toggle" size="md" icon="panel-bottom" title={withKey("Terminal", "view.terminal")} label="Terminal" pressed={layout.bottomOpen} onclick={() => live && toggleBottom()} />
-    <IconButton data-testid="session-panel-toggle" size="md" icon="panel-right" title={withKey("Changes & files", "view.right")} label="Changes & files" pressed={layout.rightOpen} onclick={() => live && toggleRight()} />
+    <IconButton data-testid="session-panel-toggle" size="md" icon="panel-right" title={withKey("Changes & files", "view.right")} label="Changes & files" pressed={rightVisible()} onclick={() => live && toggleRight()} />
   </span>
 </header>
 
@@ -99,7 +105,8 @@
   .pr { flex: none; gap: 6px; }
   .status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-sm); flex: none; }
   .status.running, .status.starting, .status.awaiting_permission { color: var(--accent); }
-  .status.error { color: var(--err-dim); }
+  .status.error, .status.failed { color: var(--err-dim); }
+  header :global(.side-toggle) { margin-left: -6px; flex: none; }
   .cost { font: var(--fs-xs) var(--font-mono); color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
   .toggles { display: flex; gap: 2px; flex: none; margin-left: 4px; }
 

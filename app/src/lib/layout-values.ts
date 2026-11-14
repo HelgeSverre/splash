@@ -1,4 +1,4 @@
-export type SideTab = "changes" | "files" | "details" | "review";
+export type SideTab = "files" | "details" | "review";
 
 const defaults = {
   left: 260,
@@ -7,7 +7,7 @@ const defaults = {
   leftOpen: true,
   rightOpen: true,
   bottomOpen: false,
-  rightTab: "changes" as SideTab,
+  rightTab: "review" as SideTab,
 };
 
 /** Persisted browser state can outlive a version or contain valid non-object JSON. */
@@ -23,7 +23,8 @@ export function restoredLayout(value: unknown): typeof defaults {
   };
   const open = (key: "leftOpen" | "rightOpen" | "bottomOpen") =>
     typeof saved[key] === "boolean" ? saved[key] as boolean : defaults[key];
-  const tabs: readonly unknown[] = ["changes", "files", "details", "review"];
+  // "changes" was a tab of its own before the Review tab took its list.
+  const tabs: readonly unknown[] = ["files", "details", "review"];
   return {
     left: size("left", 200, 420),
     right: size("right", 220, 720),

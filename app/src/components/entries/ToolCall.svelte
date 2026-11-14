@@ -59,17 +59,26 @@
       <button class="plain loc" data-testid="tool-location" data-path={loc.path} data-line={loc.line} onclick={() => openTab({ kind: "file", path: loc.path, line: loc.line ?? undefined })}
         >{rel(loc.path, cwd)}{loc.line ? `:${loc.line}` : ""}</button>
     {/each}
+    {#if diffs.length === 1 && diffs[0].type === "diff"}
+      {#if !diffs[0].old}<Tag tone="ok">new file</Tag>{/if}
+      <button class="plain loc" data-testid="tool-diff-open" title="Open the diff in a tab" onclick={() => diffs[0].type === "diff" && openTab({ kind: "diff", path: diffs[0].path })}>diff</button>
+    {/if}
     {#if hasBody}<span class="twist" aria-hidden="true"><Chevron {open} /></span>{/if}
   </div>
   {#if open}
     <div class="body" id={bodyId}>
       {#each diffs as d, i (i)}
         {#if d.type === "diff"}
-          <div class="diff-head" data-testid="tool-diff" data-path={d.path} data-new={!d.old || undefined}>
-            <button class="plain loc" data-testid="tool-diff-path" onclick={() => openTab({ kind: "diff", path: d.path })}>{rel(d.path, cwd)}</button>
-            {#if !d.old}<Tag tone="ok">new file</Tag>{/if}
+          <!-- A lone diff is named by the row above it; several each get a head. -->
+          <div data-testid="tool-diff" data-path={d.path} data-new={!d.old || undefined}>
+            {#if diffs.length > 1}
+              <div class="diff-head">
+                <button class="plain loc" data-testid="tool-diff-path" onclick={() => openTab({ kind: "diff", path: d.path })}>{rel(d.path, cwd)}</button>
+                {#if !d.old}<Tag tone="ok">new file</Tag>{/if}
+              </div>
+            {/if}
+            <DiffView oldText={d.old ?? ""} newText={d.new} path={d.path} maxHeight="360px" />
           </div>
-          <DiffView oldText={d.old ?? ""} newText={d.new} path={d.path} maxHeight="360px" />
         {/if}
       {/each}
       <!-- Output panes scroll: tabindex so the keyboard can reach them in WebKit too. -->

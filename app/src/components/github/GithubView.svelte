@@ -5,7 +5,7 @@
   import { selectMatching } from "../../lib/github-model";
   import { accountKey, parse, persist, initializeInbox, unread, snoozed, markRead, search, searchGithub, stopSearch } from "../../lib/github-inbox.svelte";
   import { prefs, setPref } from "../../lib/prefs.svelte";
-  import { toggleLeft } from "../../lib/layout.svelte";
+  import { layout, toggleLeft } from "../../lib/layout.svelte";
   import Icon from "../Icon.svelte";
   import IconButton from "../ui/IconButton.svelte";
   import FilterInput from "../ui/FilterInput.svelte";
@@ -14,6 +14,7 @@
   import Modal from "../ui/Modal.svelte";
   import ModalHeader from "../ui/ModalHeader.svelte";
   import GithubDetail from "./GithubDetail.svelte";
+  import SyncNote from "./SyncNote.svelte";
 
   const tabs = [ { id: "all", label: "All activity" }, { id: "needs_me", label: "Needs me" }, { id: "issue", label: "Issues" }, { id: "pull_request", label: "PRs" }, { id: "branch", label: "Branches" } ];
   const feed = $derived((tabs.some(t => t.id === prefs["github.feed"]) ? prefs["github.feed"] : "all") as Feed);
@@ -107,7 +108,7 @@
 </script>
 
 <div class="github-view" data-testid="github-view">
-  <header><IconButton icon="monitor" title="Toggle sidebar" onclick={toggleLeft} /><Icon name="github" size={16} /><h1 class="t-pane-title">GitHub</h1><span class="spacer"></span><button class="btn ghost sm" onclick={openActions}>Actions</button>{#if github.catalog}<span class="account t-meta" data-testid="github-account">@{github.catalog.login}</span>{/if}<IconButton data-testid="github-refresh" icon="refresh" title="Refresh GitHub" onclick={refresh} disabled={github.catalogLoading || busy} /><button class="btn primary sm" data-testid="github-new-issue" onclick={() => newIssue(selected?.repository ?? (scoped.length === 1 ? scoped[0].full_name : ""))} disabled={!canCreateIssue()}><Icon name="plus" size={12} />New issue</button></header>
+  <header>{#if !layout.leftOpen}<IconButton icon="panel-left" title="Show sidebar" label="Show sidebar" onclick={toggleLeft} />{/if}<Icon name="github" size={16} /><h1 class="t-pane-title">GitHub</h1><span class="spacer"></span><button class="btn ghost sm" onclick={openActions}>Actions</button>{#if github.catalog}<span class="account t-meta" data-testid="github-account">@{github.catalog.login}</span>{/if}<IconButton data-testid="github-refresh" icon="refresh" title="Refresh GitHub" onclick={refresh} disabled={github.catalogLoading || busy} /><button class="btn primary sm" data-testid="github-new-issue" onclick={() => newIssue(selected?.repository ?? (scoped.length === 1 ? scoped[0].full_name : ""))} disabled={!canCreateIssue()}><Icon name="plus" size={12} />New issue</button></header>
   {#if !github.catalog}
     <EmptyState icon="github" loading={github.catalogLoading} title={github.catalogLoading ? "Loading your GitHub repositories…" : "Connect your GitHub account"} detail="Splash uses GitHub CLI. Run gh auth login --hostname github.com, then retry. Private and organization repositories require access through that login.">
       {#if github.catalogError}<p class="error" role="alert">{github.catalogError}</p>{/if}<button class="btn" onclick={() => loadCatalog(true)} disabled={github.catalogLoading}>Retry</button>
@@ -125,6 +126,7 @@
       {#if activeView}<button class="btn ghost sm" data-testid="github-delete-view" onclick={() => { persist(accountKey("views"), saved.filter(v => v.id !== activeView)); activeView = ""; }}>Delete view</button>{/if}
       <span class="spacer"></span>
       <select class="field" data-testid="github-inbox-filter" aria-label="Inbox filter" bind:value={inboxFilter}><option value="inbox">Inbox</option><option value="unread">Unread</option><option value="snoozed">Snoozed</option><option value="all">Include snoozed</option></select>
+      <select class="field" data-testid="github-item-status" aria-label="Item status" bind:value={status}><option value="all">All states</option><option value="open">Open</option><option value="closed">Closed / merged</option></select>
       <button class="btn ghost sm" data-testid="github-mark-all-read" disabled={!items.length} onclick={() => markRead(items)}>Mark loaded read</button>
       <select class="field" data-testid="github-search-source" aria-label="Search source" bind:value={mode}><option value="loaded">Loaded activity</option><option value="github">Search GitHub</option></select>
     </div>
@@ -138,9 +140,7 @@
       </form>
       <div class="notice t-meta">Searches issues and PRs in {scoped.length} repositories. Text is literal; use the fields for qualifiers. Review filters search PRs only. Select Issues or PRs to narrow the type.</div>
     {/if}
-    <Tabs data-testid="github-tabs" items={mode === "github" ? tabs.filter(t => ["all", "issue", "pull_request"].includes(t.id)) : tabs} active={visibleFeed} prefix="github" label="GitHub activity type" onselect={id => { if (mode === "github" && id === "issue") review = ""; void setPref("github.feed", id); }}>
-      {#snippet actions()}<select class="field state-filter" data-testid="github-item-status" aria-label="Item status" bind:value={status}><option value="all">All states</option><option value="open">Open</option><option value="closed">Closed / merged</option></select>{/snippet}
-    </Tabs>
+    <Tabs data-testid="github-tabs" items={mode === "github" ? tabs.filter(t => ["all", "issue", "pull_request"].includes(t.id)) : tabs} active={visibleFeed} prefix="github" label="GitHub activity type" onselect={id => { if (mode === "github" && id === "issue") review = ""; void setPref("github.feed", id); }} />
     {#if github.catalogError}<div class="notice error" role="alert">Repository refresh failed. Showing the previous catalog. {github.catalogError}</div>{/if}
     {#if mode === "loaded" && feed === "needs_me"}<div class="notice t-meta">Assigned to you, directly requesting your review, or your PRs with failing checks / requested changes.</div>{/if}
     {#if failures.length}<details class="failures" data-testid="github-failures" data-count={failures.length}><summary data-testid="github-failures-summary">{failures.length} GitHub {failures.length === 1 ? "feed failed" : "feeds failed"}. Results may be incomplete.</summary><div class="failure-list">{#each failures as s}<p data-testid="github-failure" data-repo={s.repository} data-kind={s.kind}><strong>{s.repository} · {s.kind.replaceAll("_", " ")}</strong><br>{pageStore[sourceKey(s)]?.error}</p>{/each}</div><button class="btn sm" data-testid="github-failures-retry" disabled={busy} onclick={() => mode === "github" ? runSearch() : loadSources(failures, "refresh")}>Retry failed requests</button></details>{/if}
@@ -151,7 +151,7 @@
           {#each items.slice(0, limit) as item (itemKey(item))}
             <button class="plain item focus-inset" data-testid="github-item" data-repo={item.repository} data-kind={item.kind} data-number={item.number} data-branch={item.branch} class:active={selected && itemKey(item) === itemKey(selected)} aria-pressed={selected && itemKey(item) === itemKey(selected)} onclick={() => github.selected = itemKey(item)}>
               <span class="item-icon" class:failing={itemStatus(item) === "Checks failing"} class:merged={item.state === "MERGED"}><Icon name={itemIcon(item.kind)} size={15} /></span>
-              <span class="item-content"><span class="item-title" data-testid="github-item-title">{#if unread(item)}<span class="unread" data-testid="github-item-unread" role="img" aria-label="Unread" title="New or updated since last read"></span>{/if}{item.title}</span><span class="item-meta"><span class="repo-name">{item.repository}</span>{#if item.number}<span>#{item.number}</span>{/if}<span>{itemStatus(item)}</span>{#if repoByName.get(item.repository)?.project_ids.length}<span data-testid="github-item-linked" title="Linked to a Splash project"><Icon name="folder" size={11} /></span>{/if}</span></span>
+              <span class="item-content"><span class="item-title" data-testid="github-item-title">{#if unread(item)}<span class="unread" data-testid="github-item-unread" role="img" aria-label="Unread" title="New or updated since last read"></span>{/if}{item.title}</span><span class="item-meta"><span class="repo-name">{item.repository}</span>{#if item.number}<span>#{item.number}</span>{/if}<span data-testid="github-item-state">{itemStatus(item)}</span>{#if repoByName.get(item.repository)?.project_ids.length}<span data-testid="github-item-linked" title="Linked to a Splash project"><Icon name="folder" size={11} /></span>{/if}</span></span>
               <time class="t-mono-meta" datetime={item.updated_at} title={item.updated_at}>{ago(item.updated_at)}</time>
             </button>
           {:else}<EmptyState data-testid="github-empty" inline loading={busy} title={busy ? "Loading activity…" : "No matching items loaded"} detail={scoped.length ? "Try another filter, refresh, or load older items." : "Choose repositories or clear your scope filters."} />{/each}
@@ -161,8 +161,7 @@
       </section>
       {#if selected}<GithubDetail item={selected} />{:else}<div class="blank"><EmptyState icon="github" title="Your GitHub workspace" detail="Select an issue, pull request, branch, or activity to see details and linked Splash sessions." /></div>{/if}
     </div>
-    <footer><span class="sync" role="status" data-testid="github-sync" data-loading={busy} data-loaded={busy ? (mode === "github" ? search.completed : github.completed) : loaded} data-total={busy ? (mode === "github" ? search.total : github.total) : sources.length}>{#if busy}<span class="spinner"></span>Loading {mode === "github" ? search.completed : github.completed} / {mode === "github" ? search.total : github.total}{:else}{loaded} / {sources.length} feeds loaded{#if latestSync} · Updated {new Date(latestSync).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}{/if}</span><span class="spacer"></span>{#if busy}<button class="btn ghost sm" data-testid="github-pause" onclick={() => mode === "github" ? stopSearch() : stopLoading()}>Pause</button>{:else if mode === "loaded" && (github.paused || loaded < sources.length)}<button class="btn ghost sm" data-testid="github-resume" onclick={() => retry++}>Resume</button>{:else if mode === "github" && search.signature && loaded < sources.length}<button class="btn ghost sm" data-testid="github-resume-search" onclick={() => runSearch()}>Resume search</button>{/if}<span class="t-meta">{scoped.length} / {repositories.length} repositories</span></footer>
-    <div class="coverage t-meta">{mode === "github" ? "GitHub search returns up to 1,000 matches per group of up to 10 repositories and type. Narrow the scope if you reach that limit. Load more to continue. Search indexing may be delayed." : "Recent items per repository; load older items for more. GitHub’s activity feed has limited history and may be delayed."} Read and snooze apply only in Splash. New activity wakes snoozed items.</div>
+    <footer><span class="sync" role="status" data-testid="github-sync" data-loading={busy} data-loaded={busy ? (mode === "github" ? search.completed : github.completed) : loaded} data-total={busy ? (mode === "github" ? search.total : github.total) : sources.length}>{#if busy}<span class="spinner"></span>Loading {mode === "github" ? search.completed : github.completed} / {mode === "github" ? search.total : github.total}{:else}{loaded} / {sources.length} feeds loaded{#if latestSync} · Updated {new Date(latestSync).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{/if}{/if}</span><SyncNote data-testid="github-sync-info" label="About this list"><span data-testid="github-sync-note">{mode === "github" ? "GitHub search returns up to 1,000 matches per group of up to 10 repositories and type. Narrow the scope if you reach that limit. Load more to continue. Search indexing may be delayed." : "Recent items per repository; load older items for more. GitHub’s activity feed has limited history and may be delayed."} Read and snooze apply only in Splash. New activity wakes snoozed items.</span></SyncNote><span class="spacer"></span>{#if busy}<button class="btn ghost sm" data-testid="github-pause" onclick={() => mode === "github" ? stopSearch() : stopLoading()}>Pause</button>{:else if mode === "loaded" && (github.paused || loaded < sources.length)}<button class="btn ghost sm" data-testid="github-resume" onclick={() => retry++}>Resume</button>{:else if mode === "github" && search.signature && loaded < sources.length}<button class="btn ghost sm" data-testid="github-resume-search" onclick={() => runSearch()}>Resume search</button>{/if}<span class="t-meta">{scoped.length} / {repositories.length} repositories</span></footer>
   {/if}
 </div>
 
@@ -200,7 +199,6 @@
   .filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 14px 16px 10px; }
   .filters select { max-width: 190px; }
   .filters button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
-  .state-filter { height: var(--control-h-sm); font-size: var(--fs-sm); }
   .triage { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 1.2fr) minmax(300px, 1fr); }
   .list { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   .list-head { display: flex; justify-content: space-between; gap: 8px; padding: 12px 16px 8px; flex: none; }
@@ -219,7 +217,6 @@
   .more { display: flex; margin: 14px auto; }
   footer { display: flex; align-items: center; gap: 8px; min-height: var(--h-toolbar); padding: 6px 16px; border-top: 1px solid var(--border); flex: none; }
   .sync { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-xs); }
-  .coverage { padding: 0 16px 8px; font-size: var(--fs-xs); }
   .notice { padding: 8px 16px; border-bottom: 1px solid var(--border); }
   .error { color: var(--del-fg); white-space: pre-wrap; overflow-wrap: anywhere; }
   .failures { padding: 8px 16px; font-size: var(--fs-sm); color: var(--warn-dim); border-bottom: 1px solid var(--border); }

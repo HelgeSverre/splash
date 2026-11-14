@@ -40,6 +40,8 @@ test("the selected side tab stays reachable in a 220px panel", async ({ splash }
   await page.reload();
   await app.waitReady();
   await app.newSession({ where: "in_place" });
+  // A window this narrow starts with the panel closed; it opens over the chat.
+  await app.panelToggle.click();
 
   await expect.poll(async () => (await panels.side.boundingBox())?.width).toBe(220);
   const details = app.sideTab("details");
@@ -91,7 +93,7 @@ test("invalid stored panel values recover to usable controls", async ({ splash }
   await app.waitReady();
   await app.newSession({ where: "in_place" });
   await expect(app.composer).toBeVisible();
-  await expect(app.sideTab("changes")).toHaveAttribute("aria-selected", "true");
+  await expect(app.sideTab("review")).toHaveAttribute("aria-selected", "true");
   await app.prompt("Panel state recovered");
   await expect(app.title).toHaveText("Panel state recovered");
 });

@@ -16,6 +16,7 @@
   import { showError } from "../lib/system";
   import { api } from "../bindings";
   import { serverUnavailable } from "../lib/server.svelte";
+  import { toggleLeft } from "../lib/layout.svelte";
 
   let showArchived: Record<string, boolean> = $state({});
 
@@ -78,28 +79,37 @@
     }
   }
 
+  // "Go to session n" follows the list's order, which changes as sessions
+  // come and go: the numbers show only while a modifier is held, when they
+  // are about to be used.
+  let modifier = $state(false);
+  const onModifier = (e: KeyboardEvent) => (modifier = e.metaKey || e.ctrlKey || e.altKey);
+
   const hotkey = (id: string) => {
     const i = orderedSessions().findIndex((s) => s.id === id);
     return i >= 0 && i < 9 ? shortcut(`session.go${i + 1}`).replaceAll(" ", "") : "";
   };
 </script>
 
+<svelte:window onkeydown={onModifier} onkeyup={onModifier} onblur={() => (modifier = false)} />
+
 <aside data-testid="sidebar">
   <div class="brand">
     <SplashMark size={18} />
     <span>splash</span>
     <span class="spacer"></span>
+    <IconButton data-testid="sidebar-hide" title={withKey("Hide sidebar", "view.left")} label="Hide sidebar" icon="panel-left" onclick={toggleLeft} />
     <IconButton data-testid="sidebar-settings" title={withKey("Settings", "app.settings")} label="Settings" icon="gear" onclick={() => openSettings()} />
   </div>
 
-  <div class="global-nav"><NavItem data-testid="sidebar-library" label="Sessions" active={app.view.kind === "library"} onclick={openLibrary}>{#snippet lead()}<Icon name="search" size={14} />{/snippet}</NavItem>
+  <div class="global-nav"><NavItem data-testid="sidebar-library" label="Sessions" active={app.view.kind === "library"} onclick={openLibrary}>{#snippet lead()}<Icon name="list" size={14} />{/snippet}</NavItem>
     <NavItem data-testid="sidebar-attention" label="Needs attention" active={app.view.kind === "attention"} onclick={openAttention}>{#snippet lead()}<Icon name="alert" size={14} />{/snippet}{#snippet trail()}<span class="t-count" data-testid="sidebar-attention-count">{app.sessions.filter((s) => !s.archived && s.attention).length || ""}</span>{/snippet}</NavItem><NavItem data-testid="sidebar-github" label="GitHub" active={app.view.kind === "github"} onclick={openGithub}>
     {#snippet lead()}<Icon name="github" size={14} />{/snippet}
   </NavItem><NavItem data-testid="sidebar-actions" label="Actions" active={app.view.kind === "actions"} onclick={openActions}>{#snippet lead()}<Icon name="activity" size={14}/>{/snippet}</NavItem></div>
 
   <div class="section t-section">
     <span>Projects</span>
-    <IconButton data-testid="sidebar-add-project" title="Add a project folder" size="sm" icon="plus" disabled={serverUnavailable()} onclick={addFolder} />
+    <IconButton data-testid="sidebar-add-project" title="Add a project folder" label="Add a project folder" size="sm" icon="folder-plus" disabled={serverUnavailable()} onclick={addFolder} />
   </div>
 
   <nav>
@@ -128,13 +138,12 @@
               oncontextmenu={(e) => sessionMenu(e, s.id, s.title, false)}
               title={`${s.title}\n${statusLabel(s.status)}${s.branch ? ` · ${s.branch}` : ""}`}>
               {#snippet lead()}
-                <span class="dot {app.unread[s.id] && s.status === 'idle' ? 'unread' : s.status}"></span>
-                <AgentIcon id={s.agent_id} size={12} />
+                <!-- The agent's mark carries the status: one glyph, not a dot and a glyph. -->
+                <span class="agent {app.unread[s.id] && s.status === 'idle' ? 'unread' : s.attention?.kind === 'failed' ? 'error' : s.status}"><AgentIcon id={s.agent_id} size={13} /></span>
               {/snippet}
               {#snippet trail()}
                 {#if s.status === "awaiting_permission"}<span class="needs" data-testid="sidebar-session-needs" title="Needs you"><Icon name="alert" size={12} /></span>{/if}
-                {#if s.isolation === "worktree"}<span class="wt" title="worktree"><Icon name="branch" size={12} /></span>{/if}
-                <span class="key" data-testid="sidebar-session-key">{hotkey(s.id)}</span>
+                <span class="key" class:shown={modifier} data-testid="sidebar-session-key">{hotkey(s.id)}</span>
               {/snippet}
             </NavItem>
           {:else}
@@ -194,11 +203,19 @@
   .project-row:is(:hover, :focus-within) { background: var(--row-hover); color: var(--text); }
   .project-toggle { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; height: var(--row-h); padding: 0 8px; border-radius: var(--radius); }
   .project-toggle .name { flex: 1; }
-  .needs, .wt { display: inline-grid; place-items: center; flex: none; }
-  .needs { color: var(--accent); }
-  .wt { color: var(--muted); }
-  /* The keycap font, bare: a box on every row would be noise. */
-  .key { color: var(--muted); font: var(--fw-medium) var(--fs-xs) var(--font-keys); min-width: 20px; text-align: right; }
+  .needs { display: inline-grid; place-items: center; flex: none; color: var(--accent); }
+  .agent { display: inline-grid; place-items: center; flex: none; color: var(--muted); }
+  .agent.running, .agent.starting { color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .agent.awaiting_permission { color: var(--accent); }
+  .agent.unread { color: var(--ok-dim); }
+  .agent.error { color: var(--err-dim); }
+  .agent.exited { color: var(--faint); }
+  @media (prefers-reduced-motion: reduce) { .agent { animation: none; } }
+  nav :global([data-unread="true"] .label) { color: var(--text); font-weight: var(--fw-medium); }
+  /* The keycap font, bare: a box on every row would be noise. Hidden until a
+     modifier is held, so the title keeps the room. */
+  .key { display: none; color: var(--muted); font: var(--fw-medium) var(--fs-xs) var(--font-keys); min-width: 20px; text-align: right; }
+  .key.shown { display: inline; }
   .empty-projects { margin: 8px 2px; }
   .footer { border-top: 1px solid var(--border); padding: 6px; display: flex; flex-direction: column; gap: 1px; }
 </style>

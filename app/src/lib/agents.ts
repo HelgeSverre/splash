@@ -3,15 +3,24 @@ import type { AgentStatus, CommandFile, McpServer, Skill, SlashCommand } from ".
 
 export type Readiness = { tone: "ok" | "warn" | "err" | "none"; label: string };
 
+// "err" also means "cannot start a session": the Welcome count and the New
+// session dialog read it that way, so a missing agent stays "err" here.
+// `readinessBadge` is the same answer as Settings draws it.
 export function readiness(a: AgentStatus): Readiness {
   if (!a.installed) return { tone: "err", label: "not installed" };
   // Native agents do not necessarily run through npx (for example, Vibe uses
   // `vibe-acp`). Use the actual launch program so the recovery action is clear.
   if (!a.runner_ok) return { tone: "err", label: `${a.launch.split(/\s+/, 1)[0] || "ACP launcher"} missing` };
   if (a.auth === "logged_out") return { tone: "err", label: "signed out" };
-  if (a.probe && !a.probe.ok) return { tone: "warn", label: "probe failed" };
+  if (a.probe && !a.probe.ok) return { tone: "warn", label: "check failed" };
   if (a.probe?.ok) return { tone: "ok", label: "ready" };
-  return { tone: "none", label: "not probed" };
+  return { tone: "none", label: "not checked" };
+}
+
+/** `readiness` for a status badge or dot: not being installed is not an error, so it is grey. */
+export function readinessBadge(a: AgentStatus): Readiness {
+  const r = readiness(a);
+  return a.installed ? r : { ...r, tone: "none" };
 }
 
 /** How Splash talks to the agent: "native ACP" or "ACP adapter". */

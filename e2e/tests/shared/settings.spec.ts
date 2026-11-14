@@ -14,15 +14,21 @@ test.describe("agents", () => {
     await app.welcomeAgents.click();
     const settings = new Settings(app);
     await settings.expectPage("agents");
-    await expect(settings.status("claude")).toHaveText("not probed");
+    await expect(settings.status("claude")).toHaveText("not checked");
     await expect(settings.agentRow("claude")).toContainText("ACP adapter · v2.1.0");
-    await expect(settings.status("glue")).toHaveText("not probed");
+    await expect(settings.status("glue")).toHaveText("not checked");
     await expect(settings.agentRow("glue")).toContainText("native ACP · v0.9.0");
+    // Agents that aren't installed are folded away under the installed ones.
+    await expect(settings.agentRow("gemini")).toHaveCount(0);
+    await expect(settings.uninstalledAgents).toHaveAttribute("aria-expanded", "false");
+    await settings.showUninstalledAgents();
     await expect(settings.status("gemini")).toHaveText("not installed");
+    await expect(settings.agentRow("gemini")).toBeVisible();
 
     await settings.rowLink(settings.agentRow("claude")).click();
     await settings.expectPage("agent:claude");
-    await expect(settings.value("host")).toHaveText("Unverified on this host");
+    await expect(settings.value("host")).toHaveText("Not checked yet");
+    await expect(settings.link("commands")).toHaveAttribute("title", "Not known yet. Refresh to list them.");
     await expect(settings.value("installed")).toHaveText(join(world.bin, "claude"));
     await expect(settings.value("login")).toHaveText("signed in · via api key");
     await expect(settings.value("launch")).toHaveText("npx -y @agentclientprotocol/claude-agent-acp@0.81.1");
@@ -50,7 +56,7 @@ test.describe("agents", () => {
 
     await settings.go("agents");
     await expect(settings.status("claude")).toHaveText("ready");
-    await expect(settings.status("codex")).toHaveText("not probed");
+    await expect(settings.status("codex")).toHaveText("not checked");
   });
 
   test.describe("Amp", () => {
@@ -81,14 +87,14 @@ test.describe("agents", () => {
     await expect(settings.handshake).toHaveAttribute("data-state", "failed");
     await expect(settings.handshake).toContainText("Handshake failed · just now");
     await expect(settings.handshakeError).toContainText("adapter executable missing: reinstall the adapter");
-    await expect(settings.value("host")).toHaveText("Unverified on this host");
-    await expect(settings.status("claude")).toHaveText("probe failed");
-    await expect(settings.nav("agent:claude")).toHaveAccessibleName("Claude Code probe failed");
+    await expect(settings.value("host")).toHaveText("Handshake failed on this host");
+    await expect(settings.status("claude")).toHaveText("check failed");
+    await expect(settings.nav("agent:claude")).toHaveAccessibleName("Claude Code check failed");
 
     // Still offered for a session: the CLI is installed and signed in.
     await settings.close();
     await app.newSessionButton.click();
-    await expect(app.agentState("claude")).toHaveText("probe failed");
+    await expect(app.agentState("claude")).toHaveText("check failed");
     await expect(app.dialogChoice("agent", "claude")).toBeEnabled();
   });
 
@@ -111,6 +117,41 @@ test.describe("agents", () => {
       // The default agent can't start: the dialog picks one that can.
       await expect(app.dialogChoice("agent", "codex")).toBeChecked();
     });
+  });
+
+  test("agents that are not installed are folded away in the rail", async ({ splash }) => {
+    const { app } = splash;
+    const settings = new Settings(app);
+    await settings.open();
+    // Agents' own rows, without their sub-pages.
+    const agents = async () => (await settings.railPages()).filter((p) => /^agent:[^:]+$/.test(p ?? "")).sort();
+    await expect.poll(agents).toEqual(["agent:claude", "agent:codex", "agent:glue"]);
+    await expect(settings.uninstalledNav).toHaveAttribute("aria-expanded", "false");
+    const count = Number(await settings.uninstalledNav.getAttribute("data-count"));
+    expect(count).toBeGreaterThan(0);
+    await expect(settings.uninstalledNav).toContainText(String(count));
+
+    // A search opens it, and counts what it found.
+    await settings.search.fill("gemini");
+    await expect(settings.uninstalledNav).toHaveAttribute("aria-expanded", "true");
+    await expect(settings.uninstalledNav).toHaveAttribute("data-count", "1");
+    await expect(settings.nav("agent:gemini")).toBeVisible();
+    await settings.search.fill("");
+    await expect(settings.uninstalledNav).toHaveAttribute("aria-expanded", "false");
+    await expect(settings.nav("agent:gemini")).toHaveCount(0);
+
+    await settings.showUninstalled();
+    await expect.poll(async () => (await agents()).length).toBe(3 + count);
+    await settings.go("agent:gemini");
+    await expect(settings.status("gemini")).toHaveText("not installed");
+    await expect(settings.value("host")).toHaveText("Not installed");
+    await expect(settings.refresh).toBeDisabled();
+    // Its page keeps the group open: closing it by hand lasts until you leave.
+    await settings.uninstalledNav.click();
+    await expect(settings.nav("agent:gemini")).toHaveCount(0);
+    await settings.go("general");
+    await settings.search.fill("gemini");
+    await expect(settings.nav("agent:gemini")).toBeVisible();
   });
 
   test("extra arguments go before the agent's own on every launch", async ({ splash }) => {
@@ -260,6 +301,7 @@ test.describe("skills, commands and MCP servers", () => {
     // Other agents' configs, including one that cannot be read.
     await settings.subPage("codex", "mcp");
     await expect(settings.mcpServers("repl")).toContainText("env: TOKEN");
+    await settings.showUninstalled();
     await settings.subPage("pi", "mcp");
     await expect(settings.mcpErrors).toContainText("Couldn't read ~/.pi/agent/mcp.json");
 
@@ -295,7 +337,10 @@ test("General sets the defaults for new sessions", async ({ splash }) => {
   await expect(settings.value("data-folder")).toHaveText(world.data);
   await expect(settings.value("worktrees")).toHaveText(join(world.data, "worktrees"));
 
+  // Installed agents only, by name.
   await expect(settings.defaultAgent("claude")).toBeChecked();
+  await expect(settings.defaultAgent("claude")).toHaveText("Claude Code");
+  await expect(settings.defaultAgent("gemini")).toHaveCount(0);
   await settings.defaultAgent("codex").click();
   await expect(settings.defaultAgent("codex")).toBeChecked();
   await expect(settings.isolation("worktree")).toBeChecked();

@@ -4,16 +4,22 @@
   import EmptyState from "./ui/EmptyState.svelte";
   import FilePane from "./FilePane.svelte";
   import Tag from "./ui/Tag.svelte";
-  import Toolbar from "./ui/Toolbar.svelte";
   import Checkbox from "./ui/Checkbox.svelte";
-  import PathLabel from "./ui/PathLabel.svelte";
+  import type { PaneTools } from "../lib/tabs.svelte";
   import { api, type SessionView } from "../bindings";
   import { openTab } from "../lib/tabs.svelte";
   import { workspace } from "../lib/workspace.svelte";
   import { rel } from "../lib/paths";
   import { load } from "../lib/load.svelte";
 
-  let { session, path }: { session: SessionView; path: string } = $props();
+  // `setTools` puts this pane's controls on the tab bar while it is the open tab.
+  let { session, path, active = true, setTools }: { session: SessionView; path: string; active?: boolean; setTools?: (owner: object, snippet: PaneTools | null) => void } = $props();
+  const owner = {};
+  $effect(() => {
+    if (!active || !setTools) return;
+    setTools(owner, tools);
+    return () => setTools(owner, null);
+  });
   let mode: "unified" | "split" = $state((localStorage.getItem("splash.diffMode") as "unified" | "split") ?? "unified");
   let full = $state(false);
 
@@ -35,18 +41,17 @@
   }
 </script>
 
+{#snippet tools()}
+  {#if diff && diff.old === null && diff.new !== null}<Tag data-testid="diff-new-file" tone="ok">new file</Tag>{/if}
+  {#if diff && diff.new === null && !diff.binary && !diff.too_large}<Tag data-testid="diff-deleted" tone="err">deleted</Tag>{/if}
+  <SegmentedControl data-testid="diff-layout" label="Diff layout" value={mode} onchange={setMode}
+    options={[{ value: "unified", label: "Unified" }, { value: "split", label: "Split" }]} />
+  <Checkbox data-testid="diff-whole-file" bind:checked={full} label="Whole file" />
+  {#if diff && diff.new !== null}<button class="btn sm ghost" data-testid="diff-open-file" onclick={() => openTab({ kind: "file", path })}>Open file</button>{/if}
+{/snippet}
+
 <div class="tab">
-  <Toolbar>
-    <PathLabel {path} />
-    {#if diff && diff.old === null && diff.new !== null}<Tag data-testid="diff-new-file" tone="ok">new file</Tag>{/if}
-    {#if diff && diff.new === null && !diff.binary && !diff.too_large}<Tag data-testid="diff-deleted" tone="err">deleted</Tag>{/if}
-    {#snippet end()}
-      <SegmentedControl data-testid="diff-layout" label="Diff layout" value={mode} onchange={setMode}
-        options={[{ value: "unified", label: "Unified" }, { value: "split", label: "Split" }]} />
-      <Checkbox data-testid="diff-whole-file" bind:checked={full} label="Whole file" />
-      {#if diff && diff.new !== null}<button class="btn sm ghost" data-testid="diff-open-file" onclick={() => openTab({ kind: "file", path })}>Open file</button>{/if}
-    {/snippet}
-  </Toolbar>
+  {#if !setTools}<div class="bar">{@render tools()}</div>{/if}
   <div class="content">
     <FilePane {res} binary={diff?.binary} tooLarge={diff?.too_large && { title: "Too large to diff here", detail: "Over 1 MB." }}>
       {#snippet children(diff)}
@@ -62,6 +67,8 @@
 
 <style>
   .tab { height: 100%; display: flex; flex-direction: column; }
+  /* Only where there is no tab bar to carry the controls. */
+  .bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex: none; height: var(--h-toolbar); padding: 0 var(--gutter); border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
   .content { flex: 1; min-height: 0; overflow: auto; }
   .content :global(.diff) { height: 100%; background: var(--bg); }
 </style>

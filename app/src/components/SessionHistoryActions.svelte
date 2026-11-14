@@ -1,3 +1,7 @@
+<script lang="ts" module>
+  export type HistoryMessages = { busy: string; error: string; notice: string };
+</script>
+
 <script lang="ts">
   import { tick } from "svelte";
   import { api, type SessionView } from "../bindings";
@@ -14,8 +18,12 @@
   import Icon from "./Icon.svelte";
   import MenuItem from "./ui/MenuItem.svelte";
   import { rovingIndex } from "../lib/focus";
+  import { openTab } from "../lib/tabs.svelte";
 
-  let { session }: { session: SessionView } = $props();
+  // Lives in the session header: sync tags, the fork's parent and the menu.
+  // What it has to say (progress, a notice, an error) goes up through
+  // `messages`, so the session can show it on a line of its own.
+  let { session, messages = $bindable({ busy: "", error: "", notice: "" }) }: { session: SessionView; messages?: HistoryMessages } = $props();
   let busy = $state("");
   let error = $state("");
   let notice = $state("");
@@ -39,6 +47,9 @@
   const localLabel = $derived(session.isolation === "worktree" && !session.external ? "Delete local session" : "Remove local copy");
   const busyLabel = $derived(busy === "refresh" ? "Refreshing history…" : busy === "capabilities" ? "Checking history support…" : busy === "disconnect" ? "Disconnecting agent…" : "");
   const date = (value: string | null | undefined) => value ? (Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : value) : "Not reported";
+  $effect(() => {
+    messages = { busy: busyLabel, error: panel ? "" : error, notice };
+  });
   function close() { if (!busy) { panel = null; confirm = null; } }
   const menuItems = () => Array.from(menu?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? []);
   async function showMenu(last = false) {
@@ -72,10 +83,11 @@
     menuOpen = false;
     if (refocus) menuTrigger?.focus();
   }
-  function chooseMenu(action: "refresh" | "disconnect" | "capabilities" | "fork" | "manage") {
+  function chooseMenu(action: "refresh" | "disconnect" | "capabilities" | "fork" | "manage" | "log") {
     // Modal remembers the active element on mount. Return focus before the
     // selected menu item unmounts so closing Manage or Fork lands on trigger.
     hideMenu();
+    if (action === "log") return openTab({ kind: "log" });
     if (action === "fork" || action === "manage") { panel = action; error = ""; }
     else void run(action);
   }
@@ -141,29 +153,23 @@
 <svelte:window onpointerdown={onPointerDown} onresize={placeMenu} />
 
 <div class="history-bar" data-testid="history-bar" data-sync={source.deleted ? "deleted" : newer ? "outdated" : source.last_synced_at ? "synced" : "unsynced"}>
-  <div class="context">
-    {#if source.deleted}<Tag tone="muted">Local history only</Tag>
-    {:else if newer}<Tag tone="warn">New activity at agent</Tag>
-    {:else if source.last_synced_at}<span>Synced {new Date(source.last_synced_at * 1000).toLocaleString()}</span>
-    {:else}<span>Agent history</span>{/if}
-    {#if session.parent_id}<button class="plain parent" data-testid="history-parent" data-session-id={session.parent_id} disabled={!parent} onclick={() => parent && openSession(parent.id)}>Fork of {parent?.title ?? "removed local session"}</button>{/if}
-  </div>
+  {#if source.deleted}<Tag tone="muted">Local history only</Tag>
+  {:else if newer}<Tag tone="warn">New activity at agent</Tag>{/if}
+  {#if session.parent_id}<button class="plain parent truncate" data-testid="history-parent" data-session-id={session.parent_id} disabled={!parent} title="Fork of {parent?.title ?? "removed local session"}" onclick={() => parent && openSession(parent.id)}>Fork of {parent?.title ?? "removed local session"}</button>{/if}
   <div class="history-menu" bind:this={menuRoot} onfocusout={onFocusOut}>
-    <button class="plain history-menu-trigger" data-testid="history-menu-trigger" bind:this={menuTrigger} title="History actions" aria-label="History actions"
-      onclick={() => menuOpen ? hideMenu(false) : void showMenu()} onkeydown={onTriggerKey} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined}><Icon name="more-vertical" size={12} /></button>
+    <button class="plain history-menu-trigger" data-testid="history-menu-trigger" bind:this={menuTrigger} title="Session actions" aria-label="Session actions"
+      onclick={() => menuOpen ? hideMenu(false) : void showMenu()} onkeydown={onTriggerKey} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined}><Icon name="more-vertical" size={14} /></button>
     {#if menuOpen}
-      <div class="popover menu" data-testid="history-menu" id={menuId} role="menu" aria-label="Agent history actions" tabindex="-1" bind:this={menu} onkeydown={onMenuKey} style={menuStyle}>
+      <div class="popover menu" data-testid="history-menu" id={menuId} role="menu" aria-label="Session actions" tabindex="-1" bind:this={menu} onkeydown={onMenuKey} style={menuStyle}>
         {#if !disconnected}<MenuItem data-testid="history-menu-item" data-action="disconnect" role="menuitem" name="Disconnect agent" disabled={!!busy || working || serverUnavailable()} onclick={() => chooseMenu("disconnect")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />{/if}
         {#if native && !caps}<MenuItem data-testid="history-menu-item" data-action="capabilities" role="menuitem" name={busy === "capabilities" ? "Checking history support…" : "Check history support"} disabled={!!busy || serverUnavailable()} onclick={() => chooseMenu("capabilities")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />{/if}
         {#if native && caps?.load}<MenuItem data-testid="history-menu-item" data-action="refresh" role="menuitem" name={busy === "refresh" ? "Refreshing…" : "Refresh from agent"} description={actionHint || undefined} disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => chooseMenu("refresh")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />{/if}
         {#if native && caps?.fork && caps.load}<MenuItem data-testid="history-menu-item" data-action="fork" role="menuitem" name="Fork conversation" description={actionHint || undefined} disabled={!!busy || !disconnected || serverUnavailable()} onclick={() => chooseMenu("fork")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />{/if}
+        <MenuItem data-testid="history-menu-item" data-action="log" role="menuitem" name="Show protocol log" description="Raw JSON-RPC traffic" onclick={() => chooseMenu("log")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />
         <MenuItem data-testid="history-menu-item" data-action="manage" role="menuitem" name="Manage history" disabled={!!busy} onclick={() => chooseMenu("manage")} onmouseenter={(e) => e.currentTarget.focus({ preventScroll: true })} />
       </div>
     {/if}
   </div>
-  {#if busyLabel}<p class="notice" role="status" data-testid="history-busy">{busyLabel}</p>{/if}
-  {#if error && !panel}<p class="error" role="alert" data-testid="history-error">{error}</p>{/if}
-  {#if notice}<p class="notice" role="status" data-testid="history-notice">{notice}</p>{/if}
 </div>
 
 {#if panel}
@@ -182,9 +188,8 @@
           <dt>Agent title</dt><dd>{source.title ?? "Not reported"}</dd>
           <dt>Agent activity</dt><dd>{date(source.updated_at)}</dd>
           <dt>Last synced</dt><dd>{source.last_synced_at ? new Date(source.last_synced_at * 1000).toLocaleString() : "Not synced yet"}</dd>
-          {#if caps}<dt>Available actions</dt><dd>{[caps.list && "List", caps.load && "Refresh", caps.resume && "Resume", caps.close && "Close", caps.delete && "Delete", caps.fork && "Fork (experimental)", caps.additional_directories && "Extra folders"].filter(Boolean).join(" · ") || "No history actions advertised"}</dd>{/if}
         </dl>
-        {#if source.metadata_json}<details><summary>Agent metadata</summary><pre>{source.metadata_json}</pre></details>{/if}
+        {#if caps || source.metadata_json}<details data-testid="history-agent-details"><summary>Agent details</summary>{#if caps}<p class="supports" data-testid="history-agent-supports">Agent supports: {[caps.list && "List", caps.load && "Refresh", caps.resume && "Resume", caps.close && "Close", caps.delete && "Delete", caps.fork && "Fork (experimental)", caps.additional_directories && "Extra folders"].filter(Boolean).join(" · ") || "No history actions advertised"}</p>{/if}{#if source.metadata_json}<pre>{source.metadata_json}</pre>{/if}</details>{/if}
         {#if !disconnected}<p data-testid="history-disconnect-first">Disconnect the agent before changing its saved history.</p>{/if}
         {#if confirm}
           <div class="confirmation" role="group" aria-label="Confirm deletion" data-testid="history-confirm" data-confirm={confirm}>
@@ -213,17 +218,15 @@
 {/if}
 
 <style>
-  .history-bar { display: flex; align-items: center; gap: 10px; padding: 10px var(--gutter); border-bottom: 1px solid var(--border); flex-wrap: wrap; font-size: var(--fs-xs); }
-  .context { flex: 1; display: flex; flex-direction: column; align-items: start; gap: 6px; color: var(--muted); min-width: 150px; }
+  .history-bar { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; font-size: var(--fs-xs); }
   .history-menu { position: relative; flex: none; }
   .history-menu-trigger { display: inline-grid; place-items: center; width: var(--control-h-xs); height: var(--control-h-xs); border-radius: var(--radius-sm); color: var(--muted); }
   .history-menu-trigger:is(:hover, :focus-visible), .history-menu-trigger[aria-expanded="true"] { background: var(--hover); color: var(--text); }
   .menu { position: fixed; z-index: 30; overflow: auto; }
-  .buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .parent { color: var(--accent); text-align: left; }
-  .notice, .error { flex-basis: 100%; margin: 4px 0; overflow-wrap: anywhere; } .notice { color: var(--muted); } .error { color: var(--del-fg); white-space: pre-wrap; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .parent { color: var(--accent); text-align: left; min-width: 0; max-width: 220px; }
   .body { padding: 20px; overflow: auto; font-size: var(--fs-sm); } h2 { font-size: var(--fs-lg); margin: 0 0 14px; } h3 { font-size: var(--fs-sm); margin: 0 0 8px; } p { color: var(--text-2); line-height: 1.5; }
   .workspace { background: var(--row-hover); padding: 14px; border-radius: var(--radius); margin: 16px 0; } .workspace p { margin: 6px 0 0; font-family: var(--font-mono); overflow-wrap: anywhere; font-size: var(--fs-xs); }
   dl { display: grid; grid-template-columns: 105px 1fr; gap: 10px 16px; } dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
-  details { margin: 14px 0; } summary { cursor: pointer; } pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+  details { margin: 14px 0; } .supports { margin: 8px 0; } summary { cursor: pointer; } pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
   .confirmation { padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius); margin-top: 20px; } .management, .fork-actions { margin-top: 20px; } .note { color: var(--muted); font-size: var(--fs-xs); } .danger { color: var(--del-fg); }
 </style>

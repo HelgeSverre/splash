@@ -1,6 +1,5 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import AgentIcon from "./AgentIcon.svelte";
   import Picker from "./Picker.svelte";
   import ContextRing from "./ContextRing.svelte";
   import Icon from "./Icon.svelte";
@@ -99,27 +98,17 @@
   }
 
   const showDetails = () => showSideTab("details");
+  const disconnected = $derived(!archived && (session.status === "exited" || session.status === "error"));
+  const reconnecting = $derived(!!sending[session.id] && disconnected);
+  const placeholder = $derived(
+    archived ? (session.source?.deleted ? "Agent history was deleted. This local copy is read-only." : "This session is archived.")
+    : busy ? "The agent is working…"
+    : session.status === "error" ? `Connection failed. Reply to reconnect ${agent?.name ?? "the agent"} and try again`
+    : session.status === "exited" ? `Reply to reconnect ${agent?.name ?? "the agent"} and continue`
+    : "Describe a task or ask a question");
 </script>
 
 <div class="composer" data-testid="composer">
-  {#if !archived && (session.status === "exited" || session.status === "error")}
-    <div class="resume-note" data-testid="composer-resume-note"><span>{session.status === "error" ? "Connection failed. Your saved conversation is preserved." : "Viewing saved history. Continue to reconnect the agent."}</span><button class="btn sm" data-testid="composer-continue" disabled={serverUnavailable()} onclick={() => api.restart_session(session.id).catch(showError)}>Continue conversation</button></div>
-  {/if}
-  <div class="chips">
-    <button class="plain chip" data-testid="composer-where" onclick={showDetails} title={session.cwd}>
-      {#if session.isolation === "worktree"}
-        <Icon name="branch" size={12} /><span class="truncate">{session.branch ?? "worktree"}</span>
-      {:else}
-        <Icon name="monitor" size={12} /><span class="truncate">In place{session.branch ? ` · ${session.branch}` : ""}</span>
-      {/if}
-    </button>
-    <button class="plain chip" data-testid="composer-project" onclick={showDetails} title={project?.path ?? session.cwd}>
-      <Icon name="folder" size={12} /><span class="truncate">{project?.name ?? "folder"}</span>
-    </button>
-    <span class="spacer"></span>
-    <span class="agent" title={agent?.name ?? session.agent_id}><AgentIcon id={session.agent_id} size={16} /></span>
-  </div>
-
   <SlashMenu bind:this={menu} {text} commands={session.meta.commands} oncomplete={complete} />
 
   <div class="box field-box" class:disabled={archived}>
@@ -132,7 +121,8 @@
       {onkeydown}
       rows="1"
       disabled={archived}
-      placeholder={archived ? (session.source?.deleted ? "Agent history was deleted. This local copy is read-only." : "This session is archived.") : busy ? "The agent is working…" : "Describe a task or ask a question"}
+      data-disconnected={disconnected}
+      {placeholder}
     ></textarea>
     {#if busy}
       <IconButton data-testid="composer-stop" class="stop" size="sm" icon="stop" title={withKey("Stop", "session.stop")} label="Stop" disabled={serverUnavailable()} onclick={stop} />
@@ -141,10 +131,25 @@
     {/if}
   </div>
 
+  <!-- One row under the box: reconnect (when stopped), how the agent may act,
+       where it works, then the model and how hard it thinks. -->
   <div class="controls" data-testid="composer-options">
+    {#if disconnected}
+      <button class="btn sm" data-testid="composer-continue" title="Reconnect the agent without sending a message" disabled={serverUnavailable() || reconnecting} onclick={() => api.restart_session(session.id).catch(showError)}>{reconnecting ? "Reconnecting…" : "Reconnect"}</button>
+    {/if}
     {#each left as o (o.id)}
       <Picker option={o} disabled={archived} onchange={(v) => setOption(o.id, v)} />
     {/each}
+    <button class="plain chip where" data-testid="composer-where" onclick={showDetails} title={session.cwd}>
+      {#if session.isolation === "worktree"}
+        <Icon name="branch" size={12} /><span class="truncate">{session.branch ?? "worktree"}</span>
+      {:else}
+        <Icon name="monitor" size={12} /><span class="truncate">In place{session.branch ? ` · ${session.branch}` : ""}</span>
+      {/if}
+    </button>
+    <button class="plain chip project" data-testid="composer-project" onclick={showDetails} title={project?.path ?? session.cwd}>
+      <Icon name="folder" size={12} /><span class="truncate">{project?.name ?? "folder"}</span>
+    </button>
     <span class="spacer"></span>
     {#each right as o (o.id)}
       <Picker option={o} align="right" disabled={archived} onchange={(v) => setOption(o.id, v)} />
@@ -154,18 +159,15 @@
 </div>
 
 <style>
-  .resume-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: var(--fs-xs); padding-bottom: 10px; }
-
   .composer { position: relative; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 28px 12px; container-type: inline-size; }
-  .chips { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; min-width: 0; }
+  /* Where the session works, as quiet as the pickers beside it. */
   .chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    height: var(--control-h-xs); padding: 0 8px; border-radius: var(--radius); min-width: 0; max-width: 45%;
-    font-size: var(--fs-sm); color: var(--text-2); background: var(--soft); border: 1px solid var(--border); white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto;
+    height: var(--control-h-xs); padding: 0 6px; border-radius: var(--radius-sm); min-width: 0; max-width: 32%;
+    font-size: var(--fs-sm); color: var(--muted); white-space: nowrap;
   }
-  .chip:is(:hover, :focus-visible) { color: var(--text); border-color: var(--border-strong); }
-  .chip :global(svg) { color: var(--muted); }
-  .agent { display: inline-flex; padding-right: 4px; }
+  .chip:is(:hover, :focus-visible) { color: var(--text); background: var(--hover); }
+  .chip :global(svg) { flex: none; }
   .box {
     display: flex; align-items: flex-end; gap: 8px;
     background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: 8px 8px 8px 12px;
@@ -176,7 +178,11 @@
   .box :global(.stop:is(:hover, :focus-visible)) { background: var(--del-bg); color: var(--err); }
   .controls { display: flex; align-items: center; gap: 2px; margin-top: 6px; padding: 0 2px; min-height: var(--control-h-xs); }
 
+  @container (max-width: 560px) {
+    .chip.project { display: none; }
+  }
   @container (max-width: 400px) {
     textarea { max-height: 180px; }
+    .chip.where { display: none; }
   }
 </style>

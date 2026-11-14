@@ -67,7 +67,7 @@ test("a session in a worktree gets its own branch and folder", async ({ splash }
   await expect(app.detail("isolation")).toHaveText("worktree");
   await expect(app.detail("branch")).toHaveText(row.branch!);
   await expect(app.detail("base")).toHaveText(row.base_sha!.slice(0, 10));
-  await app.sideTab("changes").click();
+  await app.sideTab("review").click();
   await expect(new Workbench(app.page).changesBase).toHaveText(`vs ${row.base_sha!.slice(0, 7)}`);
 });
 
@@ -194,7 +194,7 @@ test("deleting an in-place session leaves the project's files alone", async ({ s
 test("the agent's modes and models are pickers in the composer", async ({ splash }) => {
   const { app, world } = splash;
   await app.newSession({ where: "in_place" });
-  for (const [option, label] of [["mode", "Auto"], ["model", "Opus"], ["effort", "Medium"], ["fast", "Off"]])
+  for (const [option, label] of [["mode", "Auto"], ["model", "Opus"], ["effort", "Medium"], ["fast", "Fast off"]])
     await expect(app.picker(option)).toHaveText(label);
 
   await app.picker("model").click();
@@ -227,6 +227,7 @@ test("an agent that cannot use extra folders says so", async ({ splash }) => {
   await app.newSessionButton.click();
   await app.dialogChoice("agent", "glue").click();
   await app.dialogChoice("where", "in_place").click();
+  await app.dialogFoldersToggle.click();
   await app.dialogFolders.fill(shared);
   await app.dialogStart.click();
   await expect(app.entries("error")).toContainText("This agent does not support the session's additional workspace folders.");

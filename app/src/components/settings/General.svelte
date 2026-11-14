@@ -14,6 +14,9 @@
   const defaultAgent = $derived(prefs.default_agent ?? "claude");
   const isolation = $derived(prefs.default_isolation ?? "worktree");
   const notify = $derived(prefs.notify !== "off");
+  // Only agents that can be picked for a session, plus the saved default if
+  // it has since gone missing, so the current value always shows.
+  const agentChoices = $derived(app.agents.filter((a) => a.installed || a.id === defaultAgent));
 </script>
 
 <div class="set-page">
@@ -25,9 +28,9 @@
     <SettingsRow label="Default agent" labelId="set-default-agent" desc="Preselected in the new-session dialog.">
       <!-- Wraps to a second row rather than squeezing the label. -->
       <div class="agent-choices">
-      <ChoiceGroup data-testid="settings-default-agent" items={app.agents} value={defaultAgent} key={(a) => a.id} title={(a) => a.name} labelledby="set-default-agent"
-        layout="row" variant="icon" onchange={(a) => setPref("default_agent", a.id)}>
-        {#snippet item(a)}<AgentIcon id={a.id} size={14} />{/snippet}
+      <ChoiceGroup data-testid="settings-default-agent" items={agentChoices} value={defaultAgent} key={(a) => a.id} title={(a) => (a.installed ? undefined : "Not installed")} labelledby="set-default-agent"
+        layout="row" onchange={(a) => setPref("default_agent", a.id)}>
+        {#snippet item(a)}<AgentIcon id={a.id} size={14} /><span>{a.name}</span>{/snippet}
       </ChoiceGroup>
       </div>
     </SettingsRow>
@@ -57,6 +60,7 @@
 </div>
 
 <style>
-  .agent-choices { max-width: 320px; }
+  .agent-choices { max-width: 360px; }
+  .agent-choices :global(.choice) { gap: 6px; padding: 4px 8px; font-size: var(--fs-sm); white-space: nowrap; }
   .agent-choices :global(.is-row) { justify-content: flex-end; }
 </style>

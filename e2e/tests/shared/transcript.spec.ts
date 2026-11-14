@@ -99,7 +99,8 @@ test.describe("permissions", () => {
     await expect(pending).toHaveCount(1);
     await app.expectStatus("awaiting_permission");
     await expect(app.status).toHaveText("needs you");
-    await expect(app.transcriptHint).toHaveText("Waiting for you: press 1 to 3 or click an option.");
+    // The card says how to answer; no second line repeats it.
+    await expect(app.transcriptHint).toHaveCount(0);
     await expect(app.attentionCount).toHaveText("1");
 
     // Typing a draft keeps the number keys for the draft.
@@ -247,7 +248,7 @@ test("returning to Chat follows output that arrived while Log was open", async (
   await app.send("Write a long essay");
   await expect(app.entries("agent")).toContainText("Addition is often");
 
-  await app.openLogButton.click();
+  await app.openLog();
   await expect(app.sessionTab("log")).toHaveAttribute("aria-selected", "true");
   // Let enough output arrive for the transcript to overflow while its scroller
   // is hidden by the Log pane.
@@ -311,7 +312,7 @@ test("an agent that exits mid-turn leaves an error and a recovery item", async (
   await app.expectStatus("exited");
   // The exit says why; the protocol's "Incoming transport closed" doesn't.
   await expect(app.entries("error")).toHaveCount(1);
-  await expect(app.resumeNote).toContainText("Viewing saved history. Continue to reconnect the agent.");
+  await app.expectReconnectHint();
 
   await app.openNav("attention");
   const attention = new Attention(page);

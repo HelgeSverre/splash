@@ -656,42 +656,154 @@ fn node_item(repository: &str, kind: GithubKind, v: &Value) -> GithubItem {
     }
 }
 
+/// "IssueComment" becomes "issue comment"; an unknown event type still reads as words.
+fn spaced(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if c.is_uppercase() && !out.is_empty() {
+            out.push(' ');
+        }
+        out.extend(c.to_lowercase());
+    }
+    out
+}
+
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+/// "Opened pull request", from GitHub's action ("opened", "review_requested").
+fn acted(action: &str, noun: &str) -> String {
+    match action {
+        "" => capitalized(noun),
+        "synchronize" | "edited" => format!("Updated {noun}"),
+        _ => format!("{} {noun}", capitalized(&action.replace('_', " "))),
+    }
+}
+
+/// What happened, as the start of a sentence, and the kind of activity as a
+/// word for the row's meta line. Neither shows GitHub's API type names.
+fn event_summary(event_type: &str, payload: &Value) -> (String, String) {
+    let action = string(payload, "action");
+    let action = action.as_str();
+    let comment = |noun: &str| match action {
+        "edited" => format!("Edited {noun} on"),
+        "deleted" => format!("Deleted {noun} on"),
+        _ => "Commented on".to_owned(),
+    };
+    let (lead, label) = match event_type {
+        "PushEvent" => (
+            format!(
+                "Pushed to {}",
+                string(payload, "ref").trim_start_matches("refs/heads/")
+            ),
+            "Push",
+        ),
+        "CreateEvent" | "DeleteEvent" => {
+            let verb = if event_type == "CreateEvent" {
+                "Created"
+            } else {
+                "Deleted"
+            };
+            let kind = string(payload, "ref_type");
+            let lead = format!("{verb} {kind} {}", string(payload, "ref"));
+            let label = match kind.as_str() {
+                "tag" => "Tag",
+                "repository" => "Repository",
+                _ => "Branch",
+            };
+            (lead.trim_end().to_owned(), label)
+        }
+        "IssuesEvent" => (acted(action, "issue"), "Issue"),
+        "PullRequestEvent" => (
+            if action == "closed" && payload["pull_request"]["merged"] == true {
+                "Merged pull request".to_owned()
+            } else {
+                acted(action, "pull request")
+            },
+            "Pull request",
+        ),
+        "IssueCommentEvent" => (comment("comment"), "Comment"),
+        "PullRequestReviewCommentEvent" => (comment("review comment"), "Review comment"),
+        "PullRequestReviewEvent" => (
+            match payload["review"]["state"]
+                .as_str()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "approved" => "Approved",
+                "changes_requested" => "Requested changes on",
+                _ => "Reviewed",
+            }
+            .to_owned(),
+            "Review",
+        ),
+        "CommitCommentEvent" => (
+            match payload["comment"]["commit_id"].as_str() {
+                Some(sha) => format!("Commented on commit {}", sha.get(..7).unwrap_or(sha)),
+                None => "Commented on a commit".to_owned(),
+            },
+            "Comment",
+        ),
+        "ReleaseEvent" => (acted(action, "release"), "Release"),
+        "DiscussionEvent" => (acted(action, "discussion"), "Discussion"),
+        "DiscussionCommentEvent" => (comment("comment"), "Comment"),
+        "ForkEvent" => (
+            match payload["forkee"]["full_name"].as_str() {
+                Some(name) => format!("Forked to {name}"),
+                None => "Forked the repository".to_owned(),
+            },
+            "Fork",
+        ),
+        "WatchEvent" => ("Starred the repository".to_owned(), "Star"),
+        "MemberEvent" => (
+            match payload["member"]["login"].as_str() {
+                Some(login) => format!("{} member {login}", capitalized(action)),
+                None => acted(action, "member"),
+            },
+            "Member",
+        ),
+        "PublicEvent" => ("Made the repository public".to_owned(), "Repository"),
+        "GollumEvent" => ("Updated the wiki".to_owned(), "Wiki"),
+        _ => {
+            let noun = spaced(event_type.trim_end_matches("Event"));
+            let noun = if noun.is_empty() {
+                "activity".to_owned()
+            } else {
+                noun
+            };
+            return (acted(action, &noun), capitalized(&noun));
+        }
+    };
+    (lead.trim().to_owned(), label.to_owned())
+}
+
 fn event_item(repository: &str, v: &Value) -> GithubItem {
     let payload = &v["payload"];
     let event_type = string(v, "type");
     let subject = payload
         .get("issue")
         .or_else(|| payload.get("pull_request"))
-        .or_else(|| payload.get("release"));
-    let action = string(payload, "action");
-    let title = match event_type.as_str() {
-        "PushEvent" => format!(
-            "Pushed to {}",
-            string(payload, "ref").trim_start_matches("refs/heads/")
-        ),
-        "CreateEvent" | "DeleteEvent" => format!(
-            "{} {} {}",
-            if event_type == "CreateEvent" {
-                "Created"
-            } else {
-                "Deleted"
-            },
-            string(payload, "ref_type"),
-            string(payload, "ref")
-        ),
-        _ => format!(
-            "{}{}{}",
-            event_type.trim_end_matches("Event"),
-            if action.is_empty() {
-                String::new()
-            } else {
-                format!(" · {action}")
-            },
-            subject
-                .and_then(|s| s["title"].as_str().or(s["name"].as_str()))
-                .map(|s| format!(": {s}"))
-                .unwrap_or_default()
-        ),
+        .or_else(|| payload.get("release"))
+        .or_else(|| payload.get("discussion"));
+    let (lead, label) = event_summary(&event_type, payload);
+    // The subject's title; the events API can leave it out, and then its number does.
+    let name = subject.and_then(|s| {
+        ["title", "name", "tag_name"]
+            .iter()
+            .filter_map(|key| s[*key].as_str())
+            .find(|text| !text.is_empty())
+            .map(str::to_owned)
+            .or_else(|| s["number"].as_u64().map(|n| format!("#{n}")))
+    });
+    let title = match name {
+        Some(name) => format!("{lead}: {name}"),
+        None => lead,
     };
     let comment = payload.get("comment").or_else(|| payload.get("review"));
     let url = comment
@@ -720,7 +832,7 @@ fn event_item(repository: &str, v: &Value) -> GithubItem {
             .unwrap_or_default()
             .to_owned(),
         url,
-        state: event_type.trim_end_matches("Event").to_owned(),
+        state: label,
         updated_at: string(v, "created_at"),
         author: string(&v["actor"], "login"),
         assignees: vec![],
@@ -823,6 +935,82 @@ mod tests {
         );
         assert_eq!(event.body, "hello");
         assert!(event.url.ends_with("#issuecomment-1"));
+    }
+
+    #[test]
+    fn activity_reads_as_sentences_without_api_type_names() {
+        let event = |kind: &str, payload: Value| {
+            let item = event_item("a/b", &json!({"id":"1","type":kind,"payload":payload}));
+            (item.title, item.state)
+        };
+        let is = |title: &str, label: &str| (title.to_owned(), label.to_owned());
+        assert_eq!(
+            event("PushEvent", json!({"ref":"refs/heads/main"})),
+            is("Pushed to main", "Push")
+        );
+        assert_eq!(
+            event(
+                "PullRequestEvent",
+                json!({"action":"opened","pull_request":{"title":"Bump styles"}})
+            ),
+            is("Opened pull request: Bump styles", "Pull request")
+        );
+        assert_eq!(
+            event(
+                "PullRequestEvent",
+                json!({"action":"closed","pull_request":{"number":8,"merged":true}})
+            ),
+            is("Merged pull request: #8", "Pull request")
+        );
+        assert_eq!(
+            event(
+                "IssueCommentEvent",
+                json!({"action":"created","issue":{"title":"Wrong sign"},"comment":{}})
+            ),
+            is("Commented on: Wrong sign", "Comment")
+        );
+        assert_eq!(
+            event(
+                "IssuesEvent",
+                json!({"action":"closed","issue":{"title":"Wrong sign"}})
+            ),
+            is("Closed issue: Wrong sign", "Issue")
+        );
+        assert_eq!(
+            event(
+                "PullRequestReviewEvent",
+                json!({"action":"created","review":{"state":"changes_requested"},"pull_request":{"title":"Bump styles"}})
+            ),
+            is("Requested changes on: Bump styles", "Review")
+        );
+        assert_eq!(
+            event(
+                "ReleaseEvent",
+                json!({"action":"published","release":{"name":"","tag_name":"v1.0"}})
+            ),
+            is("Published release: v1.0", "Release")
+        );
+        assert_eq!(
+            event("CreateEvent", json!({"ref_type":"tag","ref":"v1.0"})),
+            is("Created tag v1.0", "Tag")
+        );
+        assert_eq!(
+            event("CreateEvent", json!({"ref_type":"repository","ref":null})),
+            is("Created repository", "Repository")
+        );
+        assert_eq!(
+            event("WatchEvent", json!({"action":"started"})),
+            is("Starred the repository", "Star")
+        );
+        // Types this code has never heard of still read as words.
+        assert_eq!(
+            event("SponsorshipEvent", json!({"action":"created"})),
+            is("Created sponsorship", "Sponsorship")
+        );
+        assert_eq!(
+            event("MergeGroupEvent", json!({})),
+            is("Merge group", "Merge group")
+        );
     }
     fn filters() -> GithubSearch {
         GithubSearch {

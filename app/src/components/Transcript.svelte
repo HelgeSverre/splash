@@ -93,8 +93,6 @@
       <div class="hint" data-testid="transcript-hint"><span class="spinner"></span> Starting {agentName}…</div>
     {:else if session.status === "running" && !lastIsStreaming}
       <div class="hint" data-testid="transcript-hint"><span class="spinner"></span> Working…</div>
-    {:else if session.status === "awaiting_permission"}
-      <div class="hint waiting" data-testid="transcript-hint">Waiting for you: press 1 to {Math.max(1, pendingPermission(entries)?.options.length ?? 1)} or click an option.</div>
     {/if}
   </div>
 </div>
@@ -117,5 +115,4 @@
   /* Centred on the whole scroller, not the padded column. */
   .empty { position: absolute; inset: 0; display: flex; pointer-events: none; }
   .hint { display: flex; align-items: center; gap: 8px; margin: 12px 0; color: var(--muted); }
-  .hint.waiting { color: var(--accent); }
 </style>

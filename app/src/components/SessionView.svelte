@@ -4,13 +4,14 @@
   import RpcLog from "./RpcLog.svelte";
   import FileTab from "./FileTab.svelte";
   import DiffTab from "./DiffTab.svelte";
-  import SessionHistoryActions from "./SessionHistoryActions.svelte";
+  import type { Snippet } from "svelte";
+  import SessionHistoryActions, { type HistoryMessages } from "./SessionHistoryActions.svelte";
   import SessionHeader from "./SessionHeader.svelte";
   import Tabs, { type TabItem } from "./ui/Tabs.svelte";
   import { modalOpen, isComposer, isTypingTarget } from "../lib/focus";
   import { api, type SessionView } from "../bindings";
   import { transcripts, pendingPermission } from "../lib/transcripts.svelte";
-  import { sessionTabs, closeTab, selectTab, openTab } from "../lib/tabs.svelte";
+  import { sessionTabs, closeTab, selectTab, type PaneTools } from "../lib/tabs.svelte";
   import { showError } from "../lib/system";
   import { basename } from "../lib/paths";
 
@@ -19,6 +20,16 @@
   const t = $derived(transcripts[session.id]);
   const tabs = $derived(sessionTabs(session.id));
   const pending = $derived(t ? pendingPermission(t.entries) : undefined);
+  let history = $state<HistoryMessages>({ busy: "", error: "", notice: "" });
+
+  // The open pane's own controls (a diff's layout, a file's size) sit at the
+  // right of the tab bar rather than on a bar of their own. A pane hands its
+  // snippet over while it is the active one.
+  let tools = $state.raw<{ owner: object; snippet: Snippet } | null>(null);
+  function setTools(owner: object, snippet: PaneTools | null) {
+    if (snippet) tools = { owner, snippet: snippet as unknown as Snippet };
+    else if (tools?.owner === owner) tools = null;
+  }
 
   // 1–9 answers a pending permission, but only from the chat itself: the page,
   // the transcript, the card, or an empty message box. Never from the
@@ -57,17 +68,26 @@
 <svelte:window {onkeydown} />
 
 <div class="session">
-  <SessionHeader {session} />
-  {#key session.id}<SessionHistoryActions {session} />{/key}
+  <SessionHeader {session}>
+    {#snippet actions()}{#key session.id}<SessionHistoryActions {session} bind:messages={history} />{/key}{/snippet}
+  </SessionHeader>
+  {#if history.busy || history.error || history.notice}
+    <div class="history-status" data-testid="history-status">
+      {#if history.busy}<p class="notice" role="status" data-testid="history-busy">{history.busy}</p>{/if}
+      {#if history.error}<p class="error" role="alert" data-testid="history-error">{history.error}</p>{/if}
+      {#if history.notice}<p class="notice" role="status" data-testid="history-notice">{history.notice}</p>{/if}
+    </div>
+  {/if}
 
-  <Tabs data-testid="session-tabs" items={tabItems} active={String(tabs.active)} {prefix} label="Session tabs"
-    onselect={(id) => selectTab(Number(id))} onclose={(id) => closeTab(Number(id))}>
-    {#snippet actions()}
-      {#if !tabs.list.some((x) => x.kind === "log")}
-        <button class="plain log-tab focus-inset" data-testid="session-open-log" onclick={() => openTab({ kind: "log" })} title="Raw JSON-RPC traffic">Log</button>
-      {/if}
-    {/snippet}
-  </Tabs>
+  <!-- The chat alone needs no tab bar: it shows once a file, diff or the log is open. -->
+  <div class="tabstrip" class:single={tabs.list.length < 2} data-testid="session-tabstrip" data-single={tabs.list.length < 2}>
+    <Tabs data-testid="session-tabs" items={tabItems} active={String(tabs.active)} {prefix} label="Session tabs"
+      onselect={(id) => selectTab(Number(id))} onclose={(id) => closeTab(Number(id))}>
+      {#snippet actions()}
+        <span class="tools" data-testid="session-tab-tools">{#if tools}{@render tools.snippet()}{/if}</span>
+      {/snippet}
+    </Tabs>
+  </div>
 
   <div class="body">
     {#each tabs.list as tab, i (tab.kind === "chat" ? "chat" : `${tab.kind}:${"path" in tab ? tab.path : ""}`)}
@@ -82,9 +102,9 @@
         {:else if tab.kind === "log"}
           <RpcLog session={session.id} />
         {:else if tab.kind === "file"}
-          <FileTab {session} path={tab.path} line={tab.line} />
+          <FileTab {session} path={tab.path} line={tab.line} active={i === tabs.active} {setTools} />
         {:else if tab.kind === "diff"}
-          <DiffTab {session} path={tab.path} />
+          <DiffTab {session} path={tab.path} active={i === tabs.active} {setTools} />
         {/if}
       </div>
     {/each}
@@ -93,9 +113,12 @@
 
 <style>
   .session { height: 100%; display: flex; flex-direction: column; min-width: 0; }
-  /* Opens the Log tab: drawn like a tab, with the tab's inset ring. */
-  .log-tab { display: flex; align-items: center; align-self: stretch; padding: 0 10px; font-size: var(--fs-sm); color: var(--muted); }
-  .log-tab:is(:hover, :focus-visible) { color: var(--text); }
+  .tabstrip.single { display: none; }
+  .tools { display: flex; align-items: center; gap: 10px; padding-right: 4px; font-size: var(--fs-sm); color: var(--text-2); white-space: nowrap; }
+  .history-status { flex: none; padding: 6px var(--gutter); border-bottom: 1px solid var(--border); font-size: var(--fs-xs); }
+  .history-status p { margin: 0; overflow-wrap: anywhere; }
+  .history-status .notice { color: var(--muted); }
+  .history-status .error { color: var(--del-fg); white-space: pre-wrap; }
   .body { flex: 1; min-height: 0; position: relative; }
   .pane { position: absolute; inset: 0; }
   .pane.hidden { display: none; }

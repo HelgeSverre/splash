@@ -146,7 +146,7 @@ test("after a server restart the workspace is restored and the agent reconnects"
   expect(after.instance).not.toBe(before.instance);
 
   // The agent died with the server: the transcript is the saved history.
-  await expect(app.resumeNote).toContainText("Viewing saved history. Continue to reconnect the agent.");
+  await app.expectReconnectHint();
   await app.expectStatus("exited");
   await expect(app.entries("agent").last()).toContainText("a - b");
   await expect(app.composer).toHaveValue("Next question");

@@ -9,6 +9,9 @@ test("an agent signed in before startup is offered as ready", async ({ splash })
   await app.newSessionButton.click();
   await expect(app.agentState("pool")).toHaveText("v1.4.2");
   await expect(app.dialogChoice("agent", "pool")).toBeEnabled();
+  // Agents that are not installed wait behind one line.
+  await expect(app.dialogChoice("agent", "codex")).toHaveCount(0);
+  await app.dialogMoreAgents.click();
   await expect(app.agentState("codex")).toHaveAttribute("data-tone", "err");
   await expect(app.agentState("codex")).toHaveText("not installed");
 });

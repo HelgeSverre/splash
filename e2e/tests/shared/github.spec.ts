@@ -34,7 +34,27 @@ test("GitHub lists every repository's activity, filtered by owner, link and type
   await expect(view.repositories).toHaveAttribute("data-count", "4");
   await expect(view.count).toHaveAttribute("data-count", "18");
   await expect(view.title(view.item("e2e/demo", 12))).toHaveText("Subtract returns the wrong sign");
-  await expect(view.title(view.items({ repo: "e2e/demo", kind: "activity" }).first())).toHaveText("Pushed to main");
+  // Activity reads as sentences, with its kind as a word rather than GitHub's event type name.
+  const activity = (repo: string) => view.items({ repo, kind: "activity" });
+  await expect(view.title(activity("e2e/demo").first())).toHaveText("Pushed to main");
+  await expect(view.state(activity("e2e/demo").first())).toHaveText("Push");
+  await expect(view.title(activity("e2e/demo").nth(1))).toHaveText("Commented on: Subtract returns the wrong sign");
+  await expect(view.state(activity("e2e/demo").nth(1))).toHaveText("Comment");
+  await expect(view.title(activity("e2e-labs/widgets"))).toHaveText("Opened pull request: Bump widget styles");
+  await expect(view.state(activity("e2e-labs/widgets"))).toHaveText("Pull request");
+
+  // The footer is one line of sync status; what it covers is behind the info button.
+  await expect(view.syncInfo).toHaveAttribute("aria-expanded", "false");
+  await expect(view.syncNote).toHaveCount(0);
+  await view.syncInfo.click();
+  await expect(view.syncInfo).toHaveAttribute("aria-expanded", "true");
+  await expect(view.syncNote).toContainText("Recent items per repository; load older items for more.");
+  await page.keyboard.press("Escape");
+  await expect(view.syncNote).toHaveCount(0);
+  await view.syncInfo.click();
+  await expect(view.syncNote).toBeVisible();
+  await view.count.click(); // anywhere outside the note
+  await expect(view.syncInfo).toHaveAttribute("aria-expanded", "false");
 
   // Repositories come from one paginated, slurped request; each repository's
   // feeds are one REST or GraphQL page each, issues only where enabled.
@@ -577,19 +597,47 @@ test("Actions lists runs across the scope and filters them on GitHub", async ({ 
   await expect(titles).toHaveText(["Try feature a", "Fix subtract sign", "Bump widget styles", "Initial commit"]);
   await requested(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&${LAST_30_DAYS}$`));
 
-  // Status, branch and event filters go to GitHub, encoded.
+  // A row is a status dot, the title, and one meta line; the attempt shows only after a rerun.
+  await expect(actions.runStatus(actions.run("9003"))).toHaveAttribute("data-tone", "active");
+  await expect(actions.runStatus(actions.run("9003"))).toHaveAccessibleName("In progress");
+  await expect(actions.runMeta(actions.run("9003"))).toHaveText("e2e/demo · CI #43 · feat/a · push · hubot");
+  await expect(actions.runStatus(actions.run("9002"))).toHaveAttribute("data-tone", "failed");
+  await expect(actions.runStatus(actions.run("9002"))).toHaveAccessibleName("Failure");
+  await expect(actions.runMeta(actions.run("9002"))).toHaveText("e2e/demo · CI #42 · fix/subtract-sign · pull_request · octocat · attempt 2");
+  await expect(actions.runStatus(actions.run("9001"))).toHaveAttribute("data-tone", "passed");
+
+  // What the list covers is behind the info button beside the sync status.
+  await expect(actions.syncNote).toHaveCount(0);
+  await actions.syncInfo.click();
+  await expect(actions.syncInfo).toHaveAttribute("aria-expanded", "true");
+  await expect(actions.syncNote).toContainText("Starts with 30 runs per repository.");
+  await page.keyboard.press("Escape");
+  await expect(actions.syncInfo).toHaveAttribute("aria-expanded", "false");
+  await expect(actions.syncNote).toHaveCount(0);
+
+  // Status, branch and event filters go to GitHub, encoded. Each applies as it
+  // is set: a select on change, a text field on Enter or on leaving it.
   await actions.status.selectOption("failure");
   await expect(titles).toHaveText(["Fix subtract sign"]);
+  await requested(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&status=failure&${LAST_30_DAYS}$`));
   await actions.branch.fill("fix/subtract-sign");
-  await actions.event.fill("pull_request");
-  await actions.apply.click();
+  // Typing alone asks GitHub nothing.
+  expect(demoRuns().some((r) => r.includes("branch="))).toBe(false);
+  await actions.filterText(actions.branch, "fix/subtract-sign");
+  await requested(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&status=failure&branch=fix%2Fsubtract-sign&${LAST_30_DAYS}$`));
+  await actions.filterText(actions.event, "pull_request", "blur");
   await requested(new RegExp(`^repos/e2e/demo/actions/runs\\?per_page=30&page=1&status=failure&branch=fix%2Fsubtract-sign&event=pull_request&${LAST_30_DAYS}$`));
   await expect(titles).toHaveText(["Fix subtract sign"]);
+  // Committing an unchanged filter asks GitHub nothing more.
+  const before = demoRuns().length;
+  await actions.filterText(actions.event, "pull_request");
+  await actions.filterText(actions.branch, "fix/subtract-sign", "blur");
+  await expect(titles).toHaveText(["Fix subtract sign"]);
+  expect(demoRuns().length).toBe(before);
 
   await actions.status.selectOption("success");
-  await actions.branch.fill("");
-  await actions.event.fill("");
-  await actions.apply.click();
+  await actions.filterText(actions.branch, "");
+  await actions.filterText(actions.event, "", "blur");
   await actions.range.selectOption({ value: "" });
   await expect(titles).toHaveText(["Bump widget styles", "Initial commit", "Release v0.1.0"]);
   await requested("repos/e2e/demo/actions/runs?per_page=30&page=1&status=success");

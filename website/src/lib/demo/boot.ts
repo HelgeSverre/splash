@@ -22,6 +22,6 @@ async function start() {
 	channel('workspace').subscribe(applyWorkspace);
 	channel('project').subscribe(applyProject);
 	// The panel sizes a first launch gets, not whatever this browser saved.
-	Object.assign(layout, { left: 232, right: 330, leftOpen: true, rightOpen: true, bottomOpen: false, rightTab: 'changes' });
+	Object.assign(layout, { left: 232, right: 330, leftOpen: true, rightOpen: true, bottomOpen: false, rightTab: 'review' });
 	await loadAll();
 }

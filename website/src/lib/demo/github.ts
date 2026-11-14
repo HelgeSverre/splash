@@ -177,11 +177,11 @@ const ITEMS: GithubItem[] = [
 	branch(ATLAS, 'tl/cache-agent-column', 48, 'tobias-l', 'Migration 0007: add agent column and (project, agent) index'),
 
 	// demo/atlas: activity (page 1; page 2 is in OLDER_ACTIVITY)
-	event(ATLAS, 4, 'demo', 'IssueComment', 'IssueComment · created: Release uploads fail about once a week with a 503', 'https://github.com/demo/atlas/issues/124#issuecomment-3391120455', 'An agent is on it in `splash/upload-retry`: retries 429/502/503/504 up to four times, 250 ms → 500 ms → 1 s.'),
+	event(ATLAS, 4, 'demo', 'Comment', 'Commented on: Release uploads fail about once a week with a 503', 'https://github.com/demo/atlas/issues/124#issuecomment-3391120455', 'An agent is on it in `splash/upload-retry`: retries 429/502/503/504 up to four times, 250 ms → 500 ms → 1 s.'),
 	event(ATLAS, 2, 'demo', 'Push', 'Pushed to splash/release-job', 'https://github.com/demo/atlas/commits/splash/release-job'),
-	event(ATLAS, 11, 'demo', 'PullRequest', 'PullRequest · opened: Accept pre-release tags in release validation', 'https://github.com/demo/atlas/pull/130'),
+	event(ATLAS, 11, 'demo', 'Pull request', 'Opened pull request: Accept pre-release tags in release validation', 'https://github.com/demo/atlas/pull/130'),
 	event(ATLAS, 19, 'demo', 'Push', 'Pushed to splash/session-history', 'https://github.com/demo/atlas/commits/splash/session-history'),
-	event(ATLAS, 96, 'tobias-l', 'IssueComment', 'IssueComment · created: Release validation fails on pre-release tags', 'https://github.com/demo/atlas/issues/126#issuecomment-3390871214', '+1. Please make sure `v1.2` (no patch) still fails.'),
+	event(ATLAS, 96, 'tobias-l', 'Comment', 'Commented on: Release validation fails on pre-release tags', 'https://github.com/demo/atlas/issues/126#issuecomment-3390871214', '+1. Please make sure `v1.2` (no patch) still fails.'),
 
 	// demo/atlas-web
 	pull(WEB, 44, 70, 'mira-k', 'mk/release-notes-link', 'Link release notes from the download page', 'Each download card now links to its release notes, and pre-releases get an **RC** badge.\n\nPreview: https://pr-44.atlas-web.example.com', { checks: 'SUCCESS', review_decision: 'REVIEW_REQUIRED', reviewers: ['demo'], labels: ['website'] }),
@@ -189,7 +189,7 @@ const ITEMS: GithubItem[] = [
 	issue(WEB, 42, 5 * H, 'ana-r', 'Download page offers the Intel build on Apple Silicon Macs', 'Safari reports `MacIntel` as the platform on Apple Silicon too, so the page picks the x64 archive.\n\nWe should default to the universal build, or ask for the architecture when we cannot tell.', { labels: ['bug', 'website'] }),
 	branch(WEB, 'main', 25, 'demo', 'Update download copy for 0.3.0-rc.1'),
 	branch(WEB, 'mk/release-notes-link', 70, 'mira-k', 'Link release notes from each download card'),
-	event(WEB, 70, 'mira-k', 'PullRequest', 'PullRequest · opened: Link release notes from the download page', 'https://github.com/demo/atlas-web/pull/44'),
+	event(WEB, 70, 'mira-k', 'Pull request', 'Opened pull request: Link release notes from the download page', 'https://github.com/demo/atlas-web/pull/44'),
 
 	// demo/release-tools (private)
 	pull(TOOLS, 14, 50, 'demo', 'demo/prerelease-tags', 'Support pre-release tags in VERSION_PATTERN', 'Teach `Version::parse` about `-rc.N` and `-beta.N` suffixes so the release CLI can validate release candidates.', { checks: 'FAILURE', review_decision: 'CHANGES_REQUESTED', labels: ['release'] }),
@@ -215,7 +215,7 @@ const ITEMS: GithubItem[] = [
 
 /** The second page of demo/atlas activity, for "Load more". */
 const OLDER_ACTIVITY: GithubItem[] = [
-	event(ATLAS, 25 * H, 'ana-r', 'PullRequest', 'PullRequest · closed: File tree: roving focus, arrow keys and type-ahead', 'https://github.com/demo/atlas/pull/125'),
+	event(ATLAS, 25 * H, 'ana-r', 'Pull request', 'Closed pull request: File tree: roving focus, arrow keys and type-ahead', 'https://github.com/demo/atlas/pull/125'),
 	event(ATLAS, 25 * H, 'ana-r', 'Delete', 'Deleted branch ar/tree-keys', 'https://github.com/demo/atlas'),
 	event(ATLAS, 4 * D + 30, 'demo', 'Release', 'Release · published: v0.2.0', 'https://github.com/demo/atlas/releases/tag/v0.2.0', 'Asset cache, faster uploads, and the first signed macOS build.')
 ];

@@ -17,7 +17,7 @@
   import { onDestroy } from "svelte";
   import { app } from "../../lib/sessions.svelte";
   import { agentPages, preview } from "../../lib/customize.svelte";
-  import { readiness } from "../../lib/agents";
+  import { readinessBadge } from "../../lib/agents";
   import { matches } from "../../lib/format";
 
   let query = $state("");
@@ -43,6 +43,25 @@
       return { a, children, show: hit(a.name, a.id, "agent") || children.length > 0 };
     }),
   );
+
+  const installed = $derived(agents.filter((x) => x.show && x.a.installed));
+  const uninstalled = $derived(agents.filter((x) => x.show && !x.a.installed));
+  // Agents that aren't installed sit in one collapsed group. It opens by
+  // itself for a search (which must find any agent) and while one of its
+  // agents' pages is open. Opened by hand it stays open; closed by hand while
+  // it is open by itself, it stays closed until the search or the page changes.
+  const autoOpen = $derived(!!q || app.agents.some((a) => a.id === openAgent && !a.installed));
+  let pinned = $state(false);
+  let hidden = $state(false);
+  const uninstalledOpen = $derived(autoOpen ? !hidden : pinned);
+  $effect(() => {
+    void q; void openAgent;
+    hidden = false;
+  });
+  function toggleUninstalled() {
+    if (uninstalledOpen) { pinned = false; hidden = autoOpen; }
+    else { pinned = true; hidden = false; }
+  }
 
   const close = () => (app.settings = null);
   // A doc preview opens from a settings page: it goes when Settings goes.
@@ -76,14 +95,15 @@
         {/if}
 
         <div class="group-title t-section">Agents</div>
-        {#if hit("overview agents probe detect refresh")}
+        {#if hit("overview agents check probe detect refresh")}
           <NavItem data-testid="settings-nav" data-page="agents" label="Overview" active={app.settings === "agents"} onclick={() => (app.settings = "agents")}>
             {#snippet lead()}<Icon name="agents" size={15} />{/snippet}
           </NavItem>
         {/if}
-        {#each agents.filter((x) => x.show) as { a, children } (a.id)}
+        {#snippet agentRows(list: typeof agents)}
+        {#each list as { a, children } (a.id)}
           {@const open = expanded[a.id] ?? (openAgent === a.id || !!q)}
-          {@const r = readiness(a)}
+          {@const r = readinessBadge(a)}
           <NavItem data-testid="settings-nav" data-page="agent:{a.id}" label={a.name} active={app.settings === `agent:${a.id}`} onclick={() => { app.settings = `agent:${a.id}`; expanded[a.id] = true; }}>
             {#snippet lead()}<AgentIcon id={a.id} size={15} />{/snippet}
             {#snippet trail()}<span class="dot {r.tone}" title={r.label}></span>{/snippet}
@@ -101,6 +121,16 @@
             {/each}
           {/if}
         {/each}
+        {/snippet}
+        {@render agentRows(installed)}
+        {#if uninstalled.length}
+          <NavItem data-testid="settings-nav-uninstalled" data-count={uninstalled.length} label="Not installed" muted expanded={uninstalledOpen}
+            onclick={toggleUninstalled}>
+            {#snippet lead()}<span class="fold"><Chevron open={uninstalledOpen} /></span>{/snippet}
+            {#snippet trail()}<span class="t-count">{uninstalled.length}</span>{/snippet}
+          </NavItem>
+          {#if uninstalledOpen}{@render agentRows(uninstalled)}{/if}
+        {/if}
 
         {#if hit("about version data")}
           <div class="group-title t-section">About</div>
@@ -148,6 +178,8 @@
     width: var(--control-h-xs); height: var(--control-h-xs); display: grid; place-items: center;
     border-radius: var(--radius-sm);
   }
+  /* As wide as an agent's icon, so the labels line up. */
+  .fold { width: 15px; display: grid; place-items: center; flex: none; }
   .twist:is(:hover, :focus-visible) { background: var(--raised); }
   .twist:is(:hover, :focus-visible) :global(.chev) { color: var(--text); }
   .content { container-type: inline-size; position: relative; min-height: 0; overflow: auto; user-select: text; }

@@ -202,7 +202,7 @@ export class History {
     return this.app.sessionId();
   }
 
-  // ── A session's history bar ─────────────────────────────────────────────
+  // ── A session's history controls, in its header ─────────────────────────
 
   /** `data-sync`: `synced`, `unsynced`, `outdated` (new activity at the agent)
    * or `deleted` (local history only). */
@@ -214,7 +214,7 @@ export class History {
     const bar = this.bar;
     return testId(bar, "history-parent");
   }
-  /** The overflow trigger beside Agent history. */
+  /** The session menu's trigger in the header. */
   get menuTrigger() {
     return testId(this.bar, "history-menu-trigger");
   }
@@ -225,7 +225,7 @@ export class History {
   get menuItems() {
     return testId(this.menu, "history-menu-item");
   }
-  menuItem(action: "disconnect" | "capabilities" | "refresh" | "fork" | "manage") {
+  menuItem(action: "disconnect" | "capabilities" | "refresh" | "fork" | "log" | "manage") {
     return testId(this.menu, "history-menu-item", { action });
   }
   /** Open the history-actions menu before interacting with one of its actions. */
@@ -249,17 +249,15 @@ export class History {
   }
   /** What the last action did. */
   get notice() {
-    const bar = this.bar;
-    return testId(bar, "history-notice");
+    return testId(testId(this.page, "history-status"), "history-notice");
   }
   /** Announced while a history action is in flight after its menu closes. */
   get busy() {
-    return testId(this.bar, "history-busy");
+    return testId(testId(this.page, "history-status"), "history-busy");
   }
   /** Why the last action failed. */
   get barError() {
-    const bar = this.bar;
-    return testId(bar, "history-error");
+    return testId(testId(this.page, "history-status"), "history-error");
   }
 
   async disconnect() {

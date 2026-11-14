@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { actionStatus, actionTone, duration, cleanLog } from "../src/lib/actions-model.ts";
+import { actionStatus, actionLabel, actionTone, duration, cleanLog } from "../src/lib/actions-model.ts";
 
 test("queued and waiting are active; cancelled and skipped are not failures",()=> {
   assert.equal(actionTone("queued",null),"active");
@@ -9,6 +9,8 @@ test("queued and waiting are active; cancelled and skipped are not failures",()=
   assert.equal(actionTone("completed","skipped"),"neutral");
   assert.equal(actionTone("completed","timed_out"),"failed");
   assert.equal(actionStatus("completed","action_required"),"action required");
+  assert.equal(actionLabel("in_progress",null),"In progress");
+  assert.equal(actionLabel("completed","timed_out"),"Timed out");
 });
 test("durations handle jobs that have not started and completed jobs",()=> {
   const start="2026-10-06T10:00:00Z", end="2026-10-06T10:02:05Z";

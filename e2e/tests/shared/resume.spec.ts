@@ -13,7 +13,7 @@ test("saved history opens without starting the agent; Continue resumes it", asyn
   await app.sessionRow("What does subtract do?").click();
   await expect(app.entries("agent").last()).toContainText("a - b");
   await app.expectStatus("exited");
-  await expect(app.resumeNote).toContainText("Viewing saved history. Continue to reconnect the agent.");
+  await app.expectReconnectHint();
   expect(world.agents.launches("claude")).toHaveLength(1);
 
   await app.continueButton.click();
@@ -75,7 +75,7 @@ test("a failed reconnect keeps the session id, the history and the draft", async
   await app.continueButton.click();
 
   await app.expectStatus("error");
-  await expect(app.resumeNote).toContainText("Connection failed. Your saved conversation is preserved.");
+  await app.expectReconnectHint("failed");
   await expect(app.entries("error").last()).toContainText("Session not found");
   await expect(app.composer).toHaveValue("My unsent question");
   await expect(app.entries("agent").last()).toContainText("a - b");
