@@ -52,9 +52,8 @@
 </script>
 
 <div class="review" data-testid="review">
-  <section>
-    <h2>Review work</h2>
-    <p class="meta">{git?.branch ?? session.branch ?? "Current folder"}{session.base_sha ? ` · base ${session.base_sha.slice(0, 8)}` : ""}</p>
+  <div class="scroll">
+  <section class="head">
     <div class="actions">
       <button class="btn sm" data-testid="review-all-changes" disabled={!changes.length} onclick={() => { for (const c of [...changes].reverse()) openTab({ kind: "diff", path: c.path }); }}>Review all changes</button>
       {#if git?.pr}<button class="btn sm" data-testid="review-open-pr" data-number={git.pr.number} onclick={() => git?.pr && openExternal(git.pr.url)}>Open PR #{git.pr.number}</button>{/if}
@@ -69,10 +68,11 @@
   {#if failures.length}
     <section data-testid="review-failures" data-count={failures.length}><h2>Errors and failed tools · {failures.length}</h2>{#each failures as e}<p class="failure" data-testid="review-failure">{e.kind === "error" ? e.text : e.kind === "tool" ? e.title : ""}</p>{/each}</section>
   {/if}
-  <section>
+  </div>
+  <section class="feedback">
     <form onsubmit={(e) => { e.preventDefault(); send(`Review feedback for this conversation:\n\n${feedback.trim()}`); }}>
       <label for="review-feedback">Feedback for the agent</label>
-      <textarea id="review-feedback" data-testid="review-feedback" class="field" bind:value={feedback} required rows="4" placeholder="Describe what to change, including file names or line numbers." disabled={session.archived || session.source?.deleted}></textarea>
+      <textarea id="review-feedback" data-testid="review-feedback" class="field" bind:value={feedback} required rows="3" placeholder="Describe what to change, including file names or line numbers." disabled={session.archived || session.source?.deleted}></textarea>
       <div class="actions"><button class="btn primary sm" data-testid="review-send-feedback" type="submit" disabled={!available || busy || serverUnavailable()}>{busy ? "Connecting…" : "Send feedback"}</button><button class="btn sm" data-testid="review-ask" type="button" disabled={!available || busy || serverUnavailable()} onclick={() => send("Review the changes you made in this conversation. Check for correctness, regressions, and missing validation. Report concrete findings with file locations, and explain what you verified before making further changes.")}>Ask agent to review</button></div>
     </form>
     {#if error}<p class="err failure" role="alert" data-testid="review-error">{error}</p>{/if}
@@ -80,11 +80,18 @@
 </div>
 
 <style>
-  .review { overflow: auto; min-height: 0; font-size: var(--fs-sm); }
-  section { padding: 16px; border-bottom: 1px solid var(--border); } h2 { font-size: var(--fs-sm); font-weight: var(--fw-medium); margin: 0 0 10px; }
+  /* The feedback box stays at the bottom however long the file list is. */
+  .review { display: flex; flex-direction: column; height: 100%; min-height: 0; font-size: var(--fs-sm); }
+  .scroll { flex: 1; min-height: 0; overflow: auto; }
+  section { padding: 14px var(--gutter-side); border-bottom: 1px solid var(--border); }
+  .head { padding-top: 10px; padding-bottom: 10px; }
+  .head .actions { margin-top: 0; }
+  .feedback { flex: none; border-top: 1px solid var(--border); border-bottom: 0; }
+  h2 { font-size: var(--fs-sm); font-weight: var(--fw-medium); margin: 0 0 10px; }
   .meta { color: var(--muted); font-size: var(--fs-xs); margin: 0 0 10px; overflow-wrap: anywhere; }
   .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .changes { max-height: 260px; overflow: auto; border-bottom: 1px solid var(--border); }
-  label { display: block; margin-bottom: 8px; color: var(--text-2); } textarea { width: 100%; min-height: 80px; resize: vertical; }
+  .changes { border-bottom: 1px solid var(--border); }
+  .changes :global(.list) { overflow: visible; }
+  label { display: block; margin-bottom: 8px; color: var(--text-2); } textarea { width: 100%; min-height: 64px; max-height: 40vh; resize: vertical; }
   .failure { color: var(--del-fg); white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 </style>

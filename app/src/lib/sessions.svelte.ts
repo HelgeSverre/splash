@@ -178,7 +178,7 @@ export function applySession(s: SessionView | undefined) {
 
   const before = previousStatus[s.id];
   previousStatus[s.id] = s.status;
-  if (before !== "idle" && s.status === "idle" && s.attention?.kind === "review" && s.id === currentId()) showSideTab("review");
+  if (before !== "idle" && s.status === "idle" && s.attention?.kind === "review" && s.id === currentId()) showSideTab("review", false);
   const background = (s.id !== currentId() || document.hidden) && prefs.notify !== "off";
   if (!background || before === undefined || before === s.status) return;
   if (s.status === "awaiting_permission") {

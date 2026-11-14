@@ -7,6 +7,10 @@ export type Tab =
   | { kind: "file"; path: string; line?: number }
   | { kind: "diff"; path: string };
 
+/** A pane's controls for the tab bar: a snippet from that pane's template.
+ *  Typed loosely so a snippet passes whichever copy of Svelte's types checks it. */
+export type PaneTools = (...args: never[]) => unknown;
+
 type Tabs = { list: Tab[]; active: number };
 const tabs: Record<string, Tabs> = $state({});
 

@@ -10,7 +10,7 @@ import { testId } from "./testid.ts";
 
 export type Status = "starting" | "idle" | "running" | "awaiting_permission" | "error" | "exited";
 export type View = "library" | "attention" | "github" | "actions";
-export type SideTab = "review" | "changes" | "files" | "details";
+export type SideTab = "review" | "files" | "details";
 export type EntryKind = "user" | "agent" | "thought" | "tool" | "plan" | "permission" | "turn_end" | "error" | "notice" | "divider";
 
 /** The browser runs on this machine: macOS gets ⌘ shortcuts and keycap symbols. */
@@ -159,6 +159,14 @@ export class App {
   agentState(agent: AgentId | string) {
     return testId(this.dialogChoice("agent", agent), "new-session-agent-state");
   }
+  /** "Add workspace folders", which shows the folders field. */
+  get dialogFoldersToggle() {
+    return testId(this.newSessionDialog, "new-session-folders-toggle");
+  }
+  /** "Show n agents that are not installed"; `data-count` is n, `aria-expanded` whether they show. */
+  get dialogMoreAgents() {
+    return testId(this.newSessionDialog, "new-session-more-agents");
+  }
   get dialogFolders() {
     return testId(this.newSessionDialog, "new-session-folders");
   }
@@ -200,7 +208,10 @@ export class App {
     await expect(agent).toBeEnabled();
     await agent.click();
     await this.dialogChoice("where", options.where ?? "in_place").click();
-    if (options.folders) await this.dialogFolders.fill(options.folders.join("\n"));
+    if (options.folders) {
+      await this.dialogFoldersToggle.click();
+      await this.dialogFolders.fill(options.folders.join("\n"));
+    }
     await this.dialogStart.click();
     // Typing before the dialog closes would reach the previous session.
     await expect(this.newSessionDialog).toBeHidden();
@@ -261,10 +272,13 @@ export class App {
   get stopButton() {
     return testId(this.page, "composer-stop");
   }
-  /** "Viewing saved history…" or "Connection failed…" above the box. */
-  get resumeNote() {
-    return testId(this.page, "composer-resume-note");
+  /** A stopped session's message box says that replying reconnects the agent
+   * (`failed`: the connection failed rather than stopped). */
+  async expectReconnectHint(kind: "stopped" | "failed" = "stopped") {
+    await expect(this.composer).toHaveAttribute("data-disconnected", "true");
+    await expect(this.composer).toHaveAttribute("placeholder", kind === "failed" ? /^Connection failed\. Reply to reconnect .+ and try again$/ : /^Reply to reconnect .+ and continue$/);
   }
+  /** Reconnect without sending a message. */
   get continueButton() {
     return testId(this.page, "composer-continue");
   }
@@ -385,7 +399,11 @@ export class App {
   toolDiffs(tool: Locator) {
     return testId(tool, "tool-diff");
   }
-  /** The file name over a diff, which opens it in a diff tab. */
+  /** "diff" on a tool call with one diff, which opens it in a diff tab. */
+  toolDiffOpen(tool: Locator) {
+    return testId(tool, "tool-diff-open");
+  }
+  /** The file name over each diff of a tool call that made several. */
   toolDiffPath(diff: Locator) {
     return testId(diff, "tool-diff-path");
   }
@@ -421,8 +439,34 @@ export class App {
   closeTab(kind: "log" | "file" | "diff", path?: string) {
     return testId(testId(this.page, "session-tabs"), "tab-close", path ? { kind, path } : { kind });
   }
-  get openLogButton() {
-    return testId(this.page, "session-open-log");
+  /** The tab bar's wrapper; `data-single` while the chat is the only tab (the bar is hidden). */
+  get tabStrip() {
+    return testId(this.page, "session-tabstrip");
+  }
+  /** The open pane's controls at the right of the tab bar. */
+  get tabTools() {
+    return testId(this.page, "session-tab-tools");
+  }
+  /** The session menu in the header (history actions, the protocol log). */
+  get sessionMenuTrigger() {
+    return testId(this.page, "history-menu-trigger");
+  }
+  /** Open the RPC log from the session menu. */
+  async openLog() {
+    await this.sessionMenuTrigger.click();
+    await testId(testId(this.page, "history-menu"), "history-menu-item", { action: "log" }).click();
+    await expect(this.sessionTab("log")).toHaveAttribute("aria-selected", "true");
+  }
+  /** The side panel's column, or its overlay in a narrow window (`data-overlay`). */
+  get workbenchSide() {
+    return testId(this.page, "workbench-side");
+  }
+  /** Shown in the session header while the sidebar is hidden. */
+  get showSidebar() {
+    return testId(this.page, "session-sidebar-toggle");
+  }
+  get hideSidebar() {
+    return testId(this.page, "sidebar-hide");
   }
   /** A tab of the side panel. */
   sideTab(tab: SideTab) {

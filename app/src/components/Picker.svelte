@@ -19,7 +19,10 @@
   let menu: HTMLDivElement | undefined = $state();
 
   const current = $derived(option.choices.find((c) => c.value === option.current));
-  const label = $derived(current?.name ?? option.current);
+  // An on/off option says what it switches: "Off" alone names nothing.
+  const toggle = $derived(option.choices.length === 2 && option.choices.every((c) => /^(on|off)$/i.test(c.name.trim())));
+  const value = $derived(current?.name ?? option.current);
+  const label = $derived(toggle ? `${option.name.replace(/ mode$/i, "")} ${value.toLowerCase()}` : value);
   const uid = $props.id();
   const menuId = `picker-${uid}`;
 
@@ -103,7 +106,8 @@
   .trigger:is(:hover, :focus-visible):not(:disabled), .trigger.open { color: var(--text); background: var(--hover); }
   .trigger:disabled { cursor: default; opacity: 0.5; }
   .label { overflow: hidden; text-overflow: ellipsis; }
-  .chev { display: inline-grid; opacity: 0; transition: opacity 0.1s; flex: none; }
+  /* Always drawn, so the label reads as a menu before it is hovered. */
+  .chev { display: inline-grid; opacity: 0.55; transition: opacity 0.1s; flex: none; }
   .trigger:is(:hover, :focus-visible) .chev, .trigger.open .chev { opacity: 1; }
   .menu { position: absolute; bottom: calc(100% + 6px); z-index: 30; min-width: 220px; max-width: 340px; max-height: 360px; overflow: auto; }
   .menu.left { left: 0; }

@@ -137,9 +137,9 @@ export class Library {
   }
 }
 
-/** The Changes and Files tabs, and the diff, file, log and terminal panes.
- * Diff, file and log controls are those of the open session tab (the others
- * stay mounted, hidden). */
+/** The Review tab's changed files, the Files tab, and the diff, file, log and
+ * terminal panes. Diff and file controls sit on the tab bar and are those of
+ * the open session tab; the log's are in its pane. */
 export class Workbench {
   readonly page: Page;
   constructor(page: Page) {
@@ -148,6 +148,10 @@ export class Workbench {
   /** The open session tab's pane. */
   get pane() {
     return testId(this.page, "session-pane", { active: "true" });
+  }
+  /** The open tab's own controls, at the right of the tab bar. */
+  get tools() {
+    return testId(this.page, "session-tab-tools");
   }
   /** Changed files; `data-path` and `data-status` on each. */
   changes(path?: string) {
@@ -164,19 +168,19 @@ export class Workbench {
     return testId(this.page, "changes-empty");
   }
   get diffNewFile() {
-    return testId(this.pane, "diff-new-file");
+    return testId(this.tools, "diff-new-file");
   }
   get diffDeleted() {
-    return testId(this.pane, "diff-deleted");
+    return testId(this.tools, "diff-deleted");
   }
   diffLayout(value: "unified" | "split") {
-    return testId(testId(this.pane, "diff-layout"), "segment", { value });
+    return testId(testId(this.tools, "diff-layout"), "segment", { value });
   }
   get wholeFile() {
-    return testId(this.pane, "diff-whole-file");
+    return testId(this.tools, "diff-whole-file");
   }
   get openFile() {
-    return testId(this.pane, "diff-open-file");
+    return testId(this.tools, "diff-open-file");
   }
   get tree() {
     return testId(this.page, "file-tree");
@@ -197,10 +201,10 @@ export class Workbench {
   }
   /** "n lines · size"; `data-lines` is n. */
   get fileMeta() {
-    return testId(this.pane, "file-meta");
+    return testId(this.tools, "file-meta");
   }
   get fileReadOnly() {
-    return testId(this.pane, "file-readonly");
+    return testId(this.tools, "file-readonly");
   }
   get fileContent() {
     return testId(this.pane, "file-content");

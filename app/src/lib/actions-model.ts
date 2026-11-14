@@ -1,4 +1,6 @@
 export function actionStatus(status: string, conclusion: string | null) { return (conclusion || status || "unknown").replaceAll("_", " "); }
+/** The status as a label: "In progress", "Timed out". */
+export function actionLabel(status: string, conclusion: string | null) { const text = actionStatus(status, conclusion); return text.charAt(0).toUpperCase() + text.slice(1); }
 export function actionTone(status: string, conclusion: string | null) {
   if (["failure", "timed_out", "action_required", "startup_failure"].includes(conclusion ?? "")) return "failed";
   if (conclusion === "success") return "passed";

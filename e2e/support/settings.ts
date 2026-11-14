@@ -46,6 +46,15 @@ export class Settings {
   railPages(): Promise<(string | null)[]> {
     return testId(this.dialog, "settings-nav").evaluateAll((items) => items.map((item) => item.getAttribute("data-page")));
   }
+  /** "Not installed": folds the agents that aren't installed under it. `aria-expanded`;
+   * `data-count` is how many (of those the search matches). Opens by itself for a search. */
+  get uninstalledNav() {
+    return testId(this.dialog, "settings-nav-uninstalled");
+  }
+  /** Show the rail's agents that aren't installed, before going to one. */
+  async showUninstalled() {
+    await unfold(this.uninstalledNav);
+  }
   /** The open page; its `data-page` says which. */
   get current() {
     return testId(this.dialog, "settings-page");
@@ -118,7 +127,7 @@ export class Settings {
 
   // ── General ────────────────────────────────────────────────────────────────
 
-  /** A card of Default agent, by agent id. */
+  /** A card of Default agent, by agent id. Only installed agents (and the saved default) have one. */
   defaultAgent(agent: string) {
     return testId(testId(this.current, "settings-default-agent"), "choice", { value: agent });
   }
@@ -136,6 +145,14 @@ export class Settings {
   /** An agent's row on the Agents overview. */
   agentRow(agent: string) {
     return testId(this.current, "settings-agent", { agent });
+  }
+  /** "Not installed · n" on the Agents overview: folds those agents' rows. `aria-expanded`, `data-count`. */
+  get uninstalledAgents() {
+    return testId(this.current, "settings-agents-uninstalled");
+  }
+  /** Show the overview's rows for agents that aren't installed. */
+  async showUninstalledAgents() {
+    await unfold(this.uninstalledAgents);
   }
   /** An agent's status ("ready", "signed out"…): its overview row's, or its page's. */
   status(agent: string) {
@@ -229,6 +246,13 @@ export class Settings {
   get resetShortcuts() {
     return testId(this.current, "settings-reset-shortcuts");
   }
+}
+
+/** Open a fold (a button with `aria-expanded`) unless it already is. */
+async function unfold(fold: Locator) {
+  await expect(fold).toHaveAttribute("aria-expanded", /true|false/);
+  if ((await fold.getAttribute("aria-expanded")) !== "true") await fold.click();
+  await expect(fold).toHaveAttribute("aria-expanded", "true");
 }
 
 /** The read-only preview of a skill or command file. */

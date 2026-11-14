@@ -8,6 +8,8 @@
   import ChoiceGroup from "./ui/ChoiceGroup.svelte";
   import PathLabel from "./ui/PathLabel.svelte";
   import AddButton from "./ui/AddButton.svelte";
+  import Chevron from "./ui/Chevron.svelte";
+  import Icon from "./Icon.svelte";
   import { readiness as agentReadiness } from "../lib/agents";
   import { app, agentById, createSession, pickFolder, projectById } from "../lib/sessions.svelte";
   import { prefs } from "../lib/prefs.svelte";
@@ -25,6 +27,10 @@
   let isolation: Isolation = $state((prefs.default_isolation ?? "worktree") as Isolation);
   let busy = $state(false);
   let additionalFolders = $state("");
+  let showFolders = $state(false);
+  // Agents that aren't installed can't be chosen: they wait behind one line,
+  // open from the start only when nothing is installed yet.
+  let showAllAgents = $state<boolean | null>(null);
 
   const project = $derived(projectById(projectId));
   const canWorktree = $derived(project?.is_git ?? false);
@@ -39,6 +45,9 @@
   const close = () => { if (!busy) app.newSession = null; };
   const agentOff = (a: AgentStatus) => readiness(a).tone === "err";
   const readyAgents = $derived(app.agents.filter((a) => !agentOff(a)));
+  const missingAgents = $derived(app.agents.filter((a) => !a.installed));
+  const allAgents = $derived(showAllAgents ?? missingAgents.length === app.agents.length);
+  const shownAgents = $derived(allAgents ? app.agents : app.agents.filter((a) => a.installed));
   const canStart = $derived(!!projectId && !!agent && !agentOff(agent) && !busy && !serverUnavailable());
 
   // The stored default may not be installed or ready: start on one that is.
@@ -104,7 +113,7 @@
     <span class="add"><AddButton data-testid="new-session-add-folder" label="Add folder…" disabled={busy || serverUnavailable()} onclick={addFolder} /></span>
 
     <div class="label t-group" id="ns-agent">Agent</div>
-    <ChoiceGroup data-testid="new-session-agent" items={app.agents} value={agentId} key={(a) => a.id} disabled={agentOff} labelledby="ns-agent"
+    <ChoiceGroup data-testid="new-session-agent" items={shownAgents} value={agentId} key={(a) => a.id} disabled={agentOff} labelledby="ns-agent"
       layout="grid" onchange={(a) => (agentId = a.id)}>
       {#snippet item(a)}
         {@const st = readiness(a)}
@@ -115,6 +124,11 @@
       {/snippet}
       {#snippet empty()}<EmptyState inline loading title="Detecting agents…" />{/snippet}
     </ChoiceGroup>
+    {#if missingAgents.length && missingAgents.length < app.agents.length}
+      <button class="plain more" data-testid="new-session-more-agents" data-count={missingAgents.length} aria-expanded={allAgents} onclick={() => (showAllAgents = !allAgents)}>
+        <Chevron open={allAgents} />{allAgents ? "Hide" : "Show"} {missingAgents.length} {missingAgents.length === 1 ? "agent that is" : "agents that are"} not installed
+      </button>
+    {/if}
     {#if !app.agentsLoading && app.agents.length && !readyAgents.length}
       <EmptyState data-testid="new-session-agent-empty" inline icon="agents" title="No agents are ready" detail="Install and sign in to a supported coding agent, then refresh agent detection." />
       <button class="btn" data-testid="new-session-configure-agents" onclick={() => openSettings("agents")}>Configure agents</button>
@@ -130,9 +144,13 @@
 
     {/if}
     {#if !prHead}
-      <label class="label t-group" for="ns-extra-folders">Additional workspace folders</label>
-      <textarea id="ns-extra-folders" data-testid="new-session-folders" class="field extra-folders" rows="2" bind:value={additionalFolders} placeholder="Optional absolute paths, one per line" disabled={busy}></textarea>
-      <p class="desc">These folders are restored when you reconnect. The selected agent must support additional workspace folders.</p>
+      {#if showFolders || additionalFolders.trim()}
+        <label class="label t-group" for="ns-extra-folders">Additional workspace folders</label>
+        <textarea id="ns-extra-folders" data-testid="new-session-folders" class="field extra-folders" rows="2" bind:value={additionalFolders} placeholder="Absolute paths, one per line" disabled={busy}></textarea>
+        <p class="desc">These folders are restored when you reconnect. The selected agent must support additional workspace folders.</p>
+      {:else}
+        <button class="plain more folders" data-testid="new-session-folders-toggle" onclick={() => (showFolders = true)}><Icon name="plus" size={12} />Add workspace folders</button>
+      {/if}
     {/if}
     <div class="actions">
       <span class="hint">{agent?.transport === "adapter" ? "First start may download the ACP adapter via npx." : ""}</span>
@@ -152,6 +170,9 @@
   .label { display: block; margin: 16px 0 6px; }
   .label.first { margin-top: 0; }
   .add { display: block; margin-top: 4px; }
+  .more { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 2px 4px; margin-left: -4px; border-radius: var(--radius-sm); color: var(--muted); font-size: var(--fs-sm); }
+  .more:is(:hover, :focus-visible) { color: var(--text); }
+  .more.folders { margin-top: 14px; }
   .name { flex: none; font-weight: var(--fw-medium); white-space: nowrap; }
   .desc { color: var(--muted); font-size: var(--fs-sm); }
   .astate { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); color: var(--muted); }

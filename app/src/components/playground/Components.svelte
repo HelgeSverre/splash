@@ -115,9 +115,9 @@
 
 <Specimen name="StatusBadge" source="ui/StatusBadge.svelte">
   <StatusBadge tone="ok" label="ready" />
-  <StatusBadge tone="warn" label="probe failed" />
+  <StatusBadge tone="warn" label="check failed" />
   <StatusBadge tone="err" label="signed out" />
-  <StatusBadge tone="none" label="not probed" />
+  <StatusBadge tone="none" label="not checked" />
 </Specimen>
 
 <Specimen name="Tag" source="ui/Tag.svelte">

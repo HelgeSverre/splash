@@ -307,6 +307,10 @@ export class GithubView {
   title(row: Locator) {
     return testId(row, "github-item-title");
   }
+  /** A row's state in words: "Open", "Checks failing", or for activity its kind ("Push", "Comment"). */
+  state(row: Locator) {
+    return testId(row, "github-item-state");
+  }
   /** The unread marks in the list, or on one row. */
   unread(row: Locator = this.list) {
     return testId(row, "github-item-unread");
@@ -353,6 +357,14 @@ export class GithubView {
   /** Every feed answered. Each is a fake gh process, so allow for a busy machine. */
   async loaded(feeds: number) {
     await expect(this.synced(feeds)).toBeVisible({ timeout: 30_000 });
+  }
+  /** The "info" button beside the sync status; `aria-expanded` while its note shows. */
+  get syncInfo() {
+    return testId(this.page, "github-sync-info");
+  }
+  /** What is loaded and GitHub's limits; present only while open. */
+  get syncNote() {
+    return testId(this.page, "github-sync-note");
   }
   get pause() {
     return testId(this.page, "github-pause");
@@ -535,9 +547,12 @@ export class ActionsView {
   get event() {
     return testId(this.page, "actions-event");
   }
-  /** Applies the branch and event filters. */
-  get apply() {
-    return testId(this.page, "actions-apply");
+  /** Types into the branch or event filter and commits it: the filter applies
+   * on Enter or on leaving the field, not while typing. */
+  async filterText(field: Locator, value: string, commit: "enter" | "blur" = "enter") {
+    await field.fill(value);
+    if (commit === "enter") await field.press("Enter");
+    else await field.blur();
   }
   /** "owner/name · workflow" while one workflow's runs show; `data-workflow-id` is which. */
   get workflowFilter() {
@@ -563,6 +578,15 @@ export class ActionsView {
   /** Every run's title, in order. */
   get titles() {
     return testId(this.runs, "actions-run-title");
+  }
+  /** A run row's status dot: `data-tone` is active, failed, passed or neutral,
+   * and its accessible name is the status in words. */
+  runStatus(run: Locator) {
+    return testId(run, "actions-run-status");
+  }
+  /** A run row's one meta line: repository, workflow and number, branch, event, actor. */
+  runMeta(run: Locator) {
+    return testId(run, "actions-run-meta");
   }
   get workflows() {
     return testId(this.page, "actions-list", { tab: "workflows" });
@@ -650,6 +674,14 @@ export class ActionsView {
   /** Every repository answered. Each is a fake gh process, so allow for a busy machine. */
   async loaded(repositories: number) {
     await expect(this.synced(repositories)).toBeVisible({ timeout: 30_000 });
+  }
+  /** The "info" button beside the sync status; `aria-expanded` while its note shows. */
+  get syncInfo() {
+    return testId(this.page, "actions-sync-info");
+  }
+  /** What is loaded and GitHub's limits; present only while open. */
+  get syncNote() {
+    return testId(this.page, "actions-sync-note");
   }
   get pause() {
     return testId(this.page, "actions-pause");

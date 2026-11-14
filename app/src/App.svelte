@@ -17,7 +17,7 @@
   import DocPreview from "./components/DocPreview.svelte";
   import { api } from "./bindings";
   import { app, loadAll, currentSession } from "./lib/sessions.svelte";
-  import { layout, saveLayout, clamp } from "./lib/layout.svelte";
+  import { layout, saveLayout, clamp, rightVisible, setNarrow, NARROW_WIDTH } from "./lib/layout.svelte";
   import { preview } from "./lib/customize.svelte";
   import { installRoute, syncPlaygroundHash } from "./lib/route.svelte";
   import { installLive } from "./lib/live";
@@ -58,10 +58,14 @@
   const session = $derived(currentSession());
   const sessionId = $derived(session?.id);
   let workbenchWidth = $state(window.innerWidth);
-  const sideVisible = $derived(!!session && app.view.kind === "session" && layout.rightOpen);
+  const narrow = $derived(workbenchWidth < NARROW_WIDTH);
+  $effect(() => setNarrow(narrow));
+  const sideVisible = $derived(!!session && app.view.kind === "session" && rightVisible());
+  // A narrow window's side panel floats over the conversation: no column.
+  const sideColumn = $derived(sideVisible && !narrow);
   // Preserve saved sizes while reserving room for the conversation at the
   // desktop's minimum window size. Expanding the window restores those sizes.
-  const leftMax = $derived(Math.max(200, Math.min(420, workbenchWidth - 361 - (sideVisible ? 221 : 0))));
+  const leftMax = $derived(Math.max(200, Math.min(420, workbenchWidth - 361 - (sideColumn ? 221 : 0))));
   const leftWidth = $derived(clamp(layout.left, 200, leftMax));
   const rightMax = $derived(Math.max(220, Math.min(720, workbenchWidth - (layout.leftOpen ? leftWidth + 1 : 0) - 361)));
   const rightWidth = $derived(clamp(layout.right, 220, rightMax));
@@ -110,9 +114,9 @@
           <Welcome />
         {/if}
       </div>
-      {#if session && app.view.kind === "session" && layout.rightOpen}
-        <Splitter axis="x" label="Resize side panel" value={rightWidth} min={220} max={rightMax} onmove={(d) => (layout.right = clamp(rightWidth - d, 220, rightMax))} onend={saveLayout} />
-        <div class="right" data-testid="workbench-side" style:width="{rightWidth}px"><RightPanel {session} /></div>
+      {#if session && sideVisible}
+        {#if !narrow}<Splitter axis="x" label="Resize side panel" value={rightWidth} min={220} max={rightMax} onmove={(d) => (layout.right = clamp(rightWidth - d, 220, rightMax))} onend={saveLayout} />{/if}
+        <div class="right" class:overlay={narrow} data-testid="workbench-side" data-overlay={narrow} style:width="{rightWidth}px"><RightPanel {session} /></div>
       {/if}
     </div>
     {#if session && app.view.kind === "session" && layout.bottomOpen}
@@ -143,7 +147,14 @@
   .left { min-width: 0; min-height: 0; }
   main { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
   .workbench-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .top { flex: 1; min-height: 0; display: flex; }
+  .top { flex: 1; min-height: 0; display: flex; position: relative; }
   .center { flex: 1; min-width: 0; min-height: 0; }
   .right { flex: none; min-width: 0; min-height: 0; }
+  /* Narrow windows: the panel floats over the conversation's right edge. */
+  .right.overlay {
+    /* Under the session header, whose toggle closes it again. */
+    position: absolute; top: var(--h-header); right: 0; bottom: 0; z-index: 5; max-width: calc(100% - 48px);
+    border-top: 1px solid var(--border-strong);
+    background: var(--bg); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-pop);
+  }
 </style>

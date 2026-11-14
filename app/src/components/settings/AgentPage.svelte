@@ -10,7 +10,7 @@
   import { app, agentById } from "../../lib/sessions.svelte";
   import { agentPages } from "../../lib/customize.svelte";
   import { showError } from "../../lib/system";
-  import { readiness, transportLabel } from "../../lib/agents";
+  import { readinessBadge, transportLabel } from "../../lib/agents";
   import { ago } from "../../lib/format";
   import { serverUnavailable } from "../../lib/server.svelte";
   import { api } from "../../bindings";
@@ -18,7 +18,7 @@
   let { id }: { id: string } = $props();
   const a = $derived(agentById(id));
   const p = $derived(a?.probe);
-  const r = $derived(a ? readiness(a) : null);
+  const r = $derived(a ? readinessBadge(a) : null);
   let probing = $state(false);
 
   async function probe() {
@@ -38,6 +38,9 @@
   );
 
   const links = $derived(a ? agentPages(a) : []);
+  // Commands come from the handshake; skills and MCP servers are read from disk.
+  const unknown = (page: string) => (page === "commands" ? "Not known yet. Refresh to list them." : "Loading");
+  const host = $derived(p?.ok ? "ACP handshake verified on this host" : p ? "Handshake failed on this host" : a?.installed ? "Not checked yet" : "Not installed");
 </script>
 
 {#if a && r}
@@ -56,14 +59,14 @@
 
     <div class="links">
       {#each links as l (l.page)}
-        <button class="plain link" data-testid="settings-agent-link" data-page={l.page} data-count={l.count} onclick={() => (app.settings = `agent:${id}:${l.page}`)}>
+        <button class="plain link" data-testid="settings-agent-link" data-page={l.page} data-count={l.count} title={l.count === undefined ? unknown(l.page) : undefined} onclick={() => (app.settings = `agent:${id}:${l.page}`)}>
           <span class="n">{l.count ?? "…"}</span><span>{l.title}</span><span class="spacer"></span><Chevron size={12} />
         </button>
       {/each}
     </div>
 
     <SettingsGroup title="Installation">
-      <SettingsRow data-testid="settings-row" data-key="host" label="Host compatibility" value={p?.ok ? "ACP handshake verified on this host" : "Unverified on this host"} desc="Installation alone does not confirm ACP support. Refresh to test the installed adapter. WSL agents need a server running inside WSL." />
+      <SettingsRow data-testid="settings-row" data-key="host" label="Host compatibility" value={host} desc="Installation alone does not confirm ACP support. Refresh to test the installed adapter. WSL agents need a server running inside WSL." />
       <SettingsRow data-testid="settings-row" data-key="installed" label="Installed" value={a.installed ? a.cli_path : "not found on PATH"} path={a.installed} />
       <SettingsRow data-testid="settings-row" data-key="login" label="Login" value={login} />
       <SettingsRow data-testid="settings-row" data-key="launch" label="Launch" value={[a.extra_args, a.launch].filter(Boolean).join(" ")} mono />
